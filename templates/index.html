@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ESP32 Dashboard</title>
+  <style>
+    body { font-family: Arial; padding: 20px; background: #f2f2f2; }
+    .card { background: #fff; padding: 15px; border-radius: 8px; margin: 10px 0; }
+    .value { font-size: 28px; font-weight: bold; }
+    button { padding: 10px 20px; font-size: 18px; margin-right: 10px; }
+    .small { color:#666; font-size: 13px; }
+  </style>
+</head>
+<body>
+
+<h1>ESP32 Energy Dashboard</h1>
+<div class="small">Live din MQTT: <b>esp32/data</b> | Comenzi: <b>esp32/cmd</b></div>
+
+<div class="card"><div>Tensiune</div><div id="voltage" class="value">-- V</div></div>
+<div class="card"><div>Curent</div><div id="current" class="value">-- A</div></div>
+<div class="card"><div>Putere</div><div id="power" class="value">-- W</div></div>
+<div class="card"><div>Energie</div><div id="energy" class="value">-- kWh</div></div>
+
+<div class="card">
+  <h3>Releu</h3>
+  <button onclick="relay('on')">ON</button>
+  <button onclick="relay('off')">OFF</button>
+  <div id="relayStatus" class="small"></div>
+</div>
+
+<script src="/static/main.js"></script>
+</body>
+</html>
