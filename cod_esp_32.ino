@@ -7,23 +7,25 @@
 //-----------------------------------------------------------
 
 // WiFi
-const char* ssid        = "NUME_WIFI";
-const char* password    = "PAROLA_WIFI";
+const char* ssid        = "Test_TP";
+const char* password    = "pinguin1";
 
-// MQTT (Raspberry Pi broker)
-const char* mqtt_server = "192.168.1.246";
+// MQTT (Public broker)
+const char* mqtt_server = "broker.hivemq.com";
 const int   mqtt_port   = 1883;
 
 // Topics
-const char* mqtt_topic_data = "esp32/data";
-const char* mqtt_topic_cmd  = "esp32/cmd";
+const char* mqtt_topic_data = "razvy_esp32_2026/data";
+const char* mqtt_topic_cmd  = "razvy_esp32_2026/cmd";
 
 // Clienti WiFi + MQTT
 WiFiClient espClient;
 PubSubClient client(espClient);
 
 // ACS712 (curent)
-#define CURRENT_PIN 4
+#define CURRENT1_PIN 12
+#define CURRENT2_PIN 13
+#define CURRENT3_PIN 14
 const float sensitivity = 0.134;
 const float vRef = 3.3;
 const int resolution = 4095;
@@ -35,23 +37,29 @@ const float dividerFactor = (2.2 + 3.3) / 2.2;
 #define VOLTAGE_PIN 5
 float voltageCalibration = 990;
 
-// Releu
-#define RELAY_PIN 6
-bool relayState = false;
+// Relee
+#define RELAY1_PIN 15
+#define RELAY2_PIN 16
+#define RELAY3_PIN 17
+bool relay1State = false;
+bool relay2State = false;
+bool relay3State = false;
 
 // Energie
 double energy_kWh = 0.0;
 unsigned long lastMillis;
 
 // Noise ACS712 (în amperi)
-float noiseOffset = 0.0;
+float noiseOffset1 = 0.0;
+float noiseOffset2 = 0.0;
+float noiseOffset3 = 0.0;
 
 // Serial input buffer
 String serialBuffer = "";
 
-// Timer MQTT 1 minut
+// Timer MQTT 10 secunde pentru testing
 unsigned long lastMQTT = 0;
-const unsigned long MQTT_INTERVAL = 60000;
+const unsigned long MQTT_INTERVAL = 10000;
 
 //-----------------------------------------------------------
 // WIFI
@@ -85,14 +93,49 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   msg.toUpperCase();
 
   if (String(topic) == mqtt_topic_cmd) {
+    // JSON format: {"relay":1,"state":"on"}
+    int relayPos = msg.indexOf("RELAY");
+    int statePos = msg.indexOf("STATE");
+
+    if (msg.startsWith("{") && relayPos != -1 && statePos != -1) {
+      int relayIdx = msg.indexOf(":", relayPos);
+      int stateIdx = msg.indexOf(":", statePos);
+
+      int relayId = msg.substring(relayIdx + 1).toInt();
+      String stateValue = msg.substring(stateIdx + 1);
+      stateValue.replace("\"", "");
+      stateValue.replace("}", "");
+      stateValue.trim();
+
+      bool turnOn = stateValue == "ON";
+
+      if (relayId == 1) {
+        digitalWrite(RELAY1_PIN, turnOn ? LOW : HIGH);
+        relay1State = turnOn;
+      } else if (relayId == 2) {
+        digitalWrite(RELAY2_PIN, turnOn ? LOW : HIGH);
+        relay2State = turnOn;
+      } else if (relayId == 3) {
+        digitalWrite(RELAY3_PIN, turnOn ? LOW : HIGH);
+        relay3State = turnOn;
+      }
+
+      Serial.print("Releu MQTT: ");
+      Serial.print(relayId);
+      Serial.print(" -> ");
+      Serial.println(turnOn ? "PORNIT" : "OPRIT");
+      return;
+    }
+
+    // Compatibilitate veche (control doar releu 1)
     if (msg == "ON") {
-      digitalWrite(RELAY_PIN, LOW);
-      relayState = true;
-      Serial.println("Releu MQTT: PORNIT");
+      digitalWrite(RELAY1_PIN, LOW);
+      relay1State = true;
+      Serial.println("Releu MQTT 1: PORNIT");
     } else if (msg == "OFF") {
-      digitalWrite(RELAY_PIN, HIGH);
-      relayState = false;
-      Serial.println("Releu MQTT: OPRIT");
+      digitalWrite(RELAY1_PIN, HIGH);
+      relay1State = false;
+      Serial.println("Releu MQTT 1: OPRIT");
     }
   }
 }
@@ -130,19 +173,69 @@ void handleSerial() {
       serialBuffer.trim();
       serialBuffer.toUpperCase();
 
-      if (serialBuffer == "ON") {
-        digitalWrite(RELAY_PIN, LOW);
-        relayState = true;
-        Serial.println("Releu: PORNIT");
+      if (serialBuffer == "ON" || serialBuffer == "R1_ON") {
+        digitalWrite(RELAY1_PIN, LOW);
+        relay1State = true;
+        Serial.println("Releu 1: PORNIT");
       }
-      else if (serialBuffer == "OFF") {
-        digitalWrite(RELAY_PIN, HIGH);
-        relayState = false;
-        Serial.println("Releu: OPRIT");
+      else if (serialBuffer == "OFF" || serialBuffer == "R1_OFF") {
+        digitalWrite(RELAY1_PIN, HIGH);
+        relay1State = false;
+        Serial.println("Releu 1: OPRIT");
+      }
+      else if (serialBuffer == "R2_ON") {
+        digitalWrite(RELAY2_PIN, LOW);
+        relay2State = true;
+        Serial.println("Releu 2: PORNIT");
+      }
+      else if (serialBuffer == "R2_OFF") {
+        digitalWrite(RELAY2_PIN, HIGH);
+        relay2State = false;
+        Serial.println("Releu 2: OPRIT");
+      }
+      else if (serialBuffer == "R3_ON") {
+        digitalWrite(RELAY3_PIN, LOW);
+        relay3State = true;
+        Serial.println("Releu 3: PORNIT");
+      }
+      else if (serialBuffer == "R3_OFF") {
+        digitalWrite(RELAY3_PIN, HIGH);
+        relay3State = false;
+        Serial.println("Releu 3: OPRIT");
+      }
+      else if (serialBuffer == "ALL_ON") {
+        digitalWrite(RELAY1_PIN, LOW);
+        digitalWrite(RELAY2_PIN, LOW);
+        digitalWrite(RELAY3_PIN, LOW);
+        relay1State = true;
+        relay2State = true;
+        relay3State = true;
+        Serial.println("Toate releele: PORNITE");
+      }
+      else if (serialBuffer == "ALL_OFF") {
+        digitalWrite(RELAY1_PIN, HIGH);
+        digitalWrite(RELAY2_PIN, HIGH);
+        digitalWrite(RELAY3_PIN, HIGH);
+        relay1State = false;
+        relay2State = false;
+        relay3State = false;
+        Serial.println("Toate releele: OPRITE");
       }
       else if (serialBuffer == "STATUS") {
-        Serial.print("Releu: ");
-        Serial.println(relayState ? "PORNIT" : "OPRIT");
+        Serial.print("Releu 1: ");
+        Serial.println(relay1State ? "PORNIT" : "OPRIT");
+        Serial.print("Releu 2: ");
+        Serial.println(relay2State ? "PORNIT" : "OPRIT");
+        Serial.print("Releu 3: ");
+        Serial.println(relay3State ? "PORNIT" : "OPRIT");
+      }
+      else if (serialBuffer == "HELP") {
+        Serial.println("Comenzi seriale: ON/OFF, R1_ON/R1_OFF, R2_ON/R2_OFF, R3_ON/R3_OFF, ALL_ON/ALL_OFF, STATUS, HELP");
+      }
+      else if (serialBuffer.length() > 0) {
+        Serial.print("Comanda necunoscuta: ");
+        Serial.println(serialBuffer);
+        Serial.println("Scrie HELP pentru lista de comenzi.");
       }
 
       serialBuffer = "";
@@ -155,18 +248,18 @@ void handleSerial() {
 //-----------------------------------------------------------
 // MASURARE RMS ACS712 – ZERO NOISE + DETECTARE MICĂ
 //-----------------------------------------------------------
-float readCurrentRMS() {
+float readCurrentRMS(int currentPin, float noiseOffset, float &smoothState) {
   const int samples = 1500;
 
   // offset ADC
   float offset = 0;
-  for (int i = 0; i < 800; i++) offset += analogRead(CURRENT_PIN);
+  for (int i = 0; i < 800; i++) offset += analogRead(currentPin);
   offset /= 800.0;
 
   // RMS
   float sum = 0;
   for (int i = 0; i < samples; i++) {
-    float raw = analogRead(CURRENT_PIN);
+    float raw = analogRead(currentPin);
     float v_adc = (raw - offset) * (vRef / resolution);
     float v_real = v_adc * dividerFactor;
     sum += v_real * v_real;
@@ -181,10 +274,9 @@ float readCurrentRMS() {
   else current -= noiseOffset;
 
   // filtru exponential moale
-  static float smooth = 0;
-  smooth = smooth * 0.6 + current * 0.4;
+  smoothState = smoothState * 0.6 + current * 0.4;
 
-  return smooth;
+  return smoothState;
 }
 
 //-----------------------------------------------------------
@@ -216,15 +308,17 @@ float readVoltageRMS() {
 //-----------------------------------------------------------
 // TRIMITERE MQTT (DATA)
 //-----------------------------------------------------------
-void sendMQTT(float voltage_rms, float current_rms, float power_W, double energy_kWh) {
+void sendMQTT(float voltage_rms, float current1_rms, float current2_rms, float current3_rms, float current_total, float power_W, double energy_kWh) {
   if (!client.connected()) reconnectMQTT();
   client.loop();
 
   char payload[256];
   snprintf(payload, sizeof(payload),
-           "{\"voltage\":%.1f,\"current\":%.3f,\"power\":%.1f,\"energy\":%.5f,\"relay\":%s}",
-           voltage_rms, current_rms, power_W, energy_kWh,
-           relayState ? "true" : "false");
+           "{\"voltage\":%.1f,\"current\":%.3f,\"current_1\":%.3f,\"current_2\":%.3f,\"current_3\":%.3f,\"power\":%.1f,\"energy\":%.5f,\"relay_1\":%s,\"relay_2\":%s,\"relay_3\":%s}",
+           voltage_rms, current_total, current1_rms, current2_rms, current3_rms, power_W, energy_kWh,
+           relay1State ? "true" : "false",
+           relay2State ? "true" : "false",
+           relay3State ? "true" : "false");
 
   Serial.print("MQTT publish: ");
   Serial.println(payload);
@@ -238,11 +332,17 @@ void sendMQTT(float voltage_rms, float current_rms, float power_W, double energy
 void setup() {
   Serial.begin(115200);
 
-  analogSetPinAttenuation(CURRENT_PIN, ADC_11db);
+  analogSetPinAttenuation(CURRENT1_PIN, ADC_11db);
+  analogSetPinAttenuation(CURRENT2_PIN, ADC_11db);
+  analogSetPinAttenuation(CURRENT3_PIN, ADC_11db);
   analogSetPinAttenuation(VOLTAGE_PIN, ADC_11db);
 
-  pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, HIGH);
+  pinMode(RELAY1_PIN, OUTPUT);
+  pinMode(RELAY2_PIN, OUTPUT);
+  pinMode(RELAY3_PIN, OUTPUT);
+  digitalWrite(RELAY1_PIN, HIGH);
+  digitalWrite(RELAY2_PIN, HIGH);
+  digitalWrite(RELAY3_PIN, HIGH);
 
   setup_wifi();
   client.setServer(mqtt_server, mqtt_port);
@@ -250,36 +350,43 @@ void setup() {
 
   delay(500);
 
-  Serial.println("Calibrare noise ACS712...");
+  Serial.println("Calibrare noise ACS712 (3 canale)...");
 
-  int base = 0;
-  int baseSamples = 1500;
+  const int baseSamples = 1500;
+  int acsPins[3] = {CURRENT1_PIN, CURRENT2_PIN, CURRENT3_PIN};
+  float* offsets[3] = {&noiseOffset1, &noiseOffset2, &noiseOffset3};
 
-  // offset ADC
-  for (int i = 0; i < baseSamples; i++) base += analogRead(CURRENT_PIN);
-  base /= baseSamples;
+  for (int ch = 0; ch < 3; ch++) {
+    int base = 0;
+    for (int i = 0; i < baseSamples; i++) base += analogRead(acsPins[ch]);
+    base /= baseSamples;
 
-  // variatie
-  float noiseSum = 0;
-  for (int i = 0; i < baseSamples; i++) {
-    int val = analogRead(CURRENT_PIN);
-    noiseSum += abs(val - base);
+    float noiseSum = 0;
+    for (int i = 0; i < baseSamples; i++) {
+      int val = analogRead(acsPins[ch]);
+      noiseSum += abs(val - base);
+    }
+
+    float noiseADC = noiseSum / baseSamples;
+    float noiseVolt = noiseADC * (vRef / resolution) * dividerFactor;
+    *offsets[ch] = noiseVolt / sensitivity;
+
+    Serial.print("ACS");
+    Serial.print(ch + 1);
+    Serial.print(" (pin ");
+    Serial.print(acsPins[ch]);
+    Serial.print(") noise: ");
+    Serial.println(*offsets[ch], 5);
   }
-
-  float noiseADC = noiseSum / baseSamples;
-
-  // convertim in amperi
-  float noiseVolt = noiseADC * (vRef / resolution) * dividerFactor;
-  noiseOffset = noiseVolt / sensitivity;
-
-  Serial.print("Noise detectat: ");
-  Serial.println(noiseOffset, 5);
 
   delay(300);
 
   lastMillis = millis();
   lastMQTT = millis();
   Serial.println("Sistem pornit.");
+  Serial.println("Mapare pini ACS: ACS1=12, ACS2=13, ACS3=14");
+  Serial.println("Mapare relee: R1=15, R2=16, R3=17");
+  Serial.println("Comenzi seriale: ON/OFF, R1_ON/R1_OFF, R2_ON/R2_OFF, R3_ON/R3_OFF, ALL_ON/ALL_OFF, STATUS, HELP");
 }
 
 //-----------------------------------------------------------
@@ -291,9 +398,16 @@ void loop() {
   if (!client.connected()) reconnectMQTT();
   client.loop();
 
-  float current_rms = readCurrentRMS();
+  static float smooth1 = 0;
+  static float smooth2 = 0;
+  static float smooth3 = 0;
+
+  float current1_rms = readCurrentRMS(CURRENT1_PIN, noiseOffset1, smooth1);
+  float current2_rms = readCurrentRMS(CURRENT2_PIN, noiseOffset2, smooth2);
+  float current3_rms = readCurrentRMS(CURRENT3_PIN, noiseOffset3, smooth3);
+  float current_total = current1_rms + current2_rms + current3_rms;
   float voltage_rms = readVoltageRMS();
-  float power_W = voltage_rms * current_rms;
+  float power_W = voltage_rms * current_total;
 
   unsigned long now = millis();
   float deltaHours = (now - lastMillis) / 3600000.0;
@@ -303,16 +417,22 @@ void loop() {
 
   Serial.print("U_RMS: ");
   Serial.print(voltage_rms, 1);
-  Serial.print(" V | I_RMS: ");
-  Serial.print(current_rms, 3);
+  Serial.print(" V | I1: ");
+  Serial.print(current1_rms, 3);
+  Serial.print(" A | I2: ");
+  Serial.print(current2_rms, 3);
+  Serial.print(" A | I3: ");
+  Serial.print(current3_rms, 3);
+  Serial.print(" A | I_TOTAL: ");
+  Serial.print(current_total, 3);
   Serial.print(" A | P: ");
   Serial.print(power_W, 1);
   Serial.print(" W | kWh: ");
   Serial.println(energy_kWh, 5);
 
-  // PUBLICĂ MQTT DOAR O DATĂ LA 1 MINUT
+  // PUBLICĂ MQTT O DATĂ LA 10 SECUNDE (MQTT_INTERVAL)
   if (millis() - lastMQTT >= MQTT_INTERVAL) {
-    sendMQTT(voltage_rms, current_rms, power_W, energy_kWh);
+    sendMQTT(voltage_rms, current1_rms, current2_rms, current3_rms, current_total, power_W, energy_kWh);
     lastMQTT = millis();
   }
 

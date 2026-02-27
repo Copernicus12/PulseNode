@@ -7,13 +7,17 @@ use Symfony\Component\Process\Process;
 
 class Esp32RelayPublisher
 {
-    public function publish(string $state): array
+    public function publish(int $relayId, string $state): array
     {
-        $payload = strtoupper($state) === 'ON' ? 'ON' : 'OFF';
+        $normalizedState = strtolower($state) === 'on' ? 'on' : 'off';
+        $payload = json_encode([
+            'relay' => $relayId,
+            'state' => $normalizedState,
+        ]);
 
         if (! config('esp32.mqtt.enabled')) {
             return [
-                'sent' => $payload,
+                'sent' => $payload ?: '',
                 'published' => false,
                 'message' => 'MQTT disabled in config/esp32.php',
             ];
@@ -35,7 +39,7 @@ class Esp32RelayPublisher
             '-t',
             $topic,
             '-m',
-            $payload,
+            $payload ?: '',
         ];
 
         if (is_string($username) && $username !== '') {
@@ -57,7 +61,7 @@ class Esp32RelayPublisher
         }
 
         return [
-            'sent' => $payload,
+            'sent' => $payload ?: '',
             'published' => true,
             'message' => 'MQTT command published.',
         ];

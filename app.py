@@ -6,9 +6,9 @@ import threading
 
 app = Flask(__name__)
 
-MQTT_BROKER = "192.168.1.246"
-MQTT_TOPIC_DATA = "esp32/data"
-MQTT_TOPIC_CMD  = "esp32/cmd"
+MQTT_BROKER = "broker.hivemq.com"
+MQTT_TOPIC_DATA = "razvy_esp32_2026/data"
+MQTT_TOPIC_CMD  = "razvy_esp32_2026/cmd"
 
 latest_data = {
     "voltage": 0,
@@ -49,4 +49,4 @@ def api_relay(state):
     return jsonify({"status": "ok", "sent": payload})
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=5001)

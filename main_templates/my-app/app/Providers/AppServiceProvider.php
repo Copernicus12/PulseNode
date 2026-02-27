@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use App\Console\Commands\MqttListener;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -15,7 +16,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->commands([
+            MqttListener::class,
+        ]);
     }
 
     /**
