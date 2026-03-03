@@ -57,9 +57,9 @@
         {{-- Left column --}}
         <div class="flex flex-col gap-5">
 
-            {{-- Socket 1 — tall card like "Smart Lamp" --}}
+            {{-- Socket 1 --}}
             @php $s1 = $sockets[0]; $on1 = $s1['is_on']; @endphp
-            <div id="dashboard-socket-1" class="flex-1 rounded-3xl bg-card p-7">
+            <div id="dashboard-socket-1" class="rounded-3xl bg-card p-7">
                 <div class="flex items-start justify-between">
                     <div>
                         <h3 class="text-lg font-bold">{{ $s1['label'] }}</h3>
@@ -104,6 +104,32 @@
                     <div class="flex h-full items-center rounded-full px-1.5 transition-all duration-700 {{ $hasLoad2 ? 'bg-primary/15' : '' }}" style="width: max(2.75rem, {{ $pct2 }}%)">
                         <span class="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow transition-colors duration-700 {{ $on2 ? 'bg-primary/30 ring-1 ring-primary/20' : 'bg-muted-foreground/20' }}">
                             <svg class="h-3.5 w-3.5 {{ $on2 ? 'text-primary' : 'text-muted-foreground' }} transition-colors duration-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Socket 3 --}}
+            @php $s3 = $sockets[2]; $on3 = $s3['is_on']; @endphp
+            <div id="dashboard-socket-3" class="rounded-3xl bg-card p-7">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <h3 class="text-lg font-bold">{{ $s3['label'] }}</h3>
+                        <p class="text-sm text-muted-foreground">Socket 3 &middot; Relay GPIO 17</p>
+                    </div>
+                    <button onclick="toggleRelay(3, {{ $on3 ? 'false' : 'true' }})" class="flex h-11 w-11 items-center justify-center rounded-full transition {{ $on3 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground' }}">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+                    </button>
+                </div>
+                <div class="mt-7 flex items-baseline justify-between">
+                    <span class="text-sm text-muted-foreground">{{ $s3['current'] }} A</span>
+                    <span class="text-2xl font-bold tabular-nums">{{ $s3['power'] }}<span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span></span>
+                </div>
+                @php $hasLoad3 = $on3 && ((float) $s3['current'] > 0.01); $pct3 = $hasLoad3 ? max(15, min(95, ($s3['current'] / max(5, $current ?: 1)) * 100)) : 0; @endphp
+                <div class="mt-5 h-11 w-full rounded-full bg-muted">
+                    <div class="flex h-full items-center rounded-full px-1.5 transition-all duration-700 {{ $hasLoad3 ? 'bg-primary/15' : '' }}" style="width: max(2.75rem, {{ $pct3 }}%)">
+                        <span class="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow transition-colors duration-700 {{ $on3 ? 'bg-primary/30 ring-1 ring-primary/20' : 'bg-muted-foreground/20' }}">
+                            <svg class="h-3.5 w-3.5 {{ $on3 ? 'text-primary' : 'text-muted-foreground' }} transition-colors duration-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                         </span>
                     </div>
                 </div>
@@ -224,40 +250,14 @@
         </div>
     </div>
 
-    {{-- ── Row 3: Socket 3 + Hardware info ── --}}
-    <div class="grid gap-5 lg:grid-cols-2">
-
-        {{-- Socket 3 --}}
-        @php $s3 = $sockets[2]; $on3 = $s3['is_on']; @endphp
-        <div id="dashboard-socket-3" class="rounded-3xl bg-card p-7">
-            <div class="flex items-start justify-between">
-                <div>
-                    <h3 class="text-lg font-bold">{{ $s3['label'] }}</h3>
-                    <p class="text-sm text-muted-foreground">Socket 3 &middot; Relay GPIO 17</p>
-                </div>
-                <button onclick="toggleRelay(3, {{ $on3 ? 'false' : 'true' }})" class="flex h-11 w-11 items-center justify-center rounded-full transition {{ $on3 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground' }}">
-                    <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
-                </button>
-            </div>
-            <div class="mt-7 flex items-baseline justify-between">
-                <span class="text-sm text-muted-foreground">{{ $s3['current'] }} A</span>
-                <span class="text-2xl font-bold tabular-nums">{{ $s3['power'] }}<span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span></span>
-            </div>
-            @php $hasLoad3 = $on3 && ((float) $s3['current'] > 0.01); $pct3 = $hasLoad3 ? max(15, min(95, ($s3['current'] / max(5, $current ?: 1)) * 100)) : 0; @endphp
-            <div class="mt-5 h-11 w-full rounded-full bg-muted">
-                <div class="flex h-full items-center rounded-full px-1.5 transition-all duration-700 {{ $hasLoad3 ? 'bg-primary/15' : '' }}" style="width: max(2.75rem, {{ $pct3 }}%)">
-                    <span class="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow transition-colors duration-700 {{ $on3 ? 'bg-primary/30 ring-1 ring-primary/20' : 'bg-muted-foreground/20' }}">
-                        <svg class="h-3.5 w-3.5 {{ $on3 ? 'text-primary' : 'text-muted-foreground' }} transition-colors duration-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-                    </span>
-                </div>
-            </div>
-        </div>
-
-        {{-- Hardware --}}
-        <div class="rounded-3xl bg-card p-7">
-            <h3 class="text-lg font-bold">Device</h3>
-            <p class="text-sm text-muted-foreground">Hardware specifications</p>
-            <div class="mt-5 space-y-0">
+    {{-- ── Row 3: Device (collapsible) ── --}}
+    <details class="group rounded-3xl bg-card">
+        <summary class="flex cursor-pointer select-none items-center justify-between px-7 py-5 text-sm text-muted-foreground transition hover:text-foreground [&::-webkit-details-marker]:hidden">
+            <span class="font-medium">Device &middot; Hardware specifications</span>
+            <svg class="h-4 w-4 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        </summary>
+        <div class="border-t border-border/20 px-7 py-6">
+            <div class="space-y-0">
                 @php
                     $specs = [
                         ['MCU',      'ESP32-WROOM-32'],
@@ -276,7 +276,7 @@
                 @endforeach
             </div>
         </div>
-    </div>
+    </details>
 
     {{-- ── Row 4: Safety alert (only when needed) ── --}}
     @if($safetyLevel !== 'normal')

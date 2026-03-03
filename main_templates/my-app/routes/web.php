@@ -22,6 +22,12 @@ Route::get('dashboard', DashboardController::class)
 
 Route::get('power-strip', [PowerStripController::class, 'index'])
     ->middleware(['auth'])->name('power-strip.index');
+Route::get('devices', [PowerStripController::class, 'devices'])
+    ->middleware(['auth'])->name('devices.index');
+Route::post('devices/profiles', [PowerStripController::class, 'storeDeviceProfile'])
+    ->middleware(['auth'])->name('devices.profiles.store');
+Route::get('battery', [PowerStripController::class, 'battery'])
+    ->middleware(['auth'])->name('battery.index');
 Route::get('power-strip/settings', [PowerStripController::class, 'settings'])
     ->middleware(['auth'])->name('power-strip.settings');
 

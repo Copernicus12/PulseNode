@@ -24,10 +24,14 @@
     Power Strip
 </a>
 
-<a href="#"
+<a href="{{ route('devices.index') }}"
     data-search-link="1"
     data-search-label="my devices"
-   class="flex items-center gap-3 rounded-2xl px-4 py-3 text-[14px] text-muted-foreground transition hover:bg-muted/50 hover:text-foreground">
+   @class([
+       'flex items-center gap-3 rounded-2xl px-4 py-3 text-[14px] transition',
+       'bg-primary text-primary-foreground font-semibold' => $currentRoute === 'devices.index',
+       'text-muted-foreground hover:bg-muted/50 hover:text-foreground' => $currentRoute !== 'devices.index',
+   ])>
     <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
     My Devices
 </a>
@@ -40,10 +44,14 @@
     History
 </a>
 
-<a href="#"
+<a href="{{ route('battery.index') }}"
     data-search-link="1"
     data-search-label="battery level"
-   class="flex items-center gap-3 rounded-2xl px-4 py-3 text-[14px] text-muted-foreground transition hover:bg-muted/50 hover:text-foreground">
+   @class([
+       'flex items-center gap-3 rounded-2xl px-4 py-3 text-[14px] transition',
+       'bg-primary text-primary-foreground font-semibold' => $currentRoute === 'battery.index',
+       'text-muted-foreground hover:bg-muted/50 hover:text-foreground' => $currentRoute !== 'battery.index',
+   ])>
     <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
     Battery Level
 </a>
