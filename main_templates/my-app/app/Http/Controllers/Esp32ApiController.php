@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\DetectionPlan;
+use App\Models\DeviceProfile;
 use App\Models\EnergyReading;
 use App\Models\EnergySample;
+use App\Support\DeviceProfiler;
 use App\Support\Esp32RelayPublisher;
 use App\Support\Esp32StateStore;
 use Carbon\Carbon;
@@ -111,6 +114,36 @@ class Esp32ApiController extends Controller
         }
 
         return response()->json(EnergyReading::dayDetails($parsed));
+    }
+
+    public function liveDetections(DeviceProfiler $profiler): JsonResponse
+    {
+        $profiles = DeviceProfile::query()->latest('last_trained_at')->get();
+        $plans = DetectionPlan::query()
+            ->where('is_active', true)
+            ->orderByRaw('CASE WHEN socket_scope IS NULL THEN 0 ELSE 1 END DESC')
+            ->latest('updated_at')
+            ->get();
+
+        $detections = collect([1, 2, 3])->map(function (int $socketIndex) use ($profiler, $profiles, $plans): array {
+            $plan = $profiler->resolvePlanForSocket($socketIndex, $plans);
+            $detection = $profiler->detectSocket($socketIndex, $profiles, $plan);
+
+            return [
+                'socket_index' => $socketIndex,
+                'state' => (string) ($detection['state'] ?? 'idle'),
+                'confidence' => (int) ($detection['confidence'] ?? 0),
+                'label' => (string) ($detection['label'] ?? 'Unknown'),
+                'category' => (string) ($detection['category'] ?? 'Unknown'),
+                'reason' => (string) ($detection['reason'] ?? ''),
+                'required_samples' => (int) ($detection['required_samples'] ?? 3),
+            ];
+        })->values();
+
+        return response()->json([
+            'status' => 'ok',
+            'detections' => $detections,
+        ]);
     }
 
     public function restartMqttListener(): JsonResponse

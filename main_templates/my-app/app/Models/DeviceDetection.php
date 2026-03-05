@@ -13,6 +13,7 @@ class DeviceDetection extends Model
     protected $fillable = [
         'socket_index',
         'device_profile_id',
+        'detection_plan_id',
         'predicted_label',
         'predicted_category',
         'confidence',
@@ -37,5 +38,10 @@ class DeviceDetection extends Model
     public function profile(): BelongsTo
     {
         return $this->belongsTo(DeviceProfile::class, 'device_profile_id');
+    }
+
+    public function plan(): BelongsTo
+    {
+        return $this->belongsTo(DetectionPlan::class, 'detection_plan_id');
     }
 }

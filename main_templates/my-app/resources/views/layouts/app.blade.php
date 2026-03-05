@@ -104,6 +104,11 @@
                         </div>
 
                         <div class="flex items-center gap-1.5">
+                            <div id="live-telemetry-pill" class="hidden items-center gap-2 rounded-2xl bg-card px-3 py-2 text-xs text-muted-foreground ring-1 ring-border/30 lg:inline-flex">
+                                <span id="live-telemetry-dot" class="h-2 w-2 rounded-full bg-red-400"></span>
+                                <span id="live-telemetry-power" class="font-semibold tabular-nums text-foreground">0.0W</span>
+                                <span id="live-telemetry-current" class="tabular-nums">0.000A</span>
+                            </div>
                             <button title="Users" class="inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground">
                                 <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                             </button>
@@ -427,6 +432,62 @@
                 setOpen(true);
                 renderResults(input.value);
             });
+        })();
+        </script>
+        <script>
+        (function () {
+            var dot = document.getElementById('live-telemetry-dot');
+            var power = document.getElementById('live-telemetry-power');
+            var current = document.getElementById('live-telemetry-current');
+            if (!dot || !power || !current) return;
+
+            function asNumber(v) {
+                var n = Number(v);
+                return Number.isFinite(n) ? n : 0;
+            }
+
+            function isOnline(updatedAt) {
+                if (!updatedAt) return false;
+                var t = Date.parse(updatedAt);
+                if (!Number.isFinite(t)) return false;
+                return (Date.now() - t) <= (5 * 60 * 1000);
+            }
+
+            function setOnline(online) {
+                dot.classList.remove('bg-red-400', 'bg-emerald-400');
+                dot.classList.add(online ? 'bg-emerald-400' : 'bg-red-400');
+            }
+
+            function applyLatest(data) {
+                var p = asNumber(data && data.power);
+                var c = asNumber(data && data.current);
+                power.textContent = p.toFixed(1) + 'W';
+                current.textContent = c.toFixed(3) + 'A';
+                setOnline(isOnline(data && data.updated_at));
+            }
+
+            function publishLatest(data) {
+                window.__pulsenodeLatest = data;
+                window.dispatchEvent(new CustomEvent('pulsenode:latest', { detail: data }));
+            }
+
+            function pollLatest() {
+                fetch('/api/latest', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                    .then(function (r) {
+                        if (!r.ok) throw new Error('latest fetch failed');
+                        return r.json();
+                    })
+                    .then(function (data) {
+                        applyLatest(data);
+                        publishLatest(data);
+                    })
+                    .catch(function () {
+                        setOnline(false);
+                    });
+            }
+
+            pollLatest();
+            setInterval(pollLatest, 2000);
         })();
         </script>
     </body>

@@ -61,7 +61,7 @@
                     <dl class="space-y-3 text-sm">
                         <div>
                             <dt class="text-xs text-muted-foreground">Last sync</dt>
-                            <dd class="mt-1 font-semibold">{{ $lastSeen }}</dd>
+                            <dd id="battery-last-sync" class="mt-1 font-semibold">{{ $lastSeen }}</dd>
                         </div>
                         <div>
                             <dt class="text-xs text-muted-foreground">System</dt>
@@ -89,7 +89,7 @@
             </div>
             <div class="rounded-2xl bg-background p-4 ring-1 ring-border/30">
                 <p class="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">Average draw</p>
-                <p class="mt-2 text-2xl font-bold tabular-nums">{{ number_format($liveDraw, 1) }} <span class="text-sm font-normal text-muted-foreground">W</span></p>
+                <p class="mt-2 text-2xl font-bold tabular-nums"><span id="battery-live-draw">{{ number_format($liveDraw, 1) }}</span> <span class="text-sm font-normal text-muted-foreground">W</span></p>
             </div>
         </div>
     </section>
@@ -248,4 +248,32 @@
         </div>
     </section>
 </div>
+<script>
+(function () {
+    function asNumber(v) {
+        var n = Number(v);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    function lastSeenLabel(updatedAt) {
+        if (!updatedAt) return 'never';
+        var ts = Date.parse(updatedAt);
+        if (!Number.isFinite(ts)) return 'unknown';
+        var diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+        if (diffSec < 5) return 'just now';
+        if (diffSec < 60) return diffSec + ' sec ago';
+        if (diffSec < 3600) return Math.floor(diffSec / 60) + ' min ago';
+        return Math.floor(diffSec / 3600) + ' h ago';
+    }
+
+    window.addEventListener('pulsenode:latest', function (event) {
+        var data = event.detail || {};
+        var syncEl = document.getElementById('battery-last-sync');
+        if (syncEl) syncEl.textContent = lastSeenLabel(data.updated_at);
+
+        var drawEl = document.getElementById('battery-live-draw');
+        if (drawEl) drawEl.textContent = asNumber(data.power).toFixed(1);
+    });
+})();
+</script>
 @endsection

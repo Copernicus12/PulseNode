@@ -15,8 +15,8 @@
             <div class="max-w-3xl">
                 <div class="flex flex-wrap items-center gap-3">
                     <span class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium {{ $isOnline ? 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/20' : 'bg-red-500/15 text-red-300 ring-1 ring-red-500/20' }}">
-                        <span class="h-2 w-2 rounded-full {{ $isOnline ? 'bg-emerald-400' : 'bg-red-400' }}"></span>
-                        {{ $isOnline ? 'Online' : 'Offline' }}
+                        <span id="history-live-dot" class="h-2 w-2 rounded-full {{ $isOnline ? 'bg-emerald-400' : 'bg-red-400' }}"></span>
+                        <span id="history-live-status">{{ $isOnline ? 'Online' : 'Offline' }}</span>
                     </span>
                     <span class="inline-flex items-center rounded-full bg-background px-3 py-1 text-xs font-medium text-muted-foreground ring-1 ring-border/40">
                         Energy history
@@ -39,7 +39,7 @@
                     </div>
                     <div>
                         <p class="text-xs text-muted-foreground">Last sync</p>
-                        <p class="mt-1 text-lg font-semibold">{{ $lastSeen }}</p>
+                        <p id="history-last-sync" class="mt-1 text-lg font-semibold">{{ $lastSeen }}</p>
                     </div>
                     <div>
                         <p class="text-xs text-muted-foreground">Day total</p>
@@ -241,4 +241,42 @@
         </div>
     </section>
 </div>
+<script>
+(function () {
+    function lastSeenLabel(updatedAt) {
+        if (!updatedAt) return 'never';
+        var ts = Date.parse(updatedAt);
+        if (!Number.isFinite(ts)) return 'unknown';
+        var diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+        if (diffSec < 5) return 'just now';
+        if (diffSec < 60) return diffSec + ' sec ago';
+        if (diffSec < 3600) return Math.floor(diffSec / 60) + ' min ago';
+        return Math.floor(diffSec / 3600) + ' h ago';
+    }
+
+    function isOnline(updatedAt) {
+        if (!updatedAt) return false;
+        var ts = Date.parse(updatedAt);
+        if (!Number.isFinite(ts)) return false;
+        return (Date.now() - ts) <= (5 * 60 * 1000);
+    }
+
+    window.addEventListener('pulsenode:latest', function (event) {
+        var data = event.detail || {};
+        var online = isOnline(data.updated_at);
+
+        var syncEl = document.getElementById('history-last-sync');
+        if (syncEl) syncEl.textContent = lastSeenLabel(data.updated_at);
+
+        var statusEl = document.getElementById('history-live-status');
+        if (statusEl) statusEl.textContent = online ? 'Online' : 'Offline';
+
+        var dotEl = document.getElementById('history-live-dot');
+        if (dotEl) {
+            dotEl.classList.remove('bg-emerald-400', 'bg-red-400');
+            dotEl.classList.add(online ? 'bg-emerald-400' : 'bg-red-400');
+        }
+    });
+})();
+</script>
 @endsection

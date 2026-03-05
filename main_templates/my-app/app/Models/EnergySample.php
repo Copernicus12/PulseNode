@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\UniqueConstraintViolationException;
 
 class EnergySample extends Model
 {
@@ -111,15 +112,25 @@ class EnergySample extends Model
             'warning_level' => $warningLevel,
         ]);
 
-        $reading = EnergyReading::query()->firstOrCreate(
-            ['date' => $now->toDateString()],
-            [
-                'energy_socket_1' => 0,
-                'energy_socket_2' => 0,
-                'energy_socket_3' => 0,
-                'energy_total' => 0,
-            ]
-        );
+        $reading = EnergyReading::query()
+            ->whereDate('date', $now->toDateString())
+            ->first();
+
+        if ($reading === null) {
+            try {
+                $reading = EnergyReading::query()->create([
+                    'date' => $now->toDateString(),
+                    'energy_socket_1' => 0,
+                    'energy_socket_2' => 0,
+                    'energy_socket_3' => 0,
+                    'energy_total' => 0,
+                ]);
+            } catch (UniqueConstraintViolationException) {
+                $reading = EnergyReading::query()
+                    ->whereDate('date', $now->toDateString())
+                    ->firstOrFail();
+            }
+        }
 
         $reading->update([
             'energy_socket_1' => round((float) $reading->energy_socket_1 + $s1Delta, 6),

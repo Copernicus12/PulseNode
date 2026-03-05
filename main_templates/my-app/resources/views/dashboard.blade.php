@@ -523,21 +523,24 @@ function refreshEnergyHistory() {
 renderEnergyBars(energyState);
 bindEnergyBars();
 
-setInterval(function() {
-    fetch('/api/latest', { credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            var el = function(id) { return document.getElementById(id); };
-            var u = function(unit) { return ' <span class="text-sm font-normal text-muted-foreground">' + unit + '</span>'; };
-            if (el('dash-voltage')) el('dash-voltage').innerHTML = parseFloat(d.voltage || 0).toFixed(1) + u('V');
-            if (el('dash-current')) el('dash-current').innerHTML = parseFloat(d.current || 0).toFixed(3) + u('A');
-            if (el('dash-power'))   el('dash-power').innerHTML   = parseFloat(d.power || 0).toFixed(1) + u('W');
-            if (el('dash-energy'))  el('dash-energy').innerHTML  = parseFloat(d.energy || 0).toFixed(4) + u('kWh');
-            if (el('dash-energy-total')) el('dash-energy-total').innerHTML = parseFloat(d.energy || 0).toFixed(4) + u('kWh');
-            if (el('dash-raw-json')) el('dash-raw-json').textContent = JSON.stringify(d, null, 2);
-        })
-        .catch(function() {});
-}, 5000);
+function applyLatestDashboard(d) {
+    var el = function(id) { return document.getElementById(id); };
+    var u = function(unit) { return ' <span class="text-sm font-normal text-muted-foreground">' + unit + '</span>'; };
+    if (el('dash-voltage')) el('dash-voltage').innerHTML = parseFloat(d.voltage || 0).toFixed(1) + u('V');
+    if (el('dash-current')) el('dash-current').innerHTML = parseFloat(d.current || 0).toFixed(3) + u('A');
+    if (el('dash-power')) el('dash-power').innerHTML = parseFloat(d.power || 0).toFixed(1) + u('W');
+    if (el('dash-energy')) el('dash-energy').innerHTML = parseFloat(d.energy || 0).toFixed(4) + u('kWh');
+    if (el('dash-energy-total')) el('dash-energy-total').innerHTML = parseFloat(d.energy || 0).toFixed(4) + u('kWh');
+    if (el('dash-raw-json')) el('dash-raw-json').textContent = JSON.stringify(d, null, 2);
+}
+
+window.addEventListener('pulsenode:latest', function(event) {
+    applyLatestDashboard(event.detail || {});
+});
+
+if (window.__pulsenodeLatest) {
+    applyLatestDashboard(window.__pulsenodeLatest);
+}
 
 setInterval(refreshEnergyHistory, 20000);
 </script>

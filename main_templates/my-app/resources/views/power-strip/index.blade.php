@@ -282,26 +282,29 @@ function simulateGuard() {
 restoreLog();
 loadGuardPolicy();
 
-setInterval(function() {
-    fetch('/api/latest', { credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-            var el = function(id) { return document.getElementById(id); };
-            var u = function(unit) { return ' <span class="text-sm font-normal text-muted-foreground">' + unit + '</span>'; };
-            if (el('total-power')) el('total-power').innerHTML = parseFloat(d.power || 0).toFixed(1) + u('W');
-            if (el('total-energy')) el('total-energy').innerHTML = parseFloat(d.energy || 0).toFixed(3) + u('kWh');
-            if (el('active-sockets')) {
-                var count = 0;
-                if (d.relay_1) count++;
-                if (d.relay_2) count++;
-                if (d.relay_3) count++;
-                el('active-sockets').innerHTML = count + '<span class="text-sm font-normal text-muted-foreground">/3</span>';
-            }
-            if (el('raw-json')) {
-                el('raw-json').textContent = JSON.stringify(d, null, 2);
-            }
-        })
-        .catch(function() {});
-}, 5000);
+function applyLatestMetrics(d) {
+    var el = function(id) { return document.getElementById(id); };
+    var u = function(unit) { return ' <span class="text-sm font-normal text-muted-foreground">' + unit + '</span>'; };
+    if (el('total-power')) el('total-power').innerHTML = parseFloat(d.power || 0).toFixed(1) + u('W');
+    if (el('total-energy')) el('total-energy').innerHTML = parseFloat(d.energy || 0).toFixed(3) + u('kWh');
+    if (el('active-sockets')) {
+        var count = 0;
+        if (d.relay_1) count++;
+        if (d.relay_2) count++;
+        if (d.relay_3) count++;
+        el('active-sockets').innerHTML = count + '<span class="text-sm font-normal text-muted-foreground">/3</span>';
+    }
+    if (el('raw-json')) {
+        el('raw-json').textContent = JSON.stringify(d, null, 2);
+    }
+}
+
+window.addEventListener('pulsenode:latest', function(event) {
+    applyLatestMetrics(event.detail || {});
+});
+
+if (window.__pulsenodeLatest) {
+    applyLatestMetrics(window.__pulsenodeLatest);
+}
 </script>
 @endsection

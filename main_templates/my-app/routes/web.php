@@ -26,6 +26,14 @@ Route::get('devices', [PowerStripController::class, 'devices'])
     ->middleware(['auth'])->name('devices.index');
 Route::post('devices/profiles', [PowerStripController::class, 'storeDeviceProfile'])
     ->middleware(['auth'])->name('devices.profiles.store');
+Route::delete('devices/profiles/{profile}', [PowerStripController::class, 'destroyDeviceProfile'])
+    ->middleware(['auth'])->name('devices.profiles.destroy');
+Route::post('devices/plans', [PowerStripController::class, 'storeDetectionPlan'])
+    ->middleware(['auth'])->name('devices.plans.store');
+Route::post('devices/plans/{plan}/activate', [PowerStripController::class, 'activateDetectionPlan'])
+    ->middleware(['auth'])->name('devices.plans.activate');
+Route::delete('devices/plans/{plan}', [PowerStripController::class, 'destroyDetectionPlan'])
+    ->middleware(['auth'])->name('devices.plans.destroy');
 Route::get('history', [PowerStripController::class, 'history'])
     ->middleware(['auth'])->name('history.index');
 Route::get('battery', [PowerStripController::class, 'battery'])
@@ -38,6 +46,7 @@ Route::prefix('api')->middleware(['auth'])->group(function (): void {
     Route::get('relay/{relayId}/{state}', [Esp32ApiController::class, 'relay'])->name('api.relay');
     Route::get('energy-history', [Esp32ApiController::class, 'energyHistory'])->name('api.energy-history');
     Route::get('energy-day/{date}', [Esp32ApiController::class, 'energyDay'])->name('api.energy-day');
+    Route::get('devices/live-detections', [Esp32ApiController::class, 'liveDetections'])->name('api.devices.live-detections');
     Route::get('system/mqtt-listener/restart', [Esp32ApiController::class, 'restartMqttListener'])->name('api.system.mqtt.restart');
 });
 

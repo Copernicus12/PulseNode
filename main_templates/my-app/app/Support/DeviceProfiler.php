@@ -2,10 +2,10 @@
 
 namespace App\Support;
 
+use App\Models\DetectionPlan;
 use App\Models\DeviceDetection;
 use App\Models\DeviceProfile;
 use App\Models\EnergySample;
-use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 
 class DeviceProfiler
@@ -15,7 +15,7 @@ class DeviceProfiler
         return (float) config('esp32.analytics.sample_minutes', 0.1667);
     }
 
-    public function buildSocketSignature(int $socketIndex, int $windowSamples = 90): ?array
+    public function buildSocketSignature(int $socketIndex, int $windowSamples = 90, int $minActiveSamples = 3): ?array
     {
         $currentColumn = 'current_'.$socketIndex;
         $powerColumn = 'power_socket_'.$socketIndex;
@@ -33,7 +33,7 @@ class DeviceProfiler
 
         $active = $recent->filter(fn (EnergySample $sample): bool => (float) $sample->{$currentColumn} > 0.03)->values();
 
-        if ($active->count() < 3) {
+        if ($active->count() < $minActiveSamples) {
             return null;
         }
 
@@ -69,9 +69,14 @@ class DeviceProfiler
         ];
     }
 
-    public function detectSocket(int $socketIndex, Collection $profiles): array
+    public function detectSocket(int $socketIndex, Collection $profiles, ?DetectionPlan $plan = null): array
     {
-        $signature = $this->buildSocketSignature($socketIndex);
+        $resolvedPlan = $plan ?? $this->resolvePlanForSocket($socketIndex);
+        $windowSamples = $resolvedPlan?->window_samples ?? $this->windowSamplesForStrategy($resolvedPlan?->strategy ?? 'balanced');
+        $minSamples = max(2, (int) ($resolvedPlan?->min_samples ?? 3));
+        $matchThreshold = (int) ($resolvedPlan?->match_threshold ?? 68);
+
+        $signature = $this->buildSocketSignature($socketIndex, (int) $windowSamples, $minSamples);
 
         if ($signature === null) {
             return [
@@ -80,9 +85,11 @@ class DeviceProfiler
                 'confidence' => 0,
                 'label' => 'No active device',
                 'category' => 'Idle socket',
-                'reason' => 'Not enough recent activity to fingerprint this socket.',
+                'reason' => 'Not enough recent activity for this detection plan.',
                 'signature' => null,
                 'profile' => null,
+                'plan' => $resolvedPlan,
+                'required_samples' => $minSamples,
             ];
         }
 
@@ -97,7 +104,7 @@ class DeviceProfiler
             }
         }
 
-        if ($bestProfile !== null && $bestConfidence >= 68) {
+        if ($bestProfile !== null && $bestConfidence >= $matchThreshold) {
             return [
                 'socket_index' => $socketIndex,
                 'state' => 'matched',
@@ -107,6 +114,8 @@ class DeviceProfiler
                 'reason' => 'Matched against a saved power signature profile.',
                 'signature' => $signature,
                 'profile' => $bestProfile,
+                'plan' => $resolvedPlan,
+                'required_samples' => $minSamples,
             ];
         }
 
@@ -121,6 +130,8 @@ class DeviceProfiler
             'reason' => $reason,
             'signature' => $signature,
             'profile' => null,
+            'plan' => $resolvedPlan,
+            'required_samples' => $minSamples,
         ];
     }
 
@@ -137,6 +148,7 @@ class DeviceProfiler
                         'released_at' => now(),
                         'status' => 'released',
                     ]);
+
                 continue;
             }
 
@@ -148,6 +160,7 @@ class DeviceProfiler
 
             $payload = [
                 'device_profile_id' => $detection['profile']?->id,
+                'detection_plan_id' => $detection['plan']?->id,
                 'predicted_label' => $detection['label'],
                 'predicted_category' => $detection['category'],
                 'confidence' => (int) $detection['confidence'],
@@ -158,6 +171,7 @@ class DeviceProfiler
 
             if ($open && $open->predicted_label === $detection['label'] && abs($open->confidence - (int) $detection['confidence']) <= 8) {
                 $open->update($payload);
+
                 continue;
             }
 
@@ -215,6 +229,34 @@ class DeviceProfiler
         }
 
         return (int) max(0, min(99, round($score)));
+    }
+
+    public function resolvePlanForSocket(int $socketIndex, ?Collection $plans = null): ?DetectionPlan
+    {
+        $planSet = ($plans ?? DetectionPlan::query()->where('is_active', true)->get())
+            ->where('is_active', true)
+            ->values();
+
+        $socketPlan = $planSet->first(function (DetectionPlan $plan) use ($socketIndex): bool {
+            return (int) $plan->socket_scope === $socketIndex;
+        });
+
+        if ($socketPlan !== null) {
+            return $socketPlan;
+        }
+
+        return $planSet->first(function (DetectionPlan $plan): bool {
+            return $plan->socket_scope === null;
+        });
+    }
+
+    private function windowSamplesForStrategy(string $strategy): int
+    {
+        return match ($strategy) {
+            'fast' => 45,
+            'strict' => 140,
+            default => 90,
+        };
     }
 
     private function heuristicGuess(array $signature): array

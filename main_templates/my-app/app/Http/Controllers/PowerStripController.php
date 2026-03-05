@@ -2,6 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Devices\StoreDetectionPlanRequest;
+use App\Http\Requests\Devices\StoreDeviceProfileRequest;
+use App\Models\DetectionPlan;
 use App\Models\DeviceDetection;
 use App\Models\DeviceProfile;
 use App\Models\EnergyReading;
@@ -9,6 +12,7 @@ use App\Support\BatteryInsights;
 use App\Support\DeviceProfiler;
 use App\Support\Esp32StateStore;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -38,13 +42,19 @@ class PowerStripController extends Controller
 
         $updatedAt = $latest['updated_at'] ?? null;
         $lastSeen = $updatedAt ? Carbon::parse($updatedAt)->diffForHumans() : 'Never';
-        $isOnline = $systemStatus !== 'offline';
-        $voltage = round((float) ($latest['voltage'] ?? 0), 1);
-        $totalCurrent = round((float) ($latest['current'] ?? 0), 3);
         $profiles = DeviceProfile::query()->latest('last_trained_at')->get();
+        $detectionPlans = DetectionPlan::query()
+            ->orderByDesc('is_active')
+            ->orderByRaw('CASE WHEN socket_scope IS NULL THEN 0 ELSE 1 END DESC')
+            ->latest('updated_at')
+            ->get();
+
+        $planBySocket = collect([1, 2, 3])->mapWithKeys(function (int $socketIndex) use ($profiler, $detectionPlans): array {
+            return [$socketIndex => $profiler->resolvePlanForSocket($socketIndex, $detectionPlans)];
+        });
 
         $detections = collect([1, 2, 3])
-            ->map(fn (int $socketIndex): array => $profiler->detectSocket($socketIndex, $profiles))
+            ->map(fn (int $socketIndex): array => $profiler->detectSocket($socketIndex, $profiles, $planBySocket->get($socketIndex)))
             ->keyBy('socket_index');
 
         $profiler->syncDetections($detections->values()->all());
@@ -59,7 +69,7 @@ class PowerStripController extends Controller
         })->values();
 
         $recentDetections = DeviceDetection::query()
-            ->with('profile')
+            ->with(['profile', 'plan'])
             ->latest('detected_at')
             ->limit(8)
             ->get();
@@ -70,6 +80,7 @@ class PowerStripController extends Controller
             'matched_now' => $detections->where('state', 'matched')->count(),
             'unknown_now' => $detections->where('state', 'unknown')->count(),
             'active_signatures' => $detections->filter(fn (array $detection): bool => ! empty($detection['signature']))->count(),
+            'active_plans' => $detectionPlans->where('is_active', true)->count(),
         ];
 
         return view('devices.index', compact(
@@ -81,24 +92,17 @@ class PowerStripController extends Controller
             'totalEnergy',
             'systemStatus',
             'lastSeen',
-            'isOnline',
-            'voltage',
-            'totalCurrent',
             'profiles',
             'recentDetections',
             'profileCategories',
             'detectionStats',
+            'detectionPlans',
         ));
     }
 
-    public function storeDeviceProfile(Request $request, DeviceProfiler $profiler): RedirectResponse
+    public function storeDeviceProfile(StoreDeviceProfileRequest $request, DeviceProfiler $profiler): RedirectResponse
     {
-        $data = $request->validate([
-            'socket_index' => ['required', 'integer', 'in:1,2,3'],
-            'name' => ['required', 'string', 'min:2', 'max:100'],
-            'category' => ['required', 'string', 'max:64'],
-            'notes' => ['nullable', 'string', 'max:500'],
-        ]);
+        $data = $request->validated();
 
         $signature = $profiler->buildSocketSignature((int) $data['socket_index']);
 
@@ -113,6 +117,64 @@ class PowerStripController extends Controller
         return redirect()
             ->route('devices.index')
             ->with('devices_success', 'Profile "'.$data['name'].'" trained from socket '.$data['socket_index'].'.');
+    }
+
+    public function destroyDeviceProfile(DeviceProfile $profile): RedirectResponse
+    {
+        $name = $profile->name;
+        $profile->delete();
+
+        return redirect()
+            ->route('devices.index')
+            ->with('devices_success', 'Profile "'.$name.'" deleted.');
+    }
+
+    public function storeDetectionPlan(StoreDetectionPlanRequest $request): RedirectResponse
+    {
+        $data = $request->validated();
+
+        $isActive = (bool) ($data['is_active'] ?? false);
+        $scope = $data['socket_scope'] ?? null;
+
+        if ($isActive) {
+            $this->deactivatePlansForScope($scope);
+        }
+
+        $plan = DetectionPlan::query()->create([
+            'name' => $data['name'],
+            'strategy' => $data['strategy'],
+            'socket_scope' => $scope,
+            'window_samples' => (int) $data['window_samples'],
+            'min_samples' => (int) $data['min_samples'],
+            'match_threshold' => (int) $data['match_threshold'],
+            'is_active' => $isActive,
+            'notes' => $data['notes'] ?? null,
+        ]);
+
+        return redirect()
+            ->route('devices.index')
+            ->with('devices_success', 'Detection plan "'.$plan->name.'" created.');
+    }
+
+    public function activateDetectionPlan(DetectionPlan $plan): RedirectResponse
+    {
+        $this->deactivatePlansForScope($plan->socket_scope);
+
+        $plan->update(['is_active' => true]);
+
+        return redirect()
+            ->route('devices.index')
+            ->with('devices_success', 'Detection plan "'.$plan->name.'" activated.');
+    }
+
+    public function destroyDetectionPlan(DetectionPlan $plan): RedirectResponse
+    {
+        $name = $plan->name;
+        $plan->delete();
+
+        return redirect()
+            ->route('devices.index')
+            ->with('devices_success', 'Detection plan "'.$name.'" removed.');
     }
 
     public function battery(Esp32StateStore $store, BatteryInsights $insights): View
@@ -305,5 +367,19 @@ class PowerStripController extends Controller
         }
 
         return 'healthy';
+    }
+
+    private function deactivatePlansForScope(?int $scope): void
+    {
+        DetectionPlan::query()
+            ->where(function (Builder $query) use ($scope): void {
+                if ($scope === null) {
+                    $query->whereNull('socket_scope');
+                } else {
+                    $query->where('socket_scope', $scope);
+                }
+            })
+            ->where('is_active', true)
+            ->update(['is_active' => false]);
     }
 }
