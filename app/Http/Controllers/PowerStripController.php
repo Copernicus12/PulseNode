@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\DeviceDetection;
 use App\Models\DeviceProfile;
+use App\Models\EnergyReading;
 use App\Support\BatteryInsights;
 use App\Support\DeviceProfiler;
 use App\Support\Esp32StateStore;
@@ -133,6 +134,74 @@ class PowerStripController extends Controller
             'lastSeen',
             'isOnline',
             'battery',
+        ));
+    }
+
+    public function history(Request $request, Esp32StateStore $store): View
+    {
+        [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus] = $this->buildStripViewModel($store->latest());
+
+        $updatedAt = $latest['updated_at'] ?? null;
+        $lastSeen = $updatedAt ? Carbon::parse($updatedAt)->diffForHumans() : 'Never';
+        $isOnline = $systemStatus !== 'offline';
+        $history = EnergyReading::historyPayload();
+        $week = collect($history['week'] ?? []);
+        $selectedDate = (string) $request->string('date', (string) optional($week->firstWhere('is_today', true))['date'] ?: now()->toDateString());
+
+        try {
+            $selectedDate = Carbon::parse($selectedDate)->toDateString();
+        } catch (\Throwable) {
+            $selectedDate = (string) optional($week->firstWhere('is_today', true))['date'] ?: now()->toDateString();
+        }
+
+        $selectedDay = EnergyReading::dayDetails($selectedDate);
+        $weeklyTotal = round((float) $week->sum('total'), 4);
+        $averageDay = round((float) $week->avg('total'), 4);
+        $peakDay = $week->sortByDesc('total')->first();
+        $activeHours = collect($selectedDay['hourly'] ?? [])->where('energy_kwh', '>', 0)->count();
+        $topHour = collect($selectedDay['hourly'] ?? [])->sortByDesc('energy_kwh')->first();
+        $totalWarnings = (int) (($selectedDay['warnings']['high'] ?? 0) + ($selectedDay['warnings']['overload'] ?? 0));
+        $topSocket = collect($selectedDay['socket_stats'] ?? [])->sortByDesc('energy_kwh')->first();
+        $researchIdeas = [
+            [
+                'title' => 'Standby baseline detection',
+                'description' => 'Track the normal idle profile for each socket and flag unusual standby increases automatically.',
+            ],
+            [
+                'title' => 'Anomaly and overload timeline',
+                'description' => 'Store events separately and show spikes, overloads, and relay reactions as a searchable incident log.',
+            ],
+            [
+                'title' => 'Usage forecasting',
+                'description' => 'Estimate end-of-day and end-of-week energy from the current trend so the user can react earlier.',
+            ],
+            [
+                'title' => 'Automation suggestions',
+                'description' => 'Recommend schedules like turning off sockets with repeated idle leakage during known inactive hours.',
+            ],
+        ];
+
+        return view('history.index', compact(
+            'latest',
+            'sockets',
+            'activeSockets',
+            'totalPower',
+            'totalEnergy',
+            'systemStatus',
+            'lastSeen',
+            'isOnline',
+            'history',
+            'week',
+            'selectedDate',
+            'selectedDay',
+            'weeklyTotal',
+            'averageDay',
+            'peakDay',
+            'activeHours',
+            'topHour',
+            'totalWarnings',
+            'topSocket',
+            'researchIdeas',
         ));
     }
 

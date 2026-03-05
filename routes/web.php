@@ -26,14 +26,12 @@ Route::get('devices', [PowerStripController::class, 'devices'])
     ->middleware(['auth'])->name('devices.index');
 Route::post('devices/profiles', [PowerStripController::class, 'storeDeviceProfile'])
     ->middleware(['auth'])->name('devices.profiles.store');
+Route::get('history', [PowerStripController::class, 'history'])
+    ->middleware(['auth'])->name('history.index');
 Route::get('battery', [PowerStripController::class, 'battery'])
     ->middleware(['auth'])->name('battery.index');
 Route::get('power-strip/settings', [PowerStripController::class, 'settings'])
     ->middleware(['auth'])->name('power-strip.settings');
-
-Route::get('dashboard-test', function () {
-    return Inertia::render('DashboardTest');
-})->middleware(['auth'])->name('dashboard.test');
 
 Route::prefix('api')->middleware(['auth'])->group(function (): void {
     Route::get('latest', [Esp32ApiController::class, 'latest'])->name('api.latest');

@@ -22,12 +22,10 @@ Route::get('dashboard', DashboardController::class)
 
 Route::get('power-strip', [PowerStripController::class, 'index'])
     ->middleware(['auth'])->name('power-strip.index');
+Route::get('history', [PowerStripController::class, 'history'])
+    ->middleware(['auth'])->name('history.index');
 Route::get('power-strip/settings', [PowerStripController::class, 'settings'])
     ->middleware(['auth'])->name('power-strip.settings');
-
-Route::get('dashboard-test', function () {
-    return Inertia::render('DashboardTest');
-})->middleware(['auth'])->name('dashboard.test');
 
 Route::prefix('api')->middleware(['auth'])->group(function (): void {
     Route::get('latest', [Esp32ApiController::class, 'latest'])->name('api.latest');
