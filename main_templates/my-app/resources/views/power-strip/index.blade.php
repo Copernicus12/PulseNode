@@ -2,6 +2,10 @@
 
 @section('title', 'Power Strip')
 
+@push('head')
+    @vite('resources/js/power-strip-safety-guard.ts')
+@endpush
+
 @section('content')
 @php
     $lastSeen = $latest['updated_at'] ? \Carbon\Carbon::parse($latest['updated_at'])->diffForHumans() : 'Never';
@@ -74,7 +78,7 @@
     <div class="grid gap-5 lg:grid-cols-2">
 
         {{-- Scene Presets + command log --}}
-        <div class="rounded-3xl bg-card p-7">
+        <div class="flex h-full flex-col rounded-3xl bg-card p-7">
             <div class="flex items-start justify-between gap-3">
                 <div>
                     <h3 class="text-lg font-bold">Scene Presets</h3>
@@ -102,29 +106,46 @@
                 </button>
             </div>
 
-            <div class="mt-5 rounded-2xl bg-background p-4">
+            <div class="mt-5 flex min-h-[330px] flex-col rounded-2xl bg-background p-4">
                 <div class="flex items-center justify-between">
                     <p class="text-sm font-semibold">Command Log</p>
                     <button type="button" onclick="clearCommandLog()" class="text-xs text-muted-foreground transition hover:text-foreground">Clear</button>
                 </div>
-                <div id="command-log" class="mt-3 max-h-40 space-y-2 overflow-auto text-xs"></div>
+                <div id="command-log" class="mt-3 max-h-[250px] min-h-[170px] flex-1 space-y-2 overflow-auto pr-1 text-xs"></div>
+                <div class="mt-4 grid gap-2 sm:grid-cols-3">
+                    <div class="rounded-xl bg-card px-3 py-2">
+                        <p class="text-[11px] text-muted-foreground">Commands</p>
+                        <p id="log-total" class="mt-1 text-sm font-semibold tabular-nums">0</p>
+                    </div>
+                    <div class="rounded-xl bg-card px-3 py-2">
+                        <p class="text-[11px] text-muted-foreground">Errors</p>
+                        <p id="log-errors" class="mt-1 text-sm font-semibold tabular-nums">0</p>
+                    </div>
+                    <div class="rounded-xl bg-card px-3 py-2">
+                        <p class="text-[11px] text-muted-foreground">Last action</p>
+                        <p id="log-last-action" class="mt-1 truncate text-sm font-semibold">-</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-5 rounded-2xl bg-background p-4">
+                <div class="flex items-center justify-between">
+                    <p class="text-sm font-semibold">Automation Notes</p>
+                    <span id="automation-notes-status" class="text-[11px] text-muted-foreground">Live recommendations</span>
+                </div>
+                <div class="mt-3 space-y-2 text-xs text-muted-foreground">
+                    <p id="automation-note-1" class="rounded-xl bg-card px-3 py-2">Waiting for recent commands...</p>
+                    <p id="automation-note-2" class="rounded-xl bg-card px-3 py-2">Run a scene to get contextual recommendations.</p>
+                    <p id="automation-note-3" class="rounded-xl bg-card px-3 py-2">Use Test Guard after changing policy values.</p>
+                </div>
             </div>
         </div>
 
         {{-- Safety guard + quick operations --}}
         <div class="flex flex-col gap-5">
             <div class="rounded-3xl bg-card p-7">
-                <h3 class="text-lg font-bold">Safety Guard</h3>
-                <p class="text-sm text-muted-foreground">Auto action when total power exceeds a threshold.</p>
-                <div class="mt-4 space-y-3">
-                    <input id="guard-threshold" type="number" min="600" max="2800" step="50" value="1800" class="w-full rounded-xl border border-border/40 bg-background px-3 py-2 text-sm outline-none focus:border-primary/60" />
-                    <select id="guard-action" class="w-full rounded-xl border border-border/40 bg-background px-3 py-2 text-sm outline-none focus:border-primary/60">
-                        <option value="off-3">Cut socket 3</option>
-                        <option value="off-2">Cut socket 2</option>
-                        <option value="off-all">Cut all sockets</option>
-                    </select>
-                    <button type="button" onclick="saveGuardPolicy()" class="w-full rounded-2xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90">Save policy</button>
-                    <p id="guard-message" class="text-xs text-muted-foreground">No action executed.</p>
+                <div id="safety-guard-field-root" class="w-full">
+                    <p class="text-sm text-muted-foreground">Loading safety guard form...</p>
                 </div>
             </div>
 
@@ -167,6 +188,93 @@
 </div>
 
 <script>
+function updateAutomationNotes(rows, errors, lastAction) {
+    var statusEl = document.getElementById('automation-notes-status');
+    var note1 = document.getElementById('automation-note-1');
+    var note2 = document.getElementById('automation-note-2');
+    var note3 = document.getElementById('automation-note-3');
+    if (!statusEl || !note1 || !note2 || !note3) return;
+
+    var notes = [];
+    var lowerLast = (lastAction || '').toLowerCase();
+
+    if (!rows.length) {
+        notes.push('No recent commands yet. Start with Focus or Night to build a routine.');
+    } else {
+        notes.push('Last action: ' + lastAction + '.');
+    }
+
+    if (errors > 0) {
+        notes.push(errors + ' recent error(s) detected. Verify relay API or MQTT listener status.');
+        statusEl.textContent = 'Attention needed';
+        statusEl.className = 'text-[11px] text-amber-400';
+    } else if (!rows.length) {
+        notes.push('System is idle. Run one scene and the panel will suggest next steps.');
+        statusEl.textContent = 'Waiting for activity';
+        statusEl.className = 'text-[11px] text-muted-foreground';
+    } else {
+        notes.push('No recent errors. Automation flow looks stable.');
+        statusEl.textContent = 'Healthy automation';
+        statusEl.className = 'text-[11px] text-emerald-400';
+    }
+
+    if (lowerLast.indexOf('scene applied: focus') !== -1) {
+        notes.push('Focus is active. For lower idle draw later, switch to Night.');
+    } else if (lowerLast.indexOf('scene applied: night') !== -1) {
+        notes.push('Night is active. Use Away when leaving for full shutdown.');
+    } else if (lowerLast.indexOf('scene applied: away') !== -1 || lowerLast.indexOf('all sockets -> off') !== -1) {
+        notes.push('Away/off state detected. Turn on only required sockets to keep consumption low.');
+    } else if (lowerLast.indexOf('guard policy updated') !== -1) {
+        notes.push('Policy was updated. Run Test Guard once to validate the selected action.');
+    } else if (lowerLast.indexOf('socket') !== -1) {
+        notes.push('Manual socket override detected. Consider using a scene for faster repeat actions.');
+    } else if (lowerLast.indexOf('scene failed') !== -1) {
+        notes.push('A scene failed recently. Retry after checking device connectivity.');
+    } else {
+        notes.push('Use Boost only for short bursts, then return to Focus or Night.');
+    }
+
+    note1.textContent = notes[0] || '';
+    note2.textContent = notes[1] || '';
+    note3.textContent = notes[2] || '';
+}
+
+function updateCommandLogInsights() {
+    var host = document.getElementById('command-log');
+    var totalEl = document.getElementById('log-total');
+    var errorEl = document.getElementById('log-errors');
+    var lastEl = document.getElementById('log-last-action');
+    if (!host) return;
+
+    var rows = [];
+    for (var i = 0; i < host.children.length; i++) {
+        rows.push((host.children[i].textContent || '').trim());
+    }
+
+    var total = rows.length;
+    var errors = 0;
+    for (var j = 0; j < rows.length; j++) {
+        var row = rows[j].toLowerCase();
+        if (row.indexOf('failed') !== -1 || row.indexOf('error') !== -1 || row.indexOf('not active') !== -1 || row.indexOf('no guard') !== -1) {
+            errors++;
+        }
+    }
+
+    if (totalEl) totalEl.textContent = String(total);
+    if (errorEl) errorEl.textContent = String(errors);
+    var lastAction = '-';
+    if (lastEl) {
+        if (!total) {
+            lastEl.textContent = '-';
+        } else {
+            lastEl.textContent = rows[0].replace(/^\[[^\]]+\]\s*/, '') || '-';
+        }
+        lastAction = lastEl.textContent || '-';
+    }
+
+    updateAutomationNotes(rows, errors, lastAction);
+}
+
 function addLog(message, isError) {
     var host = document.getElementById('command-log');
     if (!host) return;
@@ -174,17 +282,21 @@ function addLog(message, isError) {
     row.className = 'rounded-lg px-3 py-2 ' + (isError ? 'bg-red-500/10 text-red-300' : 'bg-card text-muted-foreground');
     row.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
     host.prepend(row);
-    while (host.children.length > 20) host.removeChild(host.lastChild);
+    while (host.children.length > 30) host.removeChild(host.lastChild);
     var all = [];
     for (var i = 0; i < host.children.length; i++) all.push(host.children[i].textContent || '');
     localStorage.setItem('powerStripCommandLog', JSON.stringify(all));
+    updateCommandLogInsights();
 }
 
 function restoreLog() {
     var host = document.getElementById('command-log');
     if (!host) return;
     var raw = localStorage.getItem('powerStripCommandLog');
-    if (!raw) return;
+    if (!raw) {
+        updateCommandLogInsights();
+        return;
+    }
     try {
         var rows = JSON.parse(raw);
         if (!Array.isArray(rows)) return;
@@ -194,6 +306,7 @@ function restoreLog() {
             row.textContent = text;
             host.appendChild(row);
         });
+        updateCommandLogInsights();
     } catch (_) {}
 }
 
@@ -201,6 +314,7 @@ function clearCommandLog() {
     localStorage.removeItem('powerStripCommandLog');
     var host = document.getElementById('command-log');
     if (host) host.innerHTML = '';
+    updateCommandLogInsights();
 }
 
 function toggleSocket(idx, turnOn) {
@@ -249,9 +363,12 @@ function applyScene(scene) {
 function saveGuardPolicy() {
     var threshold = parseFloat((document.getElementById('guard-threshold') || {}).value || '1800');
     var action = (document.getElementById('guard-action') || {}).value || 'off-3';
-    localStorage.setItem('powerStripGuard', JSON.stringify({ threshold: threshold, action: action }));
+    var startDate = (document.getElementById('guard-start-date') || {}).value || '';
+    localStorage.setItem('powerStripGuard', JSON.stringify({ threshold: threshold, action: action, startDate: startDate }));
     var msg = document.getElementById('guard-message');
-    if (msg) msg.textContent = 'Policy saved: ' + threshold.toFixed(0) + 'W / ' + action;
+    if (msg) {
+        msg.textContent = 'Policy saved: ' + threshold.toFixed(0) + 'W / ' + action + (startDate ? ' / starts ' + startDate : '');
+    }
     addLog('Guard policy updated');
 }
 
@@ -262,6 +379,7 @@ function loadGuardPolicy() {
         var policy = JSON.parse(raw);
         if (policy.threshold && document.getElementById('guard-threshold')) document.getElementById('guard-threshold').value = policy.threshold;
         if (policy.action && document.getElementById('guard-action')) document.getElementById('guard-action').value = policy.action;
+        if (policy.startDate && document.getElementById('guard-start-date')) document.getElementById('guard-start-date').value = policy.startDate;
     } catch (_) {}
 }
 
@@ -273,6 +391,13 @@ function simulateGuard() {
     }
     try {
         var policy = JSON.parse(raw);
+        if (policy.startDate) {
+            var startAt = new Date(policy.startDate + 'T00:00:00');
+            if (Number.isFinite(startAt.getTime()) && Date.now() < startAt.getTime()) {
+                addLog('Guard policy is not active yet (starts on ' + policy.startDate + ').', true);
+                return;
+            }
+        }
         if (policy.action === 'off-3') return toggleSocket(3, false);
         if (policy.action === 'off-2') return toggleSocket(2, false);
         if (policy.action === 'off-all') return toggleAllSockets(false);

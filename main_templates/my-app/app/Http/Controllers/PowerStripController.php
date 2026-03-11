@@ -38,100 +38,59 @@ class PowerStripController extends Controller
 
     public function devices(Esp32StateStore $store, DeviceProfiler $profiler): View
     {
-        [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus] = $this->buildStripViewModel($store->latest());
+        return view('devices.index', $this->buildDevicesPageData($store, $profiler, 'overview', 6));
+    }
 
-        $updatedAt = $latest['updated_at'] ?? null;
-        $lastSeen = $updatedAt ? Carbon::parse($updatedAt)->diffForHumans() : 'Never';
-        $profiles = DeviceProfile::query()->latest('last_trained_at')->get();
-        $detectionPlans = DetectionPlan::query()
-            ->orderByDesc('is_active')
-            ->orderByRaw('CASE WHEN socket_scope IS NULL THEN 0 ELSE 1 END DESC')
-            ->latest('updated_at')
-            ->get();
+    public function deviceProfiles(Esp32StateStore $store, DeviceProfiler $profiler): View
+    {
+        return view('devices.index', $this->buildDevicesPageData($store, $profiler, 'profiles', 6));
+    }
 
-        $planBySocket = collect([1, 2, 3])->mapWithKeys(function (int $socketIndex) use ($profiler, $detectionPlans): array {
-            return [$socketIndex => $profiler->resolvePlanForSocket($socketIndex, $detectionPlans)];
-        });
+    public function devicePlans(Esp32StateStore $store, DeviceProfiler $profiler): View
+    {
+        return view('devices.index', $this->buildDevicesPageData($store, $profiler, 'plans', 6));
+    }
 
-        $detections = collect([1, 2, 3])
-            ->map(fn (int $socketIndex): array => $profiler->detectSocket($socketIndex, $profiles, $planBySocket->get($socketIndex)))
-            ->keyBy('socket_index');
-
-        $profiler->syncDetections($detections->values()->all());
-
-        $socketCards = collect($sockets)->map(function (array $socket) use ($detections): array {
-            $detection = $detections->get($socket['index']);
-
-            return [
-                ...$socket,
-                'detection' => $detection,
-            ];
-        })->values();
-
-        $recentDetections = DeviceDetection::query()
-            ->with(['profile', 'plan'])
-            ->latest('detected_at')
-            ->limit(8)
-            ->get();
-
-        $profileCategories = ['Computer', 'Display', 'Accessory', 'Appliance', 'Network', 'Lighting', 'Custom'];
-        $detectionStats = [
-            'trained_profiles' => $profiles->count(),
-            'matched_now' => $detections->where('state', 'matched')->count(),
-            'unknown_now' => $detections->where('state', 'unknown')->count(),
-            'active_signatures' => $detections->filter(fn (array $detection): bool => ! empty($detection['signature']))->count(),
-            'active_plans' => $detectionPlans->where('is_active', true)->count(),
-        ];
-
-        return view('devices.index', compact(
-            'latest',
-            'sockets',
-            'socketCards',
-            'activeSockets',
-            'totalPower',
-            'totalEnergy',
-            'systemStatus',
-            'lastSeen',
-            'profiles',
-            'recentDetections',
-            'profileCategories',
-            'detectionStats',
-            'detectionPlans',
-        ));
+    public function deviceActivity(Esp32StateStore $store, DeviceProfiler $profiler): View
+    {
+        return view('devices.index', $this->buildDevicesPageData($store, $profiler, 'activity', 20));
     }
 
     public function storeDeviceProfile(StoreDeviceProfileRequest $request, DeviceProfiler $profiler): RedirectResponse
     {
         $data = $request->validated();
+        $redirectRoute = $this->devicesRedirectRoute($request, 'devices.index');
 
         $signature = $profiler->buildSocketSignature((int) $data['socket_index']);
 
         if ($signature === null) {
             return redirect()
-                ->route('devices.index')
+                ->route($redirectRoute)
                 ->with('devices_error', 'Socket '.$data['socket_index'].' does not have enough recent activity to train a profile yet.');
         }
 
         DeviceProfile::query()->create($profiler->profilePayloadFromSignature($signature, $data));
 
         return redirect()
-            ->route('devices.index')
+            ->route($redirectRoute)
             ->with('devices_success', 'Profile "'.$data['name'].'" trained from socket '.$data['socket_index'].'.');
     }
 
-    public function destroyDeviceProfile(DeviceProfile $profile): RedirectResponse
+    public function destroyDeviceProfile(Request $request, DeviceProfile $profile): RedirectResponse
     {
+        $redirectRoute = $this->devicesRedirectRoute($request, 'devices.index');
         $name = $profile->name;
         $profile->delete();
 
         return redirect()
-            ->route('devices.index')
+            ->route($redirectRoute)
             ->with('devices_success', 'Profile "'.$name.'" deleted.');
     }
 
     public function storeDetectionPlan(StoreDetectionPlanRequest $request): RedirectResponse
     {
         $data = $request->validated();
+        $redirectRoute = $this->devicesRedirectRoute($request, 'devices.index');
 
         $isActive = (bool) ($data['is_active'] ?? false);
         $scope = $data['socket_scope'] ?? null;
@@ -152,28 +111,30 @@ class PowerStripController extends Controller
         ]);
 
         return redirect()
-            ->route('devices.index')
+            ->route($redirectRoute)
             ->with('devices_success', 'Detection plan "'.$plan->name.'" created.');
     }
 
-    public function activateDetectionPlan(DetectionPlan $plan): RedirectResponse
+    public function activateDetectionPlan(Request $request, DetectionPlan $plan): RedirectResponse
     {
+        $redirectRoute = $this->devicesRedirectRoute($request, 'devices.index');
         $this->deactivatePlansForScope($plan->socket_scope);
 
         $plan->update(['is_active' => true]);
 
         return redirect()
-            ->route('devices.index')
+            ->route($redirectRoute)
             ->with('devices_success', 'Detection plan "'.$plan->name.'" activated.');
     }
 
-    public function destroyDetectionPlan(DetectionPlan $plan): RedirectResponse
+    public function destroyDetectionPlan(Request $request, DetectionPlan $plan): RedirectResponse
     {
+        $redirectRoute = $this->devicesRedirectRoute($request, 'devices.index');
         $name = $plan->name;
         $plan->delete();
 
         return redirect()
-            ->route('devices.index')
+            ->route($redirectRoute)
             ->with('devices_success', 'Detection plan "'.$name.'" removed.');
     }
 
@@ -321,6 +282,146 @@ class PowerStripController extends Controller
         $systemStatus = $this->deriveSystemStatus($latest);
 
         return [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus];
+    }
+
+    private function buildDevicesPageData(Esp32StateStore $store, DeviceProfiler $profiler, string $section, int $recentDetectionsLimit): array
+    {
+        return [
+            ...$this->buildDevicesViewModel($store, $profiler),
+            'deviceSection' => $section,
+            'deviceSectionMeta' => $this->deviceSectionMeta($section),
+            'recentDetections' => DeviceDetection::query()
+                ->with(['profile', 'plan'])
+                ->latest('detected_at')
+                ->limit($recentDetectionsLimit)
+                ->get(),
+        ];
+    }
+
+    private function buildDevicesViewModel(Esp32StateStore $store, DeviceProfiler $profiler): array
+    {
+        [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus] = $this->buildStripViewModel($store->latest());
+
+        $updatedAt = $latest['updated_at'] ?? null;
+        $lastSeen = $updatedAt ? Carbon::parse($updatedAt)->diffForHumans() : 'Never';
+        $profiles = DeviceProfile::query()->latest('last_trained_at')->get();
+        $detectionPlans = DetectionPlan::query()
+            ->orderByDesc('is_active')
+            ->orderByRaw('CASE WHEN socket_scope IS NULL THEN 0 ELSE 1 END DESC')
+            ->latest('updated_at')
+            ->get();
+
+        $planBySocket = collect([1, 2, 3])->mapWithKeys(function (int $socketIndex) use ($profiler, $detectionPlans): array {
+            return [$socketIndex => $profiler->resolvePlanForSocket($socketIndex, $detectionPlans)];
+        });
+
+        $detections = collect([1, 2, 3])
+            ->map(fn (int $socketIndex): array => $profiler->detectSocket($socketIndex, $profiles, $planBySocket->get($socketIndex)))
+            ->keyBy('socket_index');
+
+        $profiler->syncDetections($detections->values()->all());
+
+        $socketCards = collect($sockets)->map(function (array $socket) use ($detections): array {
+            return [
+                ...$socket,
+                'detection' => $detections->get($socket['index']),
+            ];
+        })->values();
+
+        $profileCategories = ['Computer', 'Display', 'Accessory', 'Appliance', 'Network', 'Lighting', 'Custom'];
+        $recordedEvents = (int) DeviceDetection::query()->count();
+        $detectionStats = [
+            'trained_profiles' => $profiles->count(),
+            'matched_now' => $detections->where('state', 'matched')->count(),
+            'unknown_now' => $detections->where('state', 'unknown')->count(),
+            'active_signatures' => $detections->filter(fn (array $detection): bool => ! empty($detection['signature']))->count(),
+            'active_plans' => $detectionPlans->where('is_active', true)->count(),
+            'recorded_events' => $recordedEvents,
+        ];
+        $profileBreakdown = $profiles
+            ->groupBy(fn (DeviceProfile $profile): string => $profile->category ?: 'Custom')
+            ->map(fn ($group): int => $group->count())
+            ->sortDesc();
+        $deviceSections = [
+            [
+                'key' => 'overview',
+                'title' => 'Overview',
+                'description' => 'Live status and training',
+                'href' => route('devices.index'),
+                'badge' => $detectionStats['active_signatures'].' live',
+            ],
+            [
+                'key' => 'profiles',
+                'title' => 'Profiles',
+                'description' => 'Saved signatures',
+                'href' => route('devices.profiles.index'),
+                'badge' => $detectionStats['trained_profiles'].' saved',
+            ],
+            [
+                'key' => 'plans',
+                'title' => 'Plans',
+                'description' => 'Matching rules',
+                'href' => route('devices.plans.index'),
+                'badge' => $detectionStats['active_plans'].' active',
+            ],
+            [
+                'key' => 'activity',
+                'title' => 'Activity',
+                'description' => 'Detection timeline',
+                'href' => route('devices.activity.index'),
+                'badge' => $recordedEvents.' logged',
+            ],
+        ];
+
+        return compact(
+            'latest',
+            'sockets',
+            'socketCards',
+            'activeSockets',
+            'totalPower',
+            'totalEnergy',
+            'systemStatus',
+            'lastSeen',
+            'profiles',
+            'profileCategories',
+            'profileBreakdown',
+            'detectionStats',
+            'detectionPlans',
+            'deviceSections',
+        );
+    }
+
+    private function deviceSectionMeta(string $section): array
+    {
+        return match ($section) {
+            'profiles' => [
+                'label' => 'Profiles',
+                'description' => 'Saved fingerprints, recent training, and cleanup actions.',
+            ],
+            'plans' => [
+                'label' => 'Plans',
+                'description' => 'Detection strategies, scope assignment, and active matching rules.',
+            ],
+            'activity' => [
+                'label' => 'Activity',
+                'description' => 'Recent recognitions, confidence levels, and current socket status.',
+            ],
+            default => [
+                'label' => 'Overview',
+                'description' => 'Live signatures, current matches, and quick profile training.',
+            ],
+        };
+    }
+
+    private function devicesRedirectRoute(Request $request, string $fallback): string
+    {
+        return match ((string) $request->string('redirect_route')) {
+            'devices.index',
+            'devices.profiles.index',
+            'devices.plans.index',
+            'devices.activity.index' => (string) $request->string('redirect_route'),
+            default => $fallback,
+        };
     }
 
     private function deriveSocketStatus(array $latest, int $index): string

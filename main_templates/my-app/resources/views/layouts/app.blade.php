@@ -34,7 +34,7 @@
                             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
                         </label>
                     </div>
-                    <nav class="flex-1 space-y-1.5 overflow-y-auto">
+                    <nav class="flex-1 space-y-1.5 overflow-y-auto lg:overflow-visible">
                         @include('layouts._sidebar-links')
                     </nav>
                     <div class="mt-4 space-y-1.5 border-t border-border/20 pt-4">
@@ -61,7 +61,7 @@
                         <div class="px-3 pb-8 pt-3">
                             <span class="text-xl font-bold tracking-tight">PulseNode</span>
                         </div>
-                        <nav class="flex-1 space-y-1.5 overflow-y-auto">
+                        <nav class="flex-1 space-y-1.5 overflow-y-auto lg:overflow-visible">
                             @include('layouts._sidebar-links')
                         </nav>
                         <div class="mt-4 space-y-1.5 border-t border-border/20 pt-4">
@@ -81,6 +81,7 @@
                 </aside>
 
                 {{-- Main content area --}}
+                @php $isDashboardRoute = request()->routeIs('dashboard'); @endphp
                 <div class="flex min-h-0 flex-1 flex-col">
                     <header class="grid h-16 shrink-0 grid-cols-[auto_1fr_auto] items-center gap-3 px-2 pb-2 lg:px-4">
                         <div class="flex items-center">
@@ -104,11 +105,13 @@
                         </div>
 
                         <div class="flex items-center gap-1.5">
-                            <div id="live-telemetry-pill" class="hidden items-center gap-2 rounded-2xl bg-card px-3 py-2 text-xs text-muted-foreground ring-1 ring-border/30 lg:inline-flex">
-                                <span id="live-telemetry-dot" class="h-2 w-2 rounded-full bg-red-400"></span>
-                                <span id="live-telemetry-power" class="font-semibold tabular-nums text-foreground">0.0W</span>
-                                <span id="live-telemetry-current" class="tabular-nums">0.000A</span>
-                            </div>
+                            @unless($isDashboardRoute)
+                                <div id="live-telemetry-pill" class="hidden items-center gap-2 rounded-2xl bg-card px-3 py-2 text-xs text-muted-foreground ring-1 ring-border/30 lg:inline-flex">
+                                    <span id="live-telemetry-dot" class="h-2 w-2 rounded-full bg-red-400"></span>
+                                    <span id="live-telemetry-power" class="font-semibold tabular-nums text-foreground">0.0W</span>
+                                    <span id="live-telemetry-current" class="tabular-nums">0.000A</span>
+                                </div>
+                            @endunless
                             <button title="Users" class="inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground">
                                 <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                             </button>

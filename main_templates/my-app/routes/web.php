@@ -22,18 +22,18 @@ Route::get('dashboard', DashboardController::class)
 
 Route::get('power-strip', [PowerStripController::class, 'index'])
     ->middleware(['auth'])->name('power-strip.index');
-Route::get('devices', [PowerStripController::class, 'devices'])
-    ->middleware(['auth'])->name('devices.index');
-Route::post('devices/profiles', [PowerStripController::class, 'storeDeviceProfile'])
-    ->middleware(['auth'])->name('devices.profiles.store');
-Route::delete('devices/profiles/{profile}', [PowerStripController::class, 'destroyDeviceProfile'])
-    ->middleware(['auth'])->name('devices.profiles.destroy');
-Route::post('devices/plans', [PowerStripController::class, 'storeDetectionPlan'])
-    ->middleware(['auth'])->name('devices.plans.store');
-Route::post('devices/plans/{plan}/activate', [PowerStripController::class, 'activateDetectionPlan'])
-    ->middleware(['auth'])->name('devices.plans.activate');
-Route::delete('devices/plans/{plan}', [PowerStripController::class, 'destroyDetectionPlan'])
-    ->middleware(['auth'])->name('devices.plans.destroy');
+Route::prefix('devices')->middleware(['auth'])->name('devices.')->group(function (): void {
+    Route::get('/', [PowerStripController::class, 'devices'])->name('index');
+    Route::get('profiles', [PowerStripController::class, 'deviceProfiles'])->name('profiles.index');
+    Route::get('plans', [PowerStripController::class, 'devicePlans'])->name('plans.index');
+    Route::get('activity', [PowerStripController::class, 'deviceActivity'])->name('activity.index');
+
+    Route::post('profiles', [PowerStripController::class, 'storeDeviceProfile'])->name('profiles.store');
+    Route::delete('profiles/{profile}', [PowerStripController::class, 'destroyDeviceProfile'])->name('profiles.destroy');
+    Route::post('plans', [PowerStripController::class, 'storeDetectionPlan'])->name('plans.store');
+    Route::post('plans/{plan}/activate', [PowerStripController::class, 'activateDetectionPlan'])->name('plans.activate');
+    Route::delete('plans/{plan}', [PowerStripController::class, 'destroyDetectionPlan'])->name('plans.destroy');
+});
 Route::get('history', [PowerStripController::class, 'history'])
     ->middleware(['auth'])->name('history.index');
 Route::get('battery', [PowerStripController::class, 'battery'])
