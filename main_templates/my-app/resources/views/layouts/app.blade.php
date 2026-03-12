@@ -213,9 +213,18 @@
                     fetch('/api/relay/1/' + state, { credentials: 'same-origin' }),
                     fetch('/api/relay/2/' + state, { credentials: 'same-origin' }),
                     fetch('/api/relay/3/' + state, { credentials: 'same-origin' })
-                ]).then(function () {
+                ]).then(function (responses) {
+                    return Promise.all(responses.map(function (response) {
+                        if (!response.ok) throw new Error('Relay command failed');
+                        return response.json();
+                    }));
+                }).then(function (payloads) {
                     notify(turnOn ? 'All sockets turned on.' : 'All sockets turned off.');
-                    setTimeout(function () { window.location.reload(); }, 300);
+                    var latest = payloads.length ? (payloads[payloads.length - 1].latest || null) : null;
+                    if (latest) {
+                        window.__pulsenodeLatest = latest;
+                        window.dispatchEvent(new CustomEvent('pulsenode:latest', { detail: latest }));
+                    }
                 }).catch(function () {
                     notify('Relay command failed.', 'error');
                 });

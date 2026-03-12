@@ -44,7 +44,10 @@
             <p class="text-sm text-muted-foreground">Socket {{ $idx }} &middot; Relay GPIO {{ $gpio }}</p>
         </div>
         <button
-            onclick="toggleSocket({{ $idx }}, {{ $isOn ? 'false' : 'true' }})"
+            id="socket-toggle-{{ $idx }}"
+            data-socket-index="{{ $idx }}"
+            data-is-on="{{ $isOn ? '1' : '0' }}"
+            onclick="toggleSocket({{ $idx }})"
             title="{{ $isOn ? 'Turn off' : 'Turn on' }} {{ $label }}"
             class="flex h-11 w-11 items-center justify-center rounded-full transition {{ $isOn ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground' }}">
             <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
@@ -53,22 +56,15 @@
 
     {{-- Status --}}
     <div class="mt-4 flex items-center gap-2">
-        @if($isOn && $status !== 'offline')
-            <span class="relative flex h-2 w-2">
-                <span class="absolute inline-flex h-full w-full animate-ping rounded-full {{ $statusDot }} opacity-75"></span>
-                <span class="relative inline-flex h-2 w-2 rounded-full {{ $statusDot }}"></span>
-            </span>
-        @else
-            <span class="h-2 w-2 rounded-full {{ $statusDot }}"></span>
-        @endif
-        <span class="text-xs text-muted-foreground">{{ $statusLabel }}</span>
-        <span class="ml-auto text-xs text-muted-foreground">{{ $timeAgo }}</span>
+        <span id="socket-status-dot-{{ $idx }}" class="h-2 w-2 rounded-full {{ $statusDot }}"></span>
+        <span id="socket-status-label-{{ $idx }}" class="text-xs text-muted-foreground">{{ $statusLabel }}</span>
+        <span id="socket-updated-{{ $idx }}" class="ml-auto text-xs text-muted-foreground">{{ $timeAgo }}</span>
     </div>
 
     {{-- Values --}}
     <div class="mt-6 flex items-baseline justify-between">
-        <span class="text-sm text-muted-foreground">{{ number_format($current, 3) }} A</span>
-        <span class="text-2xl font-bold tabular-nums">{{ number_format($powerW, 1) }}<span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span></span>
+        <span id="socket-current-{{ $idx }}" class="text-sm text-muted-foreground">{{ number_format($current, 3) }} A</span>
+        <span class="text-2xl font-bold tabular-nums"><span id="socket-power-{{ $idx }}">{{ number_format($powerW, 1) }}</span><span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span></span>
     </div>
 
     {{-- Slider bar --}}
@@ -84,11 +80,11 @@
     <div class="mt-6 grid grid-cols-2 gap-4">
         <div class="rounded-2xl bg-background p-4">
             <p class="text-[11px] text-muted-foreground">Voltage</p>
-            <p class="mt-1.5 text-sm font-bold tabular-nums">{{ number_format($voltage, 1) }} <span class="text-xs font-normal text-muted-foreground">V</span></p>
+            <p class="mt-1.5 text-sm font-bold tabular-nums"><span id="socket-voltage-{{ $idx }}">{{ number_format($voltage, 1) }}</span> <span class="text-xs font-normal text-muted-foreground">V</span></p>
         </div>
         <div class="rounded-2xl bg-background p-4">
             <p class="text-[11px] text-muted-foreground">Energy</p>
-            <p class="mt-1.5 text-sm font-bold tabular-nums">{{ number_format($energyKwh, 3) }} <span class="text-xs font-normal text-muted-foreground">kWh</span></p>
+            <p class="mt-1.5 text-sm font-bold tabular-nums"><span id="socket-energy-{{ $idx }}">{{ number_format($energyKwh, 3) }}</span> <span class="text-xs font-normal text-muted-foreground">kWh</span></p>
         </div>
     </div>
 </div>

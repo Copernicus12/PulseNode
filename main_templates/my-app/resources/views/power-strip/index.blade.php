@@ -317,26 +317,104 @@ function clearCommandLog() {
     updateCommandLogInsights();
 }
 
+var relayState = {
+    1: {{ !empty($sockets[0]['is_on']) ? 'true' : 'false' }},
+    2: {{ !empty($sockets[1]['is_on']) ? 'true' : 'false' }},
+    3: {{ !empty($sockets[2]['is_on']) ? 'true' : 'false' }},
+};
+
+function asNumber(value) {
+    var num = Number(value);
+    return Number.isFinite(num) ? num : 0;
+}
+
+function formatUpdatedLabel(updatedAt) {
+    if (!updatedAt) return 'No data';
+    var timestamp = Date.parse(updatedAt);
+    if (!Number.isFinite(timestamp)) return 'No data';
+    var diffSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+    if (diffSeconds < 60) return 'just now';
+    if (diffSeconds < 3600) return Math.floor(diffSeconds / 60) + ' min ago';
+    if (diffSeconds < 86400) return Math.floor(diffSeconds / 3600) + ' h ago';
+    return Math.floor(diffSeconds / 86400) + ' d ago';
+}
+
+function resolveSocketStatus(isOn, powerW) {
+    if (!isOn) return { label: 'Off', dotClass: 'bg-muted-foreground/40' };
+    if (powerW >= 2500) return { label: 'Overload', dotClass: 'bg-red-500' };
+    if (powerW >= 1800) return { label: 'High Load', dotClass: 'bg-amber-500' };
+    return { label: 'Normal', dotClass: 'bg-emerald-500' };
+}
+
+function setSocketToggleState(idx, isOn, pending) {
+    var button = document.getElementById('socket-toggle-' + idx);
+    if (!button) return;
+    button.dataset.isOn = isOn ? '1' : '0';
+    button.disabled = !!pending;
+    button.title = (isOn ? 'Turn off' : 'Turn on') + ' Socket ' + idx;
+    button.classList.remove('bg-primary', 'text-primary-foreground', 'bg-muted', 'text-muted-foreground', 'opacity-60', 'cursor-not-allowed');
+    button.classList.add(isOn ? 'bg-primary' : 'bg-muted');
+    button.classList.add(isOn ? 'text-primary-foreground' : 'text-muted-foreground');
+    if (pending) button.classList.add('opacity-60', 'cursor-not-allowed');
+}
+
+function publishLatestSnapshot(data) {
+    if (!data) return;
+    window.__pulsenodeLatest = data;
+    window.dispatchEvent(new CustomEvent('pulsenode:latest', { detail: data }));
+}
+
+function sendRelayCommand(idx, turnOn) {
+    return fetch('/api/relay/' + idx + '/' + (turnOn ? 'on' : 'off'), { credentials: 'same-origin' })
+        .then(function(response) {
+            if (!response.ok) throw new Error('Relay command failed');
+            return response.json();
+        });
+}
+
 function toggleSocket(idx, turnOn) {
-    fetch('/api/relay/' + idx + '/' + (turnOn ? 'on' : 'off'), { credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function() {
-            addLog('Socket ' + idx + ' -> ' + (turnOn ? 'ON' : 'OFF'));
-            setTimeout(function() { location.reload(); }, 120);
+    var desiredState = typeof turnOn === 'boolean' ? turnOn : !relayState[idx];
+    setSocketToggleState(idx, relayState[idx], true);
+    sendRelayCommand(idx, desiredState)
+        .then(function(payload) {
+            var latest = payload && payload.latest ? payload.latest : null;
+            relayState[idx] = desiredState;
+            setSocketToggleState(idx, desiredState, false);
+            addLog('Socket ' + idx + ' -> ' + (desiredState ? 'ON' : 'OFF'));
+            if (latest) publishLatestSnapshot(latest);
         })
-        .catch(function(e) { console.error('Relay error', e); addLog('Socket ' + idx + ' command failed', true); });
+        .catch(function(e) {
+            setSocketToggleState(idx, relayState[idx], false);
+            console.error('Relay error', e);
+            addLog('Socket ' + idx + ' command failed', true);
+        });
 }
 
 function toggleAllSockets(turnOn) {
-    var s = turnOn ? 'on' : 'off';
+    setSocketToggleState(1, relayState[1], true);
+    setSocketToggleState(2, relayState[2], true);
+    setSocketToggleState(3, relayState[3], true);
     Promise.all([
-        fetch('/api/relay/1/' + s, { credentials: 'same-origin' }),
-        fetch('/api/relay/2/' + s, { credentials: 'same-origin' }),
-        fetch('/api/relay/3/' + s, { credentials: 'same-origin' })
-    ]).then(function() {
+        sendRelayCommand(1, turnOn),
+        sendRelayCommand(2, turnOn),
+        sendRelayCommand(3, turnOn)
+    ]).then(function(payloads) {
+        relayState[1] = turnOn;
+        relayState[2] = turnOn;
+        relayState[3] = turnOn;
+        setSocketToggleState(1, turnOn, false);
+        setSocketToggleState(2, turnOn, false);
+        setSocketToggleState(3, turnOn, false);
         addLog('All sockets -> ' + (turnOn ? 'ON' : 'OFF'));
-        setTimeout(function() { location.reload(); }, 120);
-    }).catch(function(e) { console.error('Toggle all error', e); addLog('All sockets command failed', true); });
+        var latest = payloads.length ? (payloads[payloads.length - 1].latest || null) : null;
+        if (latest) publishLatestSnapshot(latest);
+    }).catch(function(e) {
+        setSocketToggleState(1, relayState[1], false);
+        setSocketToggleState(2, relayState[2], false);
+        setSocketToggleState(3, relayState[3], false);
+        console.error('Toggle all error', e);
+        addLog('All sockets command failed', true);
+    });
 }
 
 function applyScene(scene) {
@@ -349,14 +427,21 @@ function applyScene(scene) {
     if (!map[scene]) return;
     var state = map[scene];
     Promise.all([
-        fetch('/api/relay/1/' + (state[0] ? 'on' : 'off'), { credentials: 'same-origin' }),
-        fetch('/api/relay/2/' + (state[1] ? 'on' : 'off'), { credentials: 'same-origin' }),
-        fetch('/api/relay/3/' + (state[2] ? 'on' : 'off'), { credentials: 'same-origin' }),
-    ]).then(function() {
+        sendRelayCommand(1, state[0]),
+        sendRelayCommand(2, state[1]),
+        sendRelayCommand(3, state[2]),
+    ]).then(function(payloads) {
+        relayState[1] = state[0];
+        relayState[2] = state[1];
+        relayState[3] = state[2];
+        setSocketToggleState(1, state[0], false);
+        setSocketToggleState(2, state[1], false);
+        setSocketToggleState(3, state[2], false);
         var badge = document.getElementById('scene-status');
         if (badge) badge.textContent = scene.charAt(0).toUpperCase() + scene.slice(1) + ' mode';
         addLog('Scene applied: ' + scene);
-        setTimeout(function() { location.reload(); }, 120);
+        var latest = payloads.length ? (payloads[payloads.length - 1].latest || null) : null;
+        if (latest) publishLatestSnapshot(latest);
     }).catch(function() { addLog('Scene failed: ' + scene, true); });
 }
 
@@ -422,6 +507,38 @@ function applyLatestMetrics(d) {
     if (el('raw-json')) {
         el('raw-json').textContent = JSON.stringify(d, null, 2);
     }
+
+    var voltage = asNumber(d.voltage);
+    [1, 2, 3].forEach(function(idx) {
+        var relayOn = Boolean(d['relay_' + idx]);
+        relayState[idx] = relayOn;
+        setSocketToggleState(idx, relayOn, false);
+
+        var current = asNumber(d['current_' + idx]);
+        var power = voltage * current;
+        var status = resolveSocketStatus(relayOn, power);
+
+        var currentEl = el('socket-current-' + idx);
+        if (currentEl) currentEl.textContent = current.toFixed(3) + ' A';
+
+        var powerEl = el('socket-power-' + idx);
+        if (powerEl) powerEl.textContent = power.toFixed(1);
+
+        var voltageEl = el('socket-voltage-' + idx);
+        if (voltageEl) voltageEl.textContent = voltage.toFixed(1);
+
+        var statusLabelEl = el('socket-status-label-' + idx);
+        if (statusLabelEl) statusLabelEl.textContent = status.label;
+
+        var statusDotEl = el('socket-status-dot-' + idx);
+        if (statusDotEl) {
+            statusDotEl.classList.remove('bg-emerald-500', 'bg-amber-500', 'bg-red-500', 'bg-muted-foreground/40');
+            statusDotEl.classList.add(status.dotClass);
+        }
+
+        var updatedEl = el('socket-updated-' + idx);
+        if (updatedEl) updatedEl.textContent = formatUpdatedLabel(d.updated_at);
+    });
 }
 
 window.addEventListener('pulsenode:latest', function(event) {

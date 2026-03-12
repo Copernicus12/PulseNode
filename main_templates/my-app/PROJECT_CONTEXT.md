@@ -19,7 +19,8 @@ Fiecare priză are telemetrie separată (curent, putere estimată), iar aplicaț
 ## Arhitectură software (stare curentă)
 - Backend: Laravel 12.
 - Frontend: Blade + Tailwind + JavaScript + componente Vue 3 punctuale (pentru UI/forms interactive).
-- Tooling frontend: Vite + plugin Vue + Wayfinder (`resources/js/app.ts` + `resources/js/power-strip-safety-guard.ts`).
+- Tooling frontend: Vite + plugin Vue + Wayfinder (`resources/js/app.ts` + `resources/js/power-strip-safety-guard.ts` + `resources/js/history-page.ts`).
+- UI kit intern: shadcn-vue (folosit gradual; componente active noi: `pagination`, `calendar`, `popover`, `native-select`, plus wrapper reutilizabil `date-picker`).
 - Persistență: MySQL/SQLite (în funcție de mediu), cu tabele pentru samples, agregări energetice, profile device și detection plans.
 - Store stare live: fișier JSON (`Esp32StateStore`) folosit de endpoint-urile `/api/latest`.
 
@@ -38,6 +39,11 @@ Fiecare priză are telemetrie separată (curent, putere estimată), iar aplicaț
   - `devices.activity.index`.
 - Control relee: `/api/relay/{relayId}/{state}`.
 - Istoric energetic: `/api/energy-history`, `/api/energy-day/{date}`.
+- History refactorizat pentru utilizare Home:
+  - randare UI prin componentă Vue montată din Blade (`history-page.ts` + `HistoryHomeView.vue`);
+  - layout compact, consistent cu `My Devices` (spacing, card rhythm, gradient subtil pe header card);
+  - `Hourly load map` cu paginare internă (`4` carduri/pagină);
+  - `Socket contribution` mutat sub `Hourly load map` pentru folosirea eficientă a spațiului.
 - Dispozitive:
   - management profile (create/delete);
   - detection plans (create/activate/delete);
@@ -58,6 +64,23 @@ Fiecare priză are telemetrie separată (curent, putere estimată), iar aplicaț
 - Politica de guard și notițele sunt persistate în `localStorage`, iar acțiunile folosesc funcțiile JS existente (`saveGuardPolicy`, `simulateGuard`).
 - În layout există quick actions suplimentare: navigare rapidă, `Turn all on/off`, `Open raw payload`, `Restart MQTT listener`.
 - `vite.config.ts` include explicit plugin-urile Vue + Wayfinder și entrypoint-ul nou pentru Safety Guard.
+
+## Update major pe History (12 martie 2026)
+- Selectorul vechi pe săptămâna calendaristică a fost înlocuit cu `Day selector` bazat pe `anchor_date`.
+- Fereastra afișată este dinamică: ultimele 7 zile raportate la data ancoră (`window_start` -> `window_end`), fără zile viitoare.
+- Navigarea temporală se face prin `DatePicker` reutilizabil (Popover + Calendar), nu prin pagination pe săptămâni.
+- După selectarea datei:
+  - backend validează și normalizează data ancoră;
+  - frontend actualizează query (`anchor_date`, `date`) și reafișează range-ul corespunzător.
+- Limite picker:
+  - `max_date` = ziua curentă;
+  - `min_date` = minimul dintre prima citire reală și o retenție extinsă (până la 5 ani în urmă) pentru navigare istorică.
+- Componentizare UI:
+  - componentă nouă reutilizabilă `resources/js/components/ui/date-picker/DatePicker.vue`;
+  - integrare `calendar` + `popover` + `native-select` din shadcn-vue, cu stil adaptat proiectului.
+- Calendar tuning:
+  - spațiere pe coloane ajustată pentru lizibilitate mai bună;
+  - selecția între zile nu mai „lipește” celulele vizual.
 
 ## Update important pe Devices (confidence live)
 - Problema rezolvată: bara/textul de `Confidence` nu se actualizau la date noi.

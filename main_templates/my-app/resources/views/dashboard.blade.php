@@ -65,13 +65,17 @@
                         <h3 class="text-lg font-bold">{{ $s1['label'] }}</h3>
                         <p class="text-sm text-muted-foreground">Socket 1 &middot; Relay GPIO 15</p>
                     </div>
-                    <button onclick="toggleRelay(1, {{ $on1 ? 'false' : 'true' }})" class="flex h-11 w-11 items-center justify-center rounded-full transition {{ $on1 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground' }}">
+                    <button
+                        id="dashboard-socket-toggle-1"
+                        data-relay-on="{{ $on1 ? '1' : '0' }}"
+                        onclick="toggleRelay(1)"
+                        class="flex h-11 w-11 items-center justify-center rounded-full transition {{ $on1 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground' }}">
                         <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
                     </button>
                 </div>
                 <div class="mt-7 flex items-baseline justify-between">
-                    <span class="text-sm text-muted-foreground">{{ $s1['current'] }} A</span>
-                    <span class="text-2xl font-bold tabular-nums">{{ $s1['power'] }}<span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span></span>
+                    <span id="dash-socket-current-1" class="text-sm text-muted-foreground">{{ $s1['current'] }} A</span>
+                    <span class="text-2xl font-bold tabular-nums"><span id="dash-socket-power-1">{{ $s1['power'] }}</span><span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span></span>
                 </div>
                 @php $hasLoad1 = $on1 && ((float) $s1['current'] > 0.01); $pct1 = $hasLoad1 ? max(15, min(95, ($s1['current'] / max(5, $current ?: 1)) * 100)) : 0; @endphp
                 <div class="mt-5 h-11 w-full rounded-full bg-muted">
@@ -91,13 +95,17 @@
                         <h3 class="text-lg font-bold">{{ $s2['label'] }}</h3>
                         <p class="text-sm text-muted-foreground">Socket 2 &middot; Relay GPIO 16</p>
                     </div>
-                    <button onclick="toggleRelay(2, {{ $on2 ? 'false' : 'true' }})" class="flex h-11 w-11 items-center justify-center rounded-full transition {{ $on2 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground' }}">
+                    <button
+                        id="dashboard-socket-toggle-2"
+                        data-relay-on="{{ $on2 ? '1' : '0' }}"
+                        onclick="toggleRelay(2)"
+                        class="flex h-11 w-11 items-center justify-center rounded-full transition {{ $on2 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground' }}">
                         <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
                     </button>
                 </div>
                 <div class="mt-7 flex items-baseline justify-between">
-                    <span class="text-sm text-muted-foreground">{{ $s2['current'] }} A</span>
-                    <span class="text-2xl font-bold tabular-nums">{{ $s2['power'] }}<span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span></span>
+                    <span id="dash-socket-current-2" class="text-sm text-muted-foreground">{{ $s2['current'] }} A</span>
+                    <span class="text-2xl font-bold tabular-nums"><span id="dash-socket-power-2">{{ $s2['power'] }}</span><span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span></span>
                 </div>
                 @php $hasLoad2 = $on2 && ((float) $s2['current'] > 0.01); $pct2 = $hasLoad2 ? max(15, min(95, ($s2['current'] / max(5, $current ?: 1)) * 100)) : 0; @endphp
                 <div class="mt-5 h-11 w-full rounded-full bg-muted">
@@ -117,13 +125,17 @@
                         <h3 class="text-lg font-bold">{{ $s3['label'] }}</h3>
                         <p class="text-sm text-muted-foreground">Socket 3 &middot; Relay GPIO 17</p>
                     </div>
-                    <button onclick="toggleRelay(3, {{ $on3 ? 'false' : 'true' }})" class="flex h-11 w-11 items-center justify-center rounded-full transition {{ $on3 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground' }}">
+                    <button
+                        id="dashboard-socket-toggle-3"
+                        data-relay-on="{{ $on3 ? '1' : '0' }}"
+                        onclick="toggleRelay(3)"
+                        class="flex h-11 w-11 items-center justify-center rounded-full transition {{ $on3 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground' }}">
                         <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
                     </button>
                 </div>
                 <div class="mt-7 flex items-baseline justify-between">
-                    <span class="text-sm text-muted-foreground">{{ $s3['current'] }} A</span>
-                    <span class="text-2xl font-bold tabular-nums">{{ $s3['power'] }}<span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span></span>
+                    <span id="dash-socket-current-3" class="text-sm text-muted-foreground">{{ $s3['current'] }} A</span>
+                    <span class="text-2xl font-bold tabular-nums"><span id="dash-socket-power-3">{{ $s3['power'] }}</span><span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span></span>
                 </div>
                 @php $hasLoad3 = $on3 && ((float) $s3['current'] > 0.01); $pct3 = $hasLoad3 ? max(15, min(95, ($s3['current'] / max(5, $current ?: 1)) * 100)) : 0; @endphp
                 <div class="mt-5 h-11 w-full rounded-full bg-muted">
@@ -311,20 +323,75 @@
 </div>
 
 <script>
-function toggleRelay(idx, turnOn) {
-    fetch('/api/relay/' + idx + '/' + (turnOn ? 'on' : 'off'), { credentials: 'same-origin' })
-        .then(function(r) { return r.json(); })
-        .then(function() { location.reload(); })
-        .catch(function(e) { console.error('Relay error', e); });
+var dashboardRelayState = {
+    1: {{ $on1 ? 'true' : 'false' }},
+    2: {{ $on2 ? 'true' : 'false' }},
+    3: {{ $on3 ? 'true' : 'false' }},
+};
+
+function setDashboardToggleState(idx, isOn, pending) {
+    var button = document.getElementById('dashboard-socket-toggle-' + idx);
+    if (!button) return;
+    button.dataset.relayOn = isOn ? '1' : '0';
+    button.disabled = !!pending;
+    button.classList.remove('bg-primary', 'text-primary-foreground', 'bg-muted', 'text-muted-foreground', 'opacity-60', 'cursor-not-allowed');
+    button.classList.add(isOn ? 'bg-primary' : 'bg-muted');
+    button.classList.add(isOn ? 'text-primary-foreground' : 'text-muted-foreground');
+    if (pending) button.classList.add('opacity-60', 'cursor-not-allowed');
 }
+
+function publishLatestSnapshot(data) {
+    if (!data) return;
+    window.__pulsenodeLatest = data;
+    window.dispatchEvent(new CustomEvent('pulsenode:latest', { detail: data }));
+}
+
+function sendRelayCommand(idx, turnOn) {
+    return fetch('/api/relay/' + idx + '/' + (turnOn ? 'on' : 'off'), { credentials: 'same-origin' })
+        .then(function(response) {
+            if (!response.ok) throw new Error('Relay command failed');
+            return response.json();
+        });
+}
+
+function toggleRelay(idx, turnOn) {
+    var desiredState = typeof turnOn === 'boolean' ? turnOn : !dashboardRelayState[idx];
+    setDashboardToggleState(idx, dashboardRelayState[idx], true);
+    sendRelayCommand(idx, desiredState)
+        .then(function(payload) {
+            dashboardRelayState[idx] = desiredState;
+            setDashboardToggleState(idx, desiredState, false);
+            if (payload && payload.latest) publishLatestSnapshot(payload.latest);
+        })
+        .catch(function(e) {
+            setDashboardToggleState(idx, dashboardRelayState[idx], false);
+            console.error('Relay error', e);
+        });
+}
+
 function toggleAllRelays(turnOn) {
-    var s = turnOn ? 'on' : 'off';
+    setDashboardToggleState(1, dashboardRelayState[1], true);
+    setDashboardToggleState(2, dashboardRelayState[2], true);
+    setDashboardToggleState(3, dashboardRelayState[3], true);
     Promise.all([
-        fetch('/api/relay/1/' + s, { credentials: 'same-origin' }),
-        fetch('/api/relay/2/' + s, { credentials: 'same-origin' }),
-        fetch('/api/relay/3/' + s, { credentials: 'same-origin' })
-    ]).then(function() { location.reload(); })
-      .catch(function(e) { console.error('Toggle all error', e); });
+        sendRelayCommand(1, turnOn),
+        sendRelayCommand(2, turnOn),
+        sendRelayCommand(3, turnOn)
+    ]).then(function(payloads) {
+        dashboardRelayState[1] = turnOn;
+        dashboardRelayState[2] = turnOn;
+        dashboardRelayState[3] = turnOn;
+        setDashboardToggleState(1, turnOn, false);
+        setDashboardToggleState(2, turnOn, false);
+        setDashboardToggleState(3, turnOn, false);
+        var latest = payloads.length ? (payloads[payloads.length - 1].latest || null) : null;
+        if (latest) publishLatestSnapshot(latest);
+    }).catch(function(e) {
+        setDashboardToggleState(1, dashboardRelayState[1], false);
+        setDashboardToggleState(2, dashboardRelayState[2], false);
+        setDashboardToggleState(3, dashboardRelayState[3], false);
+        console.error('Toggle all error', e);
+    });
 }
 var energyState = @json($energyUsage);
 
@@ -532,6 +599,22 @@ function applyLatestDashboard(d) {
     if (el('dash-energy')) el('dash-energy').innerHTML = parseFloat(d.energy || 0).toFixed(4) + u('kWh');
     if (el('dash-energy-total')) el('dash-energy-total').innerHTML = parseFloat(d.energy || 0).toFixed(4) + u('kWh');
     if (el('dash-raw-json')) el('dash-raw-json').textContent = JSON.stringify(d, null, 2);
+
+    var voltage = parseFloat(d.voltage || 0);
+    [1, 2, 3].forEach(function(idx) {
+        var relayOn = Boolean(d['relay_' + idx]);
+        dashboardRelayState[idx] = relayOn;
+        setDashboardToggleState(idx, relayOn, false);
+
+        var current = parseFloat(d['current_' + idx] || 0);
+        var power = voltage * current;
+
+        var currentEl = el('dash-socket-current-' + idx);
+        if (currentEl) currentEl.textContent = current.toFixed(3) + ' A';
+
+        var powerEl = el('dash-socket-power-' + idx);
+        if (powerEl) powerEl.textContent = power.toFixed(1);
+    });
 }
 
 window.addEventListener('pulsenode:latest', function(event) {
