@@ -167,41 +167,76 @@ class PowerStripController extends Controller
         $updatedAt = $latest['updated_at'] ?? null;
         $lastSeen = $updatedAt ? Carbon::parse($updatedAt)->diffForHumans() : 'Never';
         $isOnline = $systemStatus !== 'offline';
-        $history = EnergyReading::historyPayload();
-        $week = collect($history['week'] ?? []);
-        $selectedDate = (string) $request->string('date', (string) data_get($week->firstWhere('is_today', true), 'date', now()->toDateString()));
+        $today = now()->startOfDay();
+        $oldestReadingDate = EnergyReading::query()->min('date');
+        $oldestDate = $oldestReadingDate ? Carbon::parse($oldestReadingDate)->startOfDay() : $today->copy();
+        $retentionStart = $today->copy()->subYears(5);
+        $minSelectableDate = $oldestDate->lt($retentionStart) ? $oldestDate->copy() : $retentionStart;
+        $anchorDate = $today->copy();
+        $anchorDateInput = (string) $request->string('anchor_date', $today->toDateString());
+
+        try {
+            $anchorDate = Carbon::parse($anchorDateInput)->startOfDay();
+        } catch (\Throwable) {
+            $anchorDate = $today->copy();
+        }
+
+        if ($anchorDate->isAfter($today)) {
+            $anchorDate = $today->copy();
+        }
+
+        if ($anchorDate->isBefore($minSelectableDate)) {
+            $anchorDate = $minSelectableDate->copy();
+        }
+
+        $windowEnd = $anchorDate->copy();
+        $windowStart = $windowEnd->copy()->subDays(6);
+
+        $readingsByDate = EnergyReading::query()
+            ->whereBetween('date', [$windowStart->toDateString(), $windowEnd->toDateString()])
+            ->get()
+            ->keyBy(fn (EnergyReading $reading): string => Carbon::parse($reading->date)->toDateString());
+
+        $dayWindow = collect(range(0, 6))->map(function (int $offset) use ($windowStart, $today, $readingsByDate): array {
+            $date = $windowStart->copy()->addDays($offset);
+            $dateKey = $date->toDateString();
+            /** @var EnergyReading|null $reading */
+            $reading = $readingsByDate->get($dateKey);
+
+            return [
+                'date' => $dateKey,
+                'day_short' => strtoupper(substr($date->format('D'), 0, 3)),
+                'is_today' => $date->isSameDay($today),
+                'total' => round((float) ($reading?->energy_total ?? 0), 4),
+            ];
+        });
+
+        $selectedDate = (string) $request->string('date', $windowEnd->toDateString());
 
         try {
             $selectedDate = Carbon::parse($selectedDate)->toDateString();
         } catch (\Throwable) {
-            $selectedDate = (string) data_get($week->firstWhere('is_today', true), 'date', now()->toDateString());
+            $selectedDate = $windowEnd->toDateString();
+        }
+
+        if (Carbon::parse($selectedDate)->isAfter($today) || Carbon::parse($selectedDate)->isBefore($windowStart) || Carbon::parse($selectedDate)->isAfter($windowEnd)) {
+            $selectedDate = $windowEnd->toDateString();
         }
 
         $selectedDay = EnergyReading::dayDetails($selectedDate);
-        $weeklyTotal = round((float) $week->sum('total'), 4);
-        $averageDay = round((float) $week->avg('total'), 4);
-        $peakDay = $week->sortByDesc('total')->first();
+        $weeklyTotal = round((float) $dayWindow->sum('total'), 4);
+        $averageDay = round((float) $dayWindow->avg('total'), 4);
+        $peakDay = $dayWindow->sortByDesc('total')->first();
         $activeHours = collect($selectedDay['hourly'] ?? [])->where('energy_kwh', '>', 0)->count();
         $topHour = collect($selectedDay['hourly'] ?? [])->sortByDesc('energy_kwh')->first();
         $totalWarnings = (int) (($selectedDay['warnings']['high'] ?? 0) + ($selectedDay['warnings']['overload'] ?? 0));
         $topSocket = collect($selectedDay['socket_stats'] ?? [])->sortByDesc('energy_kwh')->first();
-        $researchIdeas = [
-            [
-                'title' => 'Standby baseline detection',
-                'description' => 'Track the normal idle profile for each socket and flag unusual standby increases automatically.',
-            ],
-            [
-                'title' => 'Anomaly and overload timeline',
-                'description' => 'Store events separately and show spikes, overloads, and relay reactions as a searchable incident log.',
-            ],
-            [
-                'title' => 'Usage forecasting',
-                'description' => 'Estimate end-of-day and end-of-week energy from the current trend so the user can react earlier.',
-            ],
-            [
-                'title' => 'Automation suggestions',
-                'description' => 'Recommend schedules like turning off sockets with repeated idle leakage during known inactive hours.',
-            ],
+        $daySelector = [
+            'anchor_date' => $windowEnd->toDateString(),
+            'min_date' => $minSelectableDate->toDateString(),
+            'max_date' => $today->toDateString(),
+            'window_start' => $windowStart->toDateString(),
+            'window_end' => $windowEnd->toDateString(),
         ];
 
         return view('history.index', compact(
@@ -213,8 +248,8 @@ class PowerStripController extends Controller
             'systemStatus',
             'lastSeen',
             'isOnline',
-            'history',
-            'week',
+            'dayWindow',
+            'daySelector',
             'selectedDate',
             'selectedDay',
             'weeklyTotal',
@@ -224,7 +259,6 @@ class PowerStripController extends Controller
             'topHour',
             'totalWarnings',
             'topSocket',
-            'researchIdeas',
         ));
     }
 

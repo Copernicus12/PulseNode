@@ -5,7 +5,7 @@ PulseNode este un sistem pentru monitorizare și control energetic pe un prelung
 
 Fiecare priză are telemetrie separată (curent, putere estimată), iar aplicația web oferă monitorizare live, istoric energetic și control relee.
 
-## Context workspace (actualizat: 5 martie 2026)
+## Context workspace (actualizat: 12 martie 2026)
 - Proiectul Laravel principal și activ este `main_templates/my-app`.
 - Copiile Laravel redundante au fost eliminate din workspace.
 - Orice dezvoltare nouă se face exclusiv în `main_templates/my-app`.
@@ -18,7 +18,8 @@ Fiecare priză are telemetrie separată (curent, putere estimată), iar aplicaț
 
 ## Arhitectură software (stare curentă)
 - Backend: Laravel 12.
-- Frontend: Blade + Tailwind + JavaScript (polling/event-driven pentru live updates).
+- Frontend: Blade + Tailwind + JavaScript + componente Vue 3 punctuale (pentru UI/forms interactive).
+- Tooling frontend: Vite + plugin Vue + Wayfinder (`resources/js/app.ts` + `resources/js/power-strip-safety-guard.ts`).
 - Persistență: MySQL/SQLite (în funcție de mediu), cu tabele pentru samples, agregări energetice, profile device și detection plans.
 - Store stare live: fișier JSON (`Esp32StateStore`) folosit de endpoint-urile `/api/latest`.
 
@@ -30,12 +31,17 @@ Fiecare priză are telemetrie separată (curent, putere estimată), iar aplicaț
 
 ## Funcționalități implementate (MVP extins)
 - Pagini funcționale: `Dashboard`, `Power Strip`, `Devices`, `History`, `Battery`, `Settings`, autentificare.
+- Modulul Devices are secțiuni dedicate pe rute separate:
+  - `devices.index` (Overview),
+  - `devices.profiles.index`,
+  - `devices.plans.index`,
+  - `devices.activity.index`.
 - Control relee: `/api/relay/{relayId}/{state}`.
 - Istoric energetic: `/api/energy-history`, `/api/energy-day/{date}`.
 - Dispozitive:
-- management profile (create/delete);
-- detection plans (create/activate/delete);
-- clasificare live per socket prin `DeviceProfiler`.
+  - management profile (create/delete);
+  - detection plans (create/activate/delete);
+  - clasificare live per socket prin `DeviceProfiler`.
 - Simulator date la rădăcina proiectului: `simulate_socket_data.py` (trimite trafic continuu către ingest).
 
 ## Live update UI (fără refresh manual)
@@ -43,17 +49,26 @@ Fiecare priză are telemetrie separată (curent, putere estimată), iar aplicaț
 - Event global browser: `pulsenode:latest`.
 - Pagini conectate la event: `Dashboard`, `Power Strip`, `Devices`, `Battery`, `History`.
 - Header live telemetry pill (dot online/offline, power, current) actualizat în timp real.
+- Command palette global în header (`Ctrl/Cmd + K`) pentru search de pagini + quick actions operaționale.
+
+## Actualizări recente (12 martie 2026)
+- `PowerStripController` a fost refactorizat pentru secțiunile Devices (overview/profiles/plans/activity), cu metadata per tab și redirecționare contextuală după create/delete/activate.
+- Sidebar-ul include acum grupul `My Devices` expandabil + active-state corect pe subrute.
+- Pagina `Power Strip` folosește un formular `Safety Guard` montat prin Vue (`#safety-guard-field-root`), cu componente UI reutilizabile (`field`, `select`, `textarea`).
+- Politica de guard și notițele sunt persistate în `localStorage`, iar acțiunile folosesc funcțiile JS existente (`saveGuardPolicy`, `simulateGuard`).
+- În layout există quick actions suplimentare: navigare rapidă, `Turn all on/off`, `Open raw payload`, `Restart MQTT listener`.
+- `vite.config.ts` include explicit plugin-urile Vue + Wayfinder și entrypoint-ul nou pentru Safety Guard.
 
 ## Update important pe Devices (confidence live)
 - Problema rezolvată: bara/textul de `Confidence` nu se actualizau la date noi.
 - Soluție:
-- endpoint nou `GET /api/devices/live-detections`;
-- `devices/index.blade.php` face fetch periodic (throttled) și actualizează:
-  - state badge,
-  - label/category,
-  - confidence text,
-  - confidence bar width/color,
-  - reason.
+  - endpoint nou `GET /api/devices/live-detections`;
+  - `devices/index.blade.php` face fetch periodic (throttled) și actualizează:
+    - state badge,
+    - label/category,
+    - confidence text,
+    - confidence bar width/color,
+    - reason.
 
 ## Securitate / runtime
 - `POST /api/ingest` suportă token (`X-ESP32-TOKEN`) când este configurat în `.env`.
