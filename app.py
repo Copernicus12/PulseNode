@@ -11,6 +11,34 @@ from pymongo.server_api import ServerApi
 
 app = Flask(__name__)
 
+
+def load_local_env_files():
+    # Lightweight .env loader to avoid external dependency for local runs.
+    candidate_paths = [
+        os.path.join(os.getcwd(), ".env"),
+        os.path.join(os.getcwd(), "main_templates", "my-app", ".env"),
+    ]
+
+    for path in candidate_paths:
+        if not os.path.exists(path):
+            continue
+
+        with open(path, "r", encoding="utf-8") as env_file:
+            for raw_line in env_file:
+                line = raw_line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+
+                if key and key not in os.environ:
+                    os.environ[key] = value
+
+
+load_local_env_files()
+
 MQTT_BROKER = "broker.hivemq.com"
 MQTT_TOPIC_DATA = "razvy_esp32_2026/data"
 MQTT_TOPIC_CMD  = "razvy_esp32_2026/cmd"
