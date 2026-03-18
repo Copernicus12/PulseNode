@@ -3,19 +3,14 @@
 namespace App\Support;
 
 use App\Models\DeviceDetection;
-use App\Models\EnergySample;
+use App\Models\EnergyReading;
 use Illuminate\Support\Collection;
 
 class BatteryInsights
 {
     public function build(): array
     {
-        $samples = EnergySample::query()
-            ->orderByDesc('sampled_at')
-            ->limit(180)
-            ->get()
-            ->reverse()
-            ->values();
+        $samples = EnergyReading::recentSamples(180);
 
         $socketInsights = collect([1, 2, 3])
             ->map(fn (int $socketIndex): array => $this->buildSocketInsight($socketIndex, $samples))
@@ -43,11 +38,11 @@ class BatteryInsights
     {
         $powerColumn = 'power_socket_'.$socketIndex;
         $currentColumn = 'current_'.$socketIndex;
-        $powerSeries = $samples->map(fn (EnergySample $sample): float => (float) $sample->{$powerColumn});
-        $currentSeries = $samples->map(fn (EnergySample $sample): float => (float) $sample->{$currentColumn});
+        $powerSeries = $samples->map(fn (object $sample): float => (float) $sample->{$powerColumn});
+        $currentSeries = $samples->map(fn (object $sample): float => (float) $sample->{$currentColumn});
 
-        $active = $samples->filter(fn (EnergySample $sample): bool => (float) $sample->{$currentColumn} > 0.03)->values();
-        $standby = $samples->filter(function (EnergySample $sample) use ($powerColumn, $currentColumn): bool {
+        $active = $samples->filter(fn (object $sample): bool => (float) $sample->{$currentColumn} > 0.03)->values();
+        $standby = $samples->filter(function (object $sample) use ($powerColumn, $currentColumn): bool {
             $current = (float) $sample->{$currentColumn};
             $power = (float) $sample->{$powerColumn};
 

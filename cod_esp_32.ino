@@ -61,6 +61,22 @@ String serialBuffer = "";
 unsigned long lastMQTT = 0;
 const unsigned long MQTT_INTERVAL = 10000;
 
+// Sampling tuned for ESP32-S3 stability (lower CPU blocking time).
+const int CURRENT_OFFSET_SAMPLES = 240;
+const int CURRENT_RMS_SAMPLES = 480;
+const int VOLTAGE_OFFSET_SAMPLES = 300;
+const int VOLTAGE_RMS_SAMPLES = 600;
+const int CALIBRATION_SAMPLES = 600;
+const unsigned long VOLTAGE_OFFSET_WINDOW_US = 40000;  // ~2 cycles @ 50Hz
+const unsigned long VOLTAGE_RMS_WINDOW_US = 200000;    // ~10 cycles @ 50Hz
+const float VOLTAGE_FILTER_ALPHA = 0.18;
+
+inline void watchdogFriendlyYield(int i) {
+  if ((i & 0x3F) == 0) {
+    delay(0);
+  }
+}
+
 //-----------------------------------------------------------
 // WIFI
 //-----------------------------------------------------------
@@ -249,20 +265,23 @@ void handleSerial() {
 // MASURARE RMS ACS712 – ZERO NOISE + DETECTARE MICĂ
 //-----------------------------------------------------------
 float readCurrentRMS(int currentPin, float noiseOffset, float &smoothState) {
-  const int samples = 1500;
+  const int samples = CURRENT_RMS_SAMPLES;
 
   // offset ADC
   float offset = 0;
-  for (int i = 0; i < 800; i++) offset += analogRead(currentPin);
-  offset /= 800.0;
+  for (int i = 0; i < CURRENT_OFFSET_SAMPLES; i++) {
+    offset += analogRead(currentPin);
+    watchdogFriendlyYield(i);
+  }
+  offset /= (float)CURRENT_OFFSET_SAMPLES;
 
   // RMS
   float sum = 0;
   for (int i = 0; i < samples; i++) {
     float raw = analogRead(currentPin);
     float v_adc = (raw - offset) * (vRef / resolution);
-    float v_real = v_adc * dividerFactor;
-    sum += v_real * v_real;
+    sum += v_adc * v_adc;
+    watchdogFriendlyYield(i);
   }
 
   float v_rms = sqrt(sum / samples);
@@ -283,26 +302,50 @@ float readCurrentRMS(int currentPin, float noiseOffset, float &smoothState) {
 // MASURARE RMS TENSIUNE – ZMPT101B
 //-----------------------------------------------------------
 float readVoltageRMS() {
-  const int samples = 1800;
-
+  // 1) Measure ADC offset in a fixed time window (more stable than fixed sample count).
   float offset = 0;
-  for (int i = 0; i < 900; i++) offset += analogRead(VOLTAGE_PIN);
-  offset /= 900.0;
+  int offsetCount = 0;
+  unsigned long offsetStart = micros();
+  while ((micros() - offsetStart) < VOLTAGE_OFFSET_WINDOW_US) {
+    offset += analogRead(VOLTAGE_PIN);
+    offsetCount++;
+    watchdogFriendlyYield(offsetCount);
+  }
 
+  if (offsetCount <= 0) {
+    return 0;
+  }
+
+  offset /= (float) offsetCount;
+
+  // 2) Measure RMS over ~10 mains cycles to reduce cycle-to-cycle jitter.
   float sum = 0;
-  for (int i = 0; i < samples; i++) {
+  int rmsCount = 0;
+  unsigned long rmsStart = micros();
+  while ((micros() - rmsStart) < VOLTAGE_RMS_WINDOW_US) {
     float raw = analogRead(VOLTAGE_PIN);
     float v_adc = (raw - offset) * (vRef / resolution);
     sum += v_adc * v_adc;
+    rmsCount++;
+    watchdogFriendlyYield(rmsCount);
   }
 
-  float moduleRMS = sqrt(sum / samples);
+  if (rmsCount <= 0) {
+    return 0;
+  }
+
+  float moduleRMS = sqrt(sum / (float) rmsCount);
+  float voltageRaw = moduleRMS * voltageCalibration;
+
+  // 3) Smooth final voltage to suppress fast spikes.
+  static float voltageFiltered = 230.0;
+  voltageFiltered += VOLTAGE_FILTER_ALPHA * (voltageRaw - voltageFiltered);
 
   Serial.print("moduleRMS: ");
   Serial.print(moduleRMS, 4);
   Serial.print(" | ");
 
-  return moduleRMS * voltageCalibration;
+  return voltageFiltered;
 }
 
 //-----------------------------------------------------------
@@ -352,23 +395,27 @@ void setup() {
 
   Serial.println("Calibrare noise ACS712 (3 canale)...");
 
-  const int baseSamples = 1500;
+  const int baseSamples = CALIBRATION_SAMPLES;
   int acsPins[3] = {CURRENT1_PIN, CURRENT2_PIN, CURRENT3_PIN};
   float* offsets[3] = {&noiseOffset1, &noiseOffset2, &noiseOffset3};
 
   for (int ch = 0; ch < 3; ch++) {
     int base = 0;
-    for (int i = 0; i < baseSamples; i++) base += analogRead(acsPins[ch]);
+    for (int i = 0; i < baseSamples; i++) {
+      base += analogRead(acsPins[ch]);
+      watchdogFriendlyYield(i);
+    }
     base /= baseSamples;
 
     float noiseSum = 0;
     for (int i = 0; i < baseSamples; i++) {
       int val = analogRead(acsPins[ch]);
       noiseSum += abs(val - base);
+      watchdogFriendlyYield(i);
     }
 
     float noiseADC = noiseSum / baseSamples;
-    float noiseVolt = noiseADC * (vRef / resolution) * dividerFactor;
+    float noiseVolt = noiseADC * (vRef / resolution);
     *offsets[ch] = noiseVolt / sensitivity;
 
     Serial.print("ACS");

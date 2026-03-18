@@ -5,6 +5,11 @@ namespace App\Models;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Database\Eloquent\Model;
+use MongoDB\BSON\UTCDateTime;
+use MongoDB\Client;
+use MongoDB\Model\BSONArray;
+use MongoDB\Model\BSONDocument;
+use Throwable;
 
 class EnergyReading extends Model
 {
@@ -34,16 +39,16 @@ class EnergyReading extends Model
 
         for ($i = 0; $i < 7; $i++) {
             $date = $startOfWeek->copy()->addDays($i);
-            $reading = self::where('date', $date->toDateString())->first();
+            $stats = self::dailyEnergyStats($date->toDateString());
 
             $days[] = [
                 'date'      => $date->toDateString(),
                 'day_short' => strtoupper(substr($date->format('D'), 0, 3)),
                 'is_today'  => $date->isToday(),
-                'socket_1'  => $reading ? round($reading->energy_socket_1, 4) : 0,
-                'socket_2'  => $reading ? round($reading->energy_socket_2, 4) : 0,
-                'socket_3'  => $reading ? round($reading->energy_socket_3, 4) : 0,
-                'total'     => $reading ? round($reading->energy_total, 4) : 0,
+                'socket_1'  => round((float) ($stats['socket_1'] ?? 0), 4),
+                'socket_2'  => round((float) ($stats['socket_2'] ?? 0), 4),
+                'socket_3'  => round((float) ($stats['socket_3'] ?? 0), 4),
+                'total'     => round((float) ($stats['total'] ?? 0), 4),
             ];
         }
 
@@ -65,18 +70,12 @@ class EnergyReading extends Model
     {
         $day = Carbon::parse($date)->startOfDay();
         $dayKey = $day->toDateString();
+        $samples = self::mongoSamplesForDate($dayKey);
 
-        /** @var self|null $reading */
-        $reading = self::query()->where('date', $dayKey)->first();
-        $samples = EnergySample::query()
-            ->whereDate('sampled_at', $dayKey)
-            ->orderBy('sampled_at')
-            ->get();
-
-        $total = (float) ($reading->energy_total ?? 0);
-        $socket1 = (float) ($reading->energy_socket_1 ?? 0);
-        $socket2 = (float) ($reading->energy_socket_2 ?? 0);
-        $socket3 = (float) ($reading->energy_socket_3 ?? 0);
+        $socket1 = (float) $samples->sum('energy_socket_1');
+        $socket2 = (float) $samples->sum('energy_socket_2');
+        $socket3 = (float) $samples->sum('energy_socket_3');
+        $total = $socket1 + $socket2 + $socket3;
 
         $sampleMinutes = (float) config('esp32.analytics.sample_minutes', 0.1667);
         $avgVoltage = max(1.0, (float) ($samples->avg('voltage') ?? 230));
@@ -114,7 +113,7 @@ class EnergyReading extends Model
 
             return [
                 'hour' => sprintf('%02d:00', $hour),
-                'energy_kwh' => round((float) $items->sum('delta_energy'), 4),
+                'energy_kwh' => round((float) $items->sum('delta_energy'), 6),
                 'avg_power_w' => round((float) ($items->avg('power') ?? 0), 1),
                 'peak_power_w' => round((float) ($items->max('power') ?? 0), 1),
                 'warnings' => [
@@ -139,6 +138,183 @@ class EnergyReading extends Model
             ],
             'intervals' => self::buildIntervals($samples, $sampleMinutes),
             'hourly' => $hourly,
+        ];
+    }
+
+    public static function recentSamples(int $limit = 180): Collection
+    {
+        $collection = self::mongoCollection();
+        if ($collection === null) {
+            return collect();
+        }
+
+        $cursor = $collection->find([], [
+            'sort' => ['received_at' => -1],
+            'limit' => max(1, $limit),
+        ]);
+
+        $docs = [];
+        foreach ($cursor as $doc) {
+            $docs[] = $doc;
+        }
+
+        return self::hydrateMongoSamples(collect($docs)->reverse()->values());
+    }
+
+    public static function oldestDate(): ?string
+    {
+        $collection = self::mongoCollection();
+        if ($collection === null) {
+            return null;
+        }
+
+        $doc = $collection->findOne([], ['sort' => ['received_at' => 1]]);
+        if ($doc === null || ! isset($doc['received_at']) || ! $doc['received_at'] instanceof UTCDateTime) {
+            return null;
+        }
+
+        return Carbon::instance($doc['received_at']->toDateTime())->toDateString();
+    }
+
+    private static function mongoCollection(): ?\MongoDB\Collection
+    {
+        $uri = (string) config('esp32.mongodb.uri', '');
+        if ($uri === '') {
+            return null;
+        }
+
+        try {
+            $client = new Client($uri);
+
+            return $client
+                ->selectDatabase((string) config('esp32.mongodb.database', 'espData'))
+                ->selectCollection((string) config('esp32.mongodb.collection', 'readings'));
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private static function mongoSamplesForDate(string $date): Collection
+    {
+        $collection = self::mongoCollection();
+        if ($collection === null) {
+            return collect();
+        }
+
+        $start = Carbon::parse($date)->startOfDay();
+        $end = $start->copy()->endOfDay();
+        $startMs = (int) $start->valueOf();
+        $endMs = (int) $end->valueOf();
+
+        $cursor = $collection->find([
+            'received_at' => [
+                '$gte' => new UTCDateTime($startMs),
+                '$lte' => new UTCDateTime($endMs),
+            ],
+        ], [
+            'sort' => ['received_at' => 1],
+        ]);
+
+        $docs = [];
+        foreach ($cursor as $doc) {
+            $docs[] = $doc;
+        }
+
+        return self::hydrateMongoSamples(collect($docs));
+    }
+
+    private static function hydrateMongoSamples(Collection $docs): Collection
+    {
+        $samples = collect();
+        $previousEnergy = null;
+
+        foreach ($docs as $doc) {
+            $payload = self::payloadToArray($doc['payload'] ?? null);
+            if ($payload === null) {
+                continue;
+            }
+
+            $sampledAt = now();
+            if (isset($doc['received_at']) && $doc['received_at'] instanceof UTCDateTime) {
+                $sampledAt = Carbon::instance($doc['received_at']->toDateTime());
+            }
+
+            $energy = max(0.0, (float) ($payload['energy'] ?? 0));
+            $delta = 0.0;
+            if ($previousEnergy !== null && $energy >= $previousEnergy && ($energy - $previousEnergy) < 2.0) {
+                $delta = $energy - $previousEnergy;
+            }
+            $previousEnergy = $energy;
+
+            $c1 = max(0.0, (float) ($payload['current_1'] ?? 0));
+            $c2 = max(0.0, (float) ($payload['current_2'] ?? 0));
+            $c3 = max(0.0, (float) ($payload['current_3'] ?? 0));
+            $sum = $c1 + $c2 + $c3;
+
+            if ($sum > 0.0001) {
+                $r1 = $c1 / $sum;
+                $r2 = $c2 / $sum;
+                $r3 = $c3 / $sum;
+            } else {
+                $r1 = $r2 = $r3 = 1 / 3;
+            }
+
+            $voltage = max(0.0, (float) ($payload['voltage'] ?? 0));
+            $power = max(0.0, (float) ($payload['power'] ?? 0));
+            $warning = $power > 2500 ? 'overload' : ($power > 1800 ? 'high' : 'normal');
+
+            $samples->push((object) [
+                'hour' => (int) $sampledAt->format('H'),
+                'sampled_at' => $sampledAt,
+                'delta_energy' => $delta,
+                'energy_socket_1' => $delta * $r1,
+                'energy_socket_2' => $delta * $r2,
+                'energy_socket_3' => $delta * $r3,
+                'voltage' => $voltage,
+                'power' => $power,
+                'power_socket_1' => $voltage * $c1,
+                'power_socket_2' => $voltage * $c2,
+                'power_socket_3' => $voltage * $c3,
+                'current' => max(0.0, (float) ($payload['current'] ?? 0)),
+                'current_1' => $c1,
+                'current_2' => $c2,
+                'current_3' => $c3,
+                'warning_level' => $warning,
+            ]);
+        }
+
+        return $samples;
+    }
+
+    private static function payloadToArray(mixed $value): ?array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+
+        if ($value instanceof BSONDocument || $value instanceof BSONArray) {
+            return $value->getArrayCopy();
+        }
+
+        return null;
+    }
+
+    private static function dailyEnergyStats(string $date): array
+    {
+        $samples = self::mongoSamplesForDate($date);
+        if ($samples->isEmpty()) {
+            return ['socket_1' => 0.0, 'socket_2' => 0.0, 'socket_3' => 0.0, 'total' => 0.0];
+        }
+
+        $s1 = (float) $samples->sum('energy_socket_1');
+        $s2 = (float) $samples->sum('energy_socket_2');
+        $s3 = (float) $samples->sum('energy_socket_3');
+
+        return [
+            'socket_1' => $s1,
+            'socket_2' => $s2,
+            'socket_3' => $s3,
+            'total' => $s1 + $s2 + $s3,
         ];
     }
 
@@ -188,7 +364,7 @@ class EnergyReading extends Model
                     'start' => Carbon::parse($item['start'])->format('H:i'),
                     'end' => Carbon::parse($item['end'])->format('H:i'),
                     'duration_minutes' => $duration,
-                    'energy_kwh' => round((float) $item['energy_kwh'], 4),
+                    'energy_kwh' => round((float) $item['energy_kwh'], 6),
                     'avg_power_w' => $item['samples'] > 0
                         ? round((float) $item['sum_power'] / $item['samples'], 1)
                         : 0,

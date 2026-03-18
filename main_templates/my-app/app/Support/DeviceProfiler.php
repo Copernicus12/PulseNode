@@ -5,7 +5,7 @@ namespace App\Support;
 use App\Models\DetectionPlan;
 use App\Models\DeviceDetection;
 use App\Models\DeviceProfile;
-use App\Models\EnergySample;
+use App\Models\EnergyReading;
 use Illuminate\Support\Collection;
 
 class DeviceProfiler
@@ -20,25 +20,20 @@ class DeviceProfiler
         $currentColumn = 'current_'.$socketIndex;
         $powerColumn = 'power_socket_'.$socketIndex;
 
-        $recent = EnergySample::query()
-            ->orderByDesc('sampled_at')
-            ->limit($windowSamples)
-            ->get()
-            ->reverse()
-            ->values();
+        $recent = EnergyReading::recentSamples($windowSamples);
 
         if ($recent->isEmpty()) {
             return null;
         }
 
-        $active = $recent->filter(fn (EnergySample $sample): bool => (float) $sample->{$currentColumn} > 0.03)->values();
+        $active = $recent->filter(fn (object $sample): bool => (float) $sample->{$currentColumn} > 0.03)->values();
 
         if ($active->count() < $minActiveSamples) {
             return null;
         }
 
-        $powers = $active->map(fn (EnergySample $sample): float => (float) $sample->{$powerColumn});
-        $currents = $active->map(fn (EnergySample $sample): float => (float) $sample->{$currentColumn});
+        $powers = $active->map(fn (object $sample): float => (float) $sample->{$powerColumn});
+        $currents = $active->map(fn (object $sample): float => (float) $sample->{$currentColumn});
 
         $avgPower = round((float) $powers->avg(), 2);
         $peakPower = round((float) $powers->max(), 2);

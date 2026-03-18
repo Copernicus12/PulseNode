@@ -15,4 +15,10 @@ return [
     'ingest' => [
         'token' => env('ESP32_INGEST_TOKEN'),
     ],
+
+    'mongodb' => [
+        'uri' => env('MONGODB_URI'),
+        'database' => env('MONGODB_DATABASE', 'espData'),
+        'collection' => env('MONGODB_COLLECTION', 'readings'),
+    ],
 ];

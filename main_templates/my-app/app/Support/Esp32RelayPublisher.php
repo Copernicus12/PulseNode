@@ -2,8 +2,9 @@
 
 namespace App\Support;
 
+use PhpMqtt\Client\ConnectionSettings;
+use PhpMqtt\Client\MqttClient;
 use RuntimeException;
-use Symfony\Component\Process\Process;
 
 class Esp32RelayPublisher
 {
@@ -23,41 +24,28 @@ class Esp32RelayPublisher
             ];
         }
 
-        $binary = (string) config('esp32.mqtt.publisher_binary', 'mosquitto_pub');
         $host = (string) config('esp32.mqtt.host', '127.0.0.1');
         $port = (int) config('esp32.mqtt.port', 1883);
         $topic = (string) config('esp32.mqtt.command_topic', 'esp32/cmd');
         $username = config('esp32.mqtt.username');
         $password = config('esp32.mqtt.password');
+        $clientId = 'laravel-relay-publisher-'.bin2hex(random_bytes(4));
 
-        $command = [
-            $binary,
-            '-h',
-            $host,
-            '-p',
-            (string) $port,
-            '-t',
-            $topic,
-            '-m',
-            $payload ?: '',
-        ];
-
+        $settings = new ConnectionSettings();
         if (is_string($username) && $username !== '') {
-            $command[] = '-u';
-            $command[] = $username;
+            $settings = $settings->setUsername($username);
         }
-
         if (is_string($password) && $password !== '') {
-            $command[] = '-P';
-            $command[] = $password;
+            $settings = $settings->setPassword($password);
         }
 
-        $process = new Process($command);
-        $process->setTimeout(4);
-        $process->run();
-
-        if (! $process->isSuccessful()) {
-            throw new RuntimeException(trim($process->getErrorOutput()) ?: 'Failed to publish relay command via MQTT.');
+        try {
+            $client = new MqttClient($host, $port, $clientId);
+            $client->connect($settings, true);
+            $client->publish($topic, $payload ?: '', 0);
+            $client->disconnect();
+        } catch (\Throwable $exception) {
+            throw new RuntimeException('Failed to publish relay command via MQTT: '.$exception->getMessage());
         }
 
         return [

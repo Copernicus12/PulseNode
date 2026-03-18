@@ -2,43 +2,80 @@
 
 namespace App\Support;
 
-use Illuminate\Support\Facades\File;
+use MongoDB\BSON\UTCDateTime;
+use MongoDB\Client;
+use MongoDB\Model\BSONArray;
+use MongoDB\Model\BSONDocument;
+use Throwable;
 
 class Esp32StateStore
 {
-    private string $path;
-
-    public function __construct()
-    {
-        $this->path = storage_path('app/private/esp32_latest.json');
-    }
-
     public function latest(): array
     {
         $defaults = $this->defaults();
+        $collection = $this->collection();
 
-        if (! File::exists($this->path)) {
+        if ($collection === null) {
             return $defaults;
         }
 
-        $decoded = json_decode((string) File::get($this->path), true);
+        $doc = $collection->findOne([], ['sort' => ['received_at' => -1]]);
 
-        if (! is_array($decoded)) {
+        if ($doc === null) {
             return $defaults;
         }
 
-        return $this->normalize(array_merge($defaults, $decoded));
+        $payload = $this->toArray($doc['payload'] ?? null);
+
+        if ($payload === null) {
+            return $defaults;
+        }
+
+        $updatedAt = null;
+        if (isset($doc['received_at']) && $doc['received_at'] instanceof UTCDateTime) {
+            $updatedAt = $doc['received_at']->toDateTime()->format(DATE_ATOM);
+        }
+
+        if ($updatedAt !== null) {
+            $payload['updated_at'] = $updatedAt;
+        }
+
+        return $this->normalize(array_merge($defaults, $payload));
     }
 
     public function update(array $payload): array
     {
         $state = $this->normalize(array_merge($this->latest(), $payload));
         $state['updated_at'] = now()->toIso8601String();
+        $collection = $this->collection();
 
-        File::ensureDirectoryExists(dirname($this->path));
-        File::put($this->path, json_encode($state, JSON_PRETTY_PRINT));
+        if ($collection !== null) {
+            $collection->insertOne([
+                'topic' => config('esp32.mqtt.data_topic', 'razvy_esp32_2026/data'),
+                'received_at' => new UTCDateTime(),
+                'payload' => $state,
+            ]);
+        }
 
         return $state;
+    }
+
+    private function collection(): ?\MongoDB\Collection
+    {
+        $uri = (string) config('esp32.mongodb.uri', '');
+        if ($uri === '') {
+            return null;
+        }
+
+        try {
+            $client = new Client($uri);
+
+            return $client
+                ->selectDatabase((string) config('esp32.mongodb.database', 'espData'))
+                ->selectCollection((string) config('esp32.mongodb.collection', 'readings'));
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     private function defaults(): array
@@ -73,5 +110,18 @@ class Esp32StateStore
             'relay_3' => (bool) ($payload['relay_3'] ?? false),
             'updated_at' => $payload['updated_at'] ?? null,
         ];
+    }
+
+    private function toArray(mixed $value): ?array
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+
+        if ($value instanceof BSONDocument || $value instanceof BSONArray) {
+            return $value->getArrayCopy();
+        }
+
+        return null;
     }
 }

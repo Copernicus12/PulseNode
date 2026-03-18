@@ -168,7 +168,7 @@ class PowerStripController extends Controller
         $lastSeen = $updatedAt ? Carbon::parse($updatedAt)->diffForHumans() : 'Never';
         $isOnline = $systemStatus !== 'offline';
         $today = now()->startOfDay();
-        $oldestReadingDate = EnergyReading::query()->min('date');
+        $oldestReadingDate = EnergyReading::oldestDate();
         $oldestDate = $oldestReadingDate ? Carbon::parse($oldestReadingDate)->startOfDay() : $today->copy();
         $retentionStart = $today->copy()->subYears(5);
         $minSelectableDate = $oldestDate->lt($retentionStart) ? $oldestDate->copy() : $retentionStart;
@@ -192,22 +192,16 @@ class PowerStripController extends Controller
         $windowEnd = $anchorDate->copy();
         $windowStart = $windowEnd->copy()->subDays(6);
 
-        $readingsByDate = EnergyReading::query()
-            ->whereBetween('date', [$windowStart->toDateString(), $windowEnd->toDateString()])
-            ->get()
-            ->keyBy(fn (EnergyReading $reading): string => Carbon::parse($reading->date)->toDateString());
-
-        $dayWindow = collect(range(0, 6))->map(function (int $offset) use ($windowStart, $today, $readingsByDate): array {
+        $dayWindow = collect(range(0, 6))->map(function (int $offset) use ($windowStart, $today): array {
             $date = $windowStart->copy()->addDays($offset);
             $dateKey = $date->toDateString();
-            /** @var EnergyReading|null $reading */
-            $reading = $readingsByDate->get($dateKey);
+            $details = EnergyReading::dayDetails($dateKey);
 
             return [
                 'date' => $dateKey,
                 'day_short' => strtoupper(substr($date->format('D'), 0, 3)),
                 'is_today' => $date->isSameDay($today),
-                'total' => round((float) ($reading?->energy_total ?? 0), 4),
+                'total' => round((float) ($details['total_kwh'] ?? 0), 4),
             ];
         });
 

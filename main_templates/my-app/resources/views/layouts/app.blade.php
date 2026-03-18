@@ -451,7 +451,7 @@
             var dot = document.getElementById('live-telemetry-dot');
             var power = document.getElementById('live-telemetry-power');
             var current = document.getElementById('live-telemetry-current');
-            if (!dot || !power || !current) return;
+            var hasTelemetryWidget = !!(dot && power && current);
 
             function asNumber(v) {
                 var n = Number(v);
@@ -466,6 +466,7 @@
             }
 
             function setOnline(online) {
+                if (!dot) return;
                 dot.classList.remove('bg-red-400', 'bg-emerald-400');
                 dot.classList.add(online ? 'bg-emerald-400' : 'bg-red-400');
             }
@@ -473,8 +474,10 @@
             function applyLatest(data) {
                 var p = asNumber(data && data.power);
                 var c = asNumber(data && data.current);
-                power.textContent = p.toFixed(1) + 'W';
-                current.textContent = c.toFixed(3) + 'A';
+                if (hasTelemetryWidget) {
+                    power.textContent = p.toFixed(1) + 'W';
+                    current.textContent = c.toFixed(3) + 'A';
+                }
                 setOnline(isOnline(data && data.updated_at));
             }
 

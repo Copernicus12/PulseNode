@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\DetectionPlan;
 use App\Models\DeviceProfile;
 use App\Models\EnergyReading;
-use App\Models\EnergySample;
 use App\Support\DeviceProfiler;
 use App\Support\Esp32RelayPublisher;
 use App\Support\Esp32StateStore;
@@ -87,9 +86,6 @@ class Esp32ApiController extends Controller
         ]);
 
         $latest = $store->update($payload);
-
-        // Record detailed analytics sample + per-day aggregates.
-        EnergySample::recordFromLatest($latest);
 
         return response()->json([
             'status' => 'ok',

@@ -141,6 +141,15 @@ function fmt(value: unknown, digits = 1): string {
   return number(value).toFixed(digits)
 }
 
+function fmtEnergy(value: unknown): string {
+  const kwh = number(value)
+  if (kwh >= 0.01) {
+    return `${kwh.toFixed(4)} kWh`
+  }
+
+  return `${(kwh * 1000).toFixed(2)} Wh`
+}
+
 function dayHref(date: string): string {
   const url = new URL(props.historyBaseUrl, window.location.origin)
   url.searchParams.set('date', date)
@@ -386,7 +395,7 @@ onUnmounted(() => {
                   </Badge>
                 </div>
                 <p class="mt-1.5 text-xl font-semibold leading-none tabular-nums">
-                  {{ fmt(hour.energy_kwh, 4) }} <span class="text-sm font-medium text-muted-foreground">kWh</span>
+                  {{ fmtEnergy(hour.energy_kwh) }}
                 </p>
                 <p class="mt-1 text-xs text-muted-foreground">
                   Avg {{ fmt(hour.avg_power_w, 1) }} W · Peak {{ fmt(hour.peak_power_w, 1) }} W
