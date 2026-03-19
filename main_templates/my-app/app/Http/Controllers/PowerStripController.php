@@ -10,6 +10,7 @@ use App\Models\DeviceProfile;
 use App\Models\EnergyReading;
 use App\Support\BatteryInsights;
 use App\Support\DeviceProfiler;
+use App\Support\Esp32ConnectionHealth;
 use App\Support\Esp32StateStore;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -22,9 +23,11 @@ class PowerStripController extends Controller
     /**
      * Main power-strip monitoring dashboard.
      */
-    public function index(Esp32StateStore $store): View
+    public function index(Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth): View
     {
-        [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus] = $this->buildStripViewModel($store->latest());
+        $latest = $store->latest();
+        [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus] = $this->buildStripViewModel($latest, $connectionHealth);
+        $relayCommandGuard = $connectionHealth->relayCommandAvailability($latest);
 
         return view('power-strip.index', compact(
             'latest',
@@ -33,27 +36,28 @@ class PowerStripController extends Controller
             'totalPower',
             'totalEnergy',
             'systemStatus',
+            'relayCommandGuard',
         ));
     }
 
-    public function devices(Esp32StateStore $store, DeviceProfiler $profiler): View
+    public function devices(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth): View
     {
-        return view('devices.index', $this->buildDevicesPageData($store, $profiler, 'overview', 6));
+        return view('devices.index', $this->buildDevicesPageData($store, $profiler, $connectionHealth, 'overview', 6));
     }
 
-    public function deviceProfiles(Esp32StateStore $store, DeviceProfiler $profiler): View
+    public function deviceProfiles(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth): View
     {
-        return view('devices.index', $this->buildDevicesPageData($store, $profiler, 'profiles', 6));
+        return view('devices.index', $this->buildDevicesPageData($store, $profiler, $connectionHealth, 'profiles', 6));
     }
 
-    public function devicePlans(Esp32StateStore $store, DeviceProfiler $profiler): View
+    public function devicePlans(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth): View
     {
-        return view('devices.index', $this->buildDevicesPageData($store, $profiler, 'plans', 6));
+        return view('devices.index', $this->buildDevicesPageData($store, $profiler, $connectionHealth, 'plans', 6));
     }
 
-    public function deviceActivity(Esp32StateStore $store, DeviceProfiler $profiler): View
+    public function deviceActivity(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth): View
     {
-        return view('devices.index', $this->buildDevicesPageData($store, $profiler, 'activity', 20));
+        return view('devices.index', $this->buildDevicesPageData($store, $profiler, $connectionHealth, 'activity', 20));
     }
 
     public function storeDeviceProfile(StoreDeviceProfileRequest $request, DeviceProfiler $profiler): RedirectResponse
@@ -138,9 +142,9 @@ class PowerStripController extends Controller
             ->with('devices_success', 'Detection plan "'.$name.'" removed.');
     }
 
-    public function battery(Esp32StateStore $store, BatteryInsights $insights): View
+    public function battery(Esp32StateStore $store, BatteryInsights $insights, Esp32ConnectionHealth $connectionHealth): View
     {
-        [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus] = $this->buildStripViewModel($store->latest());
+        [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus] = $this->buildStripViewModel($store->latest(), $connectionHealth);
 
         $updatedAt = $latest['updated_at'] ?? null;
         $lastSeen = $updatedAt ? Carbon::parse($updatedAt)->diffForHumans() : 'Never';
@@ -160,9 +164,9 @@ class PowerStripController extends Controller
         ));
     }
 
-    public function history(Request $request, Esp32StateStore $store): View
+    public function history(Request $request, Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth): View
     {
-        [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus] = $this->buildStripViewModel($store->latest());
+        [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus] = $this->buildStripViewModel($store->latest(), $connectionHealth);
 
         $updatedAt = $latest['updated_at'] ?? null;
         $lastSeen = $updatedAt ? Carbon::parse($updatedAt)->diffForHumans() : 'Never';
@@ -266,7 +270,7 @@ class PowerStripController extends Controller
         return view('power-strip.settings', compact('latest'));
     }
 
-    private function buildStripViewModel(array $latest): array
+    private function buildStripViewModel(array $latest, Esp32ConnectionHealth $connectionHealth): array
     {
         $sockets = [
             [
@@ -277,7 +281,7 @@ class PowerStripController extends Controller
                 'current' => round((float) ($latest['current_1'] ?? 0), 3),
                 'power_w' => round((float) ($latest['voltage'] ?? 0) * (float) ($latest['current_1'] ?? 0), 1),
                 'energy_kwh' => round((float) ($latest['energy'] ?? 0), 3),
-                'status' => $this->deriveSocketStatus($latest, 1),
+                'status' => $this->deriveSocketStatus($latest, 1, $connectionHealth),
                 'updated_at' => $latest['updated_at'] ?? null,
             ],
             [
@@ -288,7 +292,7 @@ class PowerStripController extends Controller
                 'current' => round((float) ($latest['current_2'] ?? 0), 3),
                 'power_w' => round((float) ($latest['voltage'] ?? 0) * (float) ($latest['current_2'] ?? 0), 1),
                 'energy_kwh' => round((float) ($latest['energy'] ?? 0), 3),
-                'status' => $this->deriveSocketStatus($latest, 2),
+                'status' => $this->deriveSocketStatus($latest, 2, $connectionHealth),
                 'updated_at' => $latest['updated_at'] ?? null,
             ],
             [
@@ -299,7 +303,7 @@ class PowerStripController extends Controller
                 'current' => round((float) ($latest['current_3'] ?? 0), 3),
                 'power_w' => round((float) ($latest['voltage'] ?? 0) * (float) ($latest['current_3'] ?? 0), 1),
                 'energy_kwh' => round((float) ($latest['energy'] ?? 0), 3),
-                'status' => $this->deriveSocketStatus($latest, 3),
+                'status' => $this->deriveSocketStatus($latest, 3, $connectionHealth),
                 'updated_at' => $latest['updated_at'] ?? null,
             ],
         ];
@@ -307,15 +311,15 @@ class PowerStripController extends Controller
         $activeSockets = collect($sockets)->where('is_on', true)->count();
         $totalPower = collect($sockets)->sum('power_w');
         $totalEnergy = collect($sockets)->sum('energy_kwh');
-        $systemStatus = $this->deriveSystemStatus($latest);
+        $systemStatus = $this->deriveSystemStatus($latest, $connectionHealth);
 
         return [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus];
     }
 
-    private function buildDevicesPageData(Esp32StateStore $store, DeviceProfiler $profiler, string $section, int $recentDetectionsLimit): array
+    private function buildDevicesPageData(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth, string $section, int $recentDetectionsLimit): array
     {
         return [
-            ...$this->buildDevicesViewModel($store, $profiler),
+            ...$this->buildDevicesViewModel($store, $profiler, $connectionHealth),
             'deviceSection' => $section,
             'deviceSectionMeta' => $this->deviceSectionMeta($section),
             'recentDetections' => DeviceDetection::query()
@@ -326,9 +330,9 @@ class PowerStripController extends Controller
         ];
     }
 
-    private function buildDevicesViewModel(Esp32StateStore $store, DeviceProfiler $profiler): array
+    private function buildDevicesViewModel(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth): array
     {
-        [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus] = $this->buildStripViewModel($store->latest());
+        [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus] = $this->buildStripViewModel($store->latest(), $connectionHealth);
 
         $updatedAt = $latest['updated_at'] ?? null;
         $lastSeen = $updatedAt ? Carbon::parse($updatedAt)->diffForHumans() : 'Never';
@@ -452,14 +456,9 @@ class PowerStripController extends Controller
         };
     }
 
-    private function deriveSocketStatus(array $latest, int $index): string
+    private function deriveSocketStatus(array $latest, int $index, Esp32ConnectionHealth $connectionHealth): string
     {
-        if ($latest['updated_at'] === null) {
-            return 'offline';
-        }
-
-        $updatedAt = Carbon::parse($latest['updated_at']);
-        if ($updatedAt->diffInMinutes(now()) > 5) {
+        if (! $connectionHealth->isOnline($latest)) {
             return 'offline';
         }
 
@@ -479,14 +478,9 @@ class PowerStripController extends Controller
         return 'normal';
     }
 
-    private function deriveSystemStatus(array $latest): string
+    private function deriveSystemStatus(array $latest, Esp32ConnectionHealth $connectionHealth): string
     {
-        if ($latest['updated_at'] === null) {
-            return 'offline';
-        }
-
-        $updatedAt = Carbon::parse($latest['updated_at']);
-        if ($updatedAt->diffInMinutes(now()) > 5) {
+        if (! $connectionHealth->isOnline($latest)) {
             return 'offline';
         }
 

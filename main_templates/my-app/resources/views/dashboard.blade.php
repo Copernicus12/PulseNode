@@ -2,8 +2,13 @@
 
 @section('title', 'Dashboard')
 
+@push('head')
+    @vite('resources/js/relay-command-toast.ts')
+@endpush
+
 @section('content')
 <div class="space-y-5">
+    @include('layouts._relay-command-alert', ['relayCommandGuard' => $relayCommandGuard])
 
     {{-- ── Row 1: Live Monitoring (full-width, like Camera CCTV) ── --}}
     <div class="rounded-3xl bg-card p-7">
@@ -338,6 +343,7 @@ function setDashboardToggleState(idx, isOn, pending) {
     button.classList.add(isOn ? 'bg-primary' : 'bg-muted');
     button.classList.add(isOn ? 'text-primary-foreground' : 'text-muted-foreground');
     if (pending) button.classList.add('opacity-60', 'cursor-not-allowed');
+    button.title = isOn ? 'Turn off Socket ' + idx : 'Turn on Socket ' + idx;
 }
 
 function publishLatestSnapshot(data) {
@@ -347,10 +353,31 @@ function publishLatestSnapshot(data) {
 }
 
 function sendRelayCommand(idx, turnOn) {
+    if (window.pulsenodeEnsureRelayCommandAllowed && !window.pulsenodeEnsureRelayCommandAllowed(turnOn)) {
+        var blockedGuard = window.__pulsenodeRelayCommandGuard || {};
+        return Promise.reject(new Error(blockedGuard.message || 'Socket power-on is unavailable right now.'));
+    }
+
     return fetch('/api/relay/' + idx + '/' + (turnOn ? 'on' : 'off'), { credentials: 'same-origin' })
         .then(function(response) {
-            if (!response.ok) throw new Error('Relay command failed');
-            return response.json();
+            return response.json().catch(function() {
+                return {};
+            }).then(function(payload) {
+                if (!response.ok) {
+                    if (payload && payload.guard && window.pulsenodeSetRelayCommandGuard) {
+                        window.pulsenodeSetRelayCommandGuard(payload.guard);
+                    }
+                    if (payload && payload.guard && window.pulsenodeShowRelayCommandNotification) {
+                        window.pulsenodeShowRelayCommandNotification(payload.message, payload.guard);
+                    }
+
+                    var error = new Error((payload && payload.message) || 'Relay command failed');
+                    error.payload = payload;
+                    throw error;
+                }
+
+                return payload;
+            });
         });
 }
 
@@ -370,6 +397,10 @@ function toggleRelay(idx, turnOn) {
 }
 
 function toggleAllRelays(turnOn) {
+    if (turnOn && window.pulsenodeEnsureRelayCommandAllowed && !window.pulsenodeEnsureRelayCommandAllowed(true)) {
+        return;
+    }
+
     setDashboardToggleState(1, dashboardRelayState[1], true);
     setDashboardToggleState(2, dashboardRelayState[2], true);
     setDashboardToggleState(3, dashboardRelayState[3], true);
@@ -617,9 +648,19 @@ function applyLatestDashboard(d) {
     });
 }
 
+window.addEventListener('pulsenode:relay-guard', function() {
+    setDashboardToggleState(1, dashboardRelayState[1], false);
+    setDashboardToggleState(2, dashboardRelayState[2], false);
+    setDashboardToggleState(3, dashboardRelayState[3], false);
+});
+
 window.addEventListener('pulsenode:latest', function(event) {
     applyLatestDashboard(event.detail || {});
 });
+
+setDashboardToggleState(1, dashboardRelayState[1], false);
+setDashboardToggleState(2, dashboardRelayState[2], false);
+setDashboardToggleState(3, dashboardRelayState[3], false);
 
 if (window.__pulsenodeLatest) {
     applyLatestDashboard(window.__pulsenodeLatest);

@@ -3,6 +3,7 @@
 @section('title', 'Power Strip')
 
 @push('head')
+    @vite('resources/js/relay-command-toast.ts')
     @vite('resources/js/power-strip-safety-guard.ts')
 @endpush
 
@@ -13,6 +14,7 @@
 @endphp
 
 <div class="space-y-5">
+    @include('layouts._relay-command-alert', ['relayCommandGuard' => $relayCommandGuard])
 
     {{-- ── Row 1: Operations header ── --}}
     <div class="rounded-3xl bg-card p-7">
@@ -365,10 +367,31 @@ function publishLatestSnapshot(data) {
 }
 
 function sendRelayCommand(idx, turnOn) {
+    if (window.pulsenodeEnsureRelayCommandAllowed && !window.pulsenodeEnsureRelayCommandAllowed(turnOn)) {
+        var blockedGuard = window.__pulsenodeRelayCommandGuard || {};
+        return Promise.reject(new Error(blockedGuard.message || 'Socket power-on is unavailable right now.'));
+    }
+
     return fetch('/api/relay/' + idx + '/' + (turnOn ? 'on' : 'off'), { credentials: 'same-origin' })
         .then(function(response) {
-            if (!response.ok) throw new Error('Relay command failed');
-            return response.json();
+            return response.json().catch(function() {
+                return {};
+            }).then(function(payload) {
+                if (!response.ok) {
+                    if (payload && payload.guard && window.pulsenodeSetRelayCommandGuard) {
+                        window.pulsenodeSetRelayCommandGuard(payload.guard);
+                    }
+                    if (payload && payload.guard && window.pulsenodeShowRelayCommandNotification) {
+                        window.pulsenodeShowRelayCommandNotification(payload.message, payload.guard);
+                    }
+
+                    var error = new Error((payload && payload.message) || 'Relay command failed');
+                    error.payload = payload;
+                    throw error;
+                }
+
+                return payload;
+            });
         });
 }
 
@@ -386,11 +409,17 @@ function toggleSocket(idx, turnOn) {
         .catch(function(e) {
             setSocketToggleState(idx, relayState[idx], false);
             console.error('Relay error', e);
-            addLog('Socket ' + idx + ' command failed', true);
+            addLog((e && e.message) ? e.message : ('Socket ' + idx + ' command failed'), true);
         });
 }
 
 function toggleAllSockets(turnOn) {
+    if (turnOn && window.pulsenodeEnsureRelayCommandAllowed && !window.pulsenodeEnsureRelayCommandAllowed(true)) {
+        var blockedGuard = window.__pulsenodeRelayCommandGuard || {};
+        addLog(blockedGuard.message || 'Socket power-on is unavailable right now.', true);
+        return;
+    }
+
     setSocketToggleState(1, relayState[1], true);
     setSocketToggleState(2, relayState[2], true);
     setSocketToggleState(3, relayState[3], true);
@@ -413,7 +442,7 @@ function toggleAllSockets(turnOn) {
         setSocketToggleState(2, relayState[2], false);
         setSocketToggleState(3, relayState[3], false);
         console.error('Toggle all error', e);
-        addLog('All sockets command failed', true);
+        addLog((e && e.message) ? e.message : 'All sockets command failed', true);
     });
 }
 
@@ -426,6 +455,12 @@ function applyScene(scene) {
     };
     if (!map[scene]) return;
     var state = map[scene];
+    if (state.some(function(value) { return value; }) && window.pulsenodeEnsureRelayCommandAllowed && !window.pulsenodeEnsureRelayCommandAllowed(true)) {
+        var blockedGuard = window.__pulsenodeRelayCommandGuard || {};
+        addLog(blockedGuard.message || 'Scene failed because socket power-on is unavailable right now.', true);
+        return;
+    }
+
     Promise.all([
         sendRelayCommand(1, state[0]),
         sendRelayCommand(2, state[1]),
@@ -544,6 +579,16 @@ function applyLatestMetrics(d) {
 window.addEventListener('pulsenode:latest', function(event) {
     applyLatestMetrics(event.detail || {});
 });
+
+window.addEventListener('pulsenode:relay-guard', function() {
+    setSocketToggleState(1, relayState[1], false);
+    setSocketToggleState(2, relayState[2], false);
+    setSocketToggleState(3, relayState[3], false);
+});
+
+setSocketToggleState(1, relayState[1], false);
+setSocketToggleState(2, relayState[2], false);
+setSocketToggleState(3, relayState[3], false);
 
 if (window.__pulsenodeLatest) {
     applyLatestMetrics(window.__pulsenodeLatest);

@@ -83,7 +83,7 @@
                 {{-- Main content area --}}
                 @php $isDashboardRoute = request()->routeIs('dashboard'); @endphp
                 <div class="flex min-h-0 flex-1 flex-col">
-                    <header class="grid h-16 shrink-0 grid-cols-[auto_1fr_auto] items-center gap-3 px-2 pb-2 lg:px-4">
+                    <header id="app-shell-header" class="grid h-16 shrink-0 grid-cols-[auto_1fr_auto] items-center gap-3 px-2 pb-2 lg:px-4">
                         <div class="flex items-center">
                             <label for="mobile-sidebar" class="inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground lg:hidden">
                                 <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
@@ -115,7 +115,7 @@
                             <button title="Users" class="inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground">
                                 <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                             </button>
-                            <button title="Messages" class="inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground">
+                            <button id="relay-command-toast-anchor" title="Messages" class="inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground">
                                 <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
                             </button>
                             <details class="relative ml-1">
@@ -140,7 +140,7 @@
                         </div>
                     </header>
 
-                    <main class="flex-1 overflow-y-auto px-2 pb-6 pt-1 lg:px-4">
+                    <main id="main-content-scroll" class="relative flex-1 overflow-y-auto px-2 pb-6 pt-1 lg:px-4">
                         @yield('content')
                     </main>
                 </div>

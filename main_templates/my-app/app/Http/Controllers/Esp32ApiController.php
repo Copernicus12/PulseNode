@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DetectionPlan;
 use App\Models\DeviceProfile;
 use App\Models\EnergyReading;
+use App\Support\Esp32ConnectionHealth;
 use App\Support\DeviceProfiler;
 use App\Support\Esp32RelayPublisher;
 use App\Support\Esp32StateStore;
@@ -21,7 +22,7 @@ class Esp32ApiController extends Controller
         return response()->json($store->latest());
     }
 
-    public function relay(int $relayId, string $state, Esp32StateStore $store, Esp32RelayPublisher $publisher): JsonResponse
+    public function relay(int $relayId, string $state, Esp32StateStore $store, Esp32RelayPublisher $publisher, Esp32ConnectionHealth $connectionHealth): JsonResponse
     {
         if (! in_array($state, ['on', 'off'], true)) {
             return response()->json([
@@ -37,6 +38,19 @@ class Esp32ApiController extends Controller
             ], 422);
         }
 
+        $latestState = $store->latest();
+        $relayCommandGuard = $connectionHealth->relayCommandAvailability($latestState);
+
+        if ($state === 'on' && ! $relayCommandGuard['can_turn_on']) {
+            return response()->json([
+                'status' => 'unavailable',
+                'sent' => strtoupper($state),
+                'published' => false,
+                'message' => $relayCommandGuard['message'],
+                'guard' => $relayCommandGuard,
+            ], 409);
+        }
+
         try {
             $publishResult = $publisher->publish($relayId, $state);
         } catch (RuntimeException $exception) {
@@ -49,9 +63,9 @@ class Esp32ApiController extends Controller
         }
 
         $latest = $store->update([
-            'relay_1' => $relayId === 1 ? $state === 'on' : $store->latest()['relay_1'],
-            'relay_2' => $relayId === 2 ? $state === 'on' : $store->latest()['relay_2'],
-            'relay_3' => $relayId === 3 ? $state === 'on' : $store->latest()['relay_3'],
+            'relay_1' => $relayId === 1 ? $state === 'on' : (bool) ($latestState['relay_1'] ?? false),
+            'relay_2' => $relayId === 2 ? $state === 'on' : (bool) ($latestState['relay_2'] ?? false),
+            'relay_3' => $relayId === 3 ? $state === 'on' : (bool) ($latestState['relay_3'] ?? false),
         ]);
 
         return response()->json([

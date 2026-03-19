@@ -21,4 +21,9 @@ return [
         'database' => env('MONGODB_DATABASE', 'espData'),
         'collection' => env('MONGODB_COLLECTION', 'readings'),
     ],
+
+    'connection' => [
+        'offline_after_seconds' => (int) env('ESP32_OFFLINE_AFTER_SECONDS', 300),
+        'relay_command_max_age_seconds' => (int) env('ESP32_RELAY_COMMAND_MAX_AGE_SECONDS', 90),
+    ],
 ];

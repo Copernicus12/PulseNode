@@ -3,24 +3,25 @@
 namespace App\Http\Controllers;
 
 use App\Models\EnergyReading;
+use App\Support\Esp32ConnectionHealth;
 use App\Support\Esp32StateStore;
 use Carbon\Carbon;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Esp32StateStore $store): View
+    public function __invoke(Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth): View
     {
         $latest = $store->latest();
 
         // ── Derive system status ──────────────────────────────────────
-        $isOnline    = false;
+        $isOnline = $connectionHealth->isOnline($latest);
         $lastSeen    = null;
         $lastSeenAgo = 'niciodată';
+        $relayCommandGuard = $connectionHealth->relayCommandAvailability($latest);
 
         if ($latest['updated_at'] !== null) {
             $updatedAt   = Carbon::parse($latest['updated_at']);
-            $isOnline    = $updatedAt->diffInMinutes(now()) <= 5;
             $lastSeen    = $updatedAt;
             $lastSeenAgo = $updatedAt->diffForHumans();
         }
@@ -96,6 +97,7 @@ class DashboardController extends Controller
             'activeRelays',
             'sockets',
             'safetyLevel',
+            'relayCommandGuard',
             'energyUsage',
         ));
     }

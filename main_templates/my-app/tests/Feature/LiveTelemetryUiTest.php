@@ -18,7 +18,6 @@ class LiveTelemetryUiTest extends TestCase
         $response = $this->get(route('dashboard'));
 
         $response->assertOk();
-        $response->assertSee('id="live-telemetry-pill"', false);
         $response->assertSee("window.dispatchEvent(new CustomEvent('pulsenode:latest'", false);
         $response->assertSee('setInterval(pollLatest, 2000);', false);
     }
@@ -28,10 +27,26 @@ class LiveTelemetryUiTest extends TestCase
         $user = User::factory()->create();
         $this->actingAs($user);
 
-        foreach (['power-strip.index', 'devices.index', 'battery.index', 'history.index'] as $routeName) {
+        foreach (['dashboard', 'power-strip.index', 'devices.index', 'battery.index'] as $routeName) {
             $response = $this->get(route($routeName));
             $response->assertOk();
             $response->assertSee("window.addEventListener('pulsenode:latest'", false);
+        }
+    }
+
+    public function test_dashboard_and_power_strip_keep_the_relay_command_guard_and_sonner_toast_mount(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        foreach (['dashboard', 'power-strip.index'] as $routeName) {
+            $response = $this->get(route($routeName));
+
+            $response->assertOk();
+            $response->assertSee('window.pulsenodeEnsureRelayCommandAllowed', false);
+            $response->assertSee('window.pulsenodeShowRelayCommandNotification', false);
+            $response->assertSee('id="relay-command-toast-root"', false);
+            $response->assertDontSee('id="relay-command-alert-root"', false);
         }
     }
 
