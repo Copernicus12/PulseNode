@@ -6,11 +6,13 @@
 // CONFIGURARI
 //-----------------------------------------------------------
 
+const char* FW_VERSION = "esp32-current-fix-v7";
+
 // WiFi
 const char* ssid        = "Test_TP";
 const char* password    = "pinguin1";
 
-// MQTT (Public broker)
+// MQTT
 const char* mqtt_server = "broker.hivemq.com";
 const int   mqtt_port   = 1883;
 
@@ -22,55 +24,104 @@ const char* mqtt_topic_cmd  = "razvy_esp32_2026/cmd";
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// ACS712 (curent)
+// ACS712
 #define CURRENT1_PIN 12
 #define CURRENT2_PIN 13
 #define CURRENT3_PIN 14
-const float sensitivity = 0.134;
+
+const float sensitivity = 0.134;   // V/A
 const float vRef = 3.3;
 const int resolution = 4095;
 
-// Divizor 2.2k / 3.3k
+// Divizor rezistiv ACS -> ESP32: 3.3k si 2.2k
 const float dividerFactor = (2.2 + 3.3) / 2.2;
 
-// ZMPT101B (tensiune)
+// ZMPT101B
 #define VOLTAGE_PIN 5
-float voltageCalibration = 990;
+float voltageCalibration = 990.0;
 
 // Relee
 #define RELAY1_PIN 15
 #define RELAY2_PIN 16
 #define RELAY3_PIN 17
+
 bool relay1State = false;
 bool relay2State = false;
 bool relay3State = false;
 
 // Energie
 double energy_kWh = 0.0;
-unsigned long lastMillis;
-
-// Noise ACS712 (în amperi)
-float noiseOffset1 = 0.0;
-float noiseOffset2 = 0.0;
-float noiseOffset3 = 0.0;
+unsigned long lastMillis = 0;
 
 // Serial input buffer
 String serialBuffer = "";
 
-// Timer MQTT 10 secunde pentru testing
+// Timer MQTT
 unsigned long lastMQTT = 0;
 const unsigned long MQTT_INTERVAL = 10000;
 
-// Sampling tuned for ESP32-S3 stability (lower CPU blocking time).
+// Sampling
 const int CURRENT_OFFSET_SAMPLES = 240;
-const int CURRENT_RMS_SAMPLES = 480;
+const int CURRENT_RMS_SAMPLES    = 480;
 const int VOLTAGE_OFFSET_SAMPLES = 300;
-const int VOLTAGE_RMS_SAMPLES = 600;
-const int CALIBRATION_SAMPLES = 600;
-const unsigned long VOLTAGE_OFFSET_WINDOW_US = 40000;  // ~2 cycles @ 50Hz
-const unsigned long VOLTAGE_RMS_WINDOW_US = 200000;    // ~10 cycles @ 50Hz
-const float VOLTAGE_FILTER_ALPHA = 0.18;
+const int VOLTAGE_RMS_SAMPLES    = 600;
+const int CURRENT_OFFSET_AVERAGE_READS = 30;
 
+const unsigned long VOLTAGE_OFFSET_WINDOW_US = 40000;   // ~2 perioade la 50Hz
+const unsigned long VOLTAGE_RMS_WINDOW_US    = 200000;  // ~10 perioade la 50Hz
+
+const float VOLTAGE_FILTER_ALPHA = 0.18;
+const float DEFAULT_VOLTAGE_RMS = 224.0;
+
+const float MIN_CURRENT_THRESHOLD = 0.035;
+const float CURRENT_HOLD_ZERO_THRESHOLD = 0.025;
+const float LOW_CURRENT_STABILIZE_THRESHOLD = 0.18;
+const float LOW_CURRENT_FILTER_ALPHA = 0.10;
+const float NORMAL_CURRENT_FILTER_ALPHA = 0.20;
+const float POWER_FILTER_ALPHA = 0.18;
+const float LOW_POWER_STABILIZE_THRESHOLD_W = 30.0;
+const float LOW_POWER_FILTER_ALPHA = 0.08;
+const float DOMINANCE_RATIO_THRESHOLD = 0.35;
+const float DOMINANCE_MIN_ACTIVE_CURRENT = 0.12;
+const float MULTI_LOAD_ACTIVE_THRESHOLD = 0.08;
+const float MULTI_LOAD_PAIR_RATIO_THRESHOLD = 0.55;
+const float CROSSTALK_12 = 0.18;
+const float CROSSTALK_13 = 0.10;
+const float CROSSTALK_21 = 0.12;
+const float CROSSTALK_23 = 0.10;
+const float CROSSTALK_31 = 0.08;
+const float CROSSTALK_32 = 0.16;
+const float MQTT_RESET_CURRENT_LEVEL = 0.04;
+const int MQTT_RESET_ZERO_STREAK = 3;
+const unsigned long RELAY_SETTLE_MS = 1500;
+
+float currentNoiseFloor1 = 0.0;
+float currentNoiseFloor2 = 0.0;
+float currentNoiseFloor3 = 0.0;
+
+struct MQTTAverageBuffer {
+  float voltageSum;
+  float current1Sum;
+  float current2Sum;
+  float current3Sum;
+  float totalCurrentSum;
+  float powerSum;
+  int voltageCount;
+  int current1Count;
+  int current2Count;
+  int current3Count;
+  int totalCurrentCount;
+  int powerCount;
+  int zeroStreak1;
+  int zeroStreak2;
+  int zeroStreak3;
+};
+
+MQTTAverageBuffer mqttAverage = {0};
+
+//-----------------------------------------------------------
+// YIELD PRIETENOS PENTRU WATCHDOG
+//-----------------------------------------------------------
 inline void watchdogFriendlyYield(int i) {
   if ((i & 0x3F) == 0) {
     delay(0);
@@ -99,17 +150,144 @@ void setup_wifi() {
 }
 
 //-----------------------------------------------------------
-// CALLBACK MQTT – CONTROL RELEU
+// MASURARE CURENT RMS BRUT
+//-----------------------------------------------------------
+float measureCurrentRMSRaw(int currentPin) {
+  float offset = 0.0;
+
+  for (int i = 0; i < CURRENT_OFFSET_SAMPLES; i++) {
+    offset += analogRead(currentPin);
+    watchdogFriendlyYield(i);
+  }
+  offset /= (float)CURRENT_OFFSET_SAMPLES;
+
+  float sum = 0.0;
+  for (int i = 0; i < CURRENT_RMS_SAMPLES; i++) {
+    float raw = analogRead(currentPin);
+    float v_adc = (raw - offset) * (vRef / resolution);
+    float v_sensor = v_adc * dividerFactor;
+    sum += v_sensor * v_sensor;
+    watchdogFriendlyYield(i);
+  }
+
+  float v_rms = sqrt(sum / (float)CURRENT_RMS_SAMPLES);
+  return v_rms / sensitivity;
+}
+
+//-----------------------------------------------------------
+// CALIBRARE NOISE FLOOR ACS LA STARTUP
+//-----------------------------------------------------------
+float calibrateCurrentNoiseFloor(int currentPin) {
+  float totalCurrent = 0.0;
+
+  for (int i = 0; i < CURRENT_OFFSET_AVERAGE_READS; i++) {
+    float rawCurrent = measureCurrentRMSRaw(currentPin);
+    totalCurrent += rawCurrent;
+    watchdogFriendlyYield(i);
+  }
+
+  return totalCurrent / (float)CURRENT_OFFSET_AVERAGE_READS;
+}
+
+void resetMQTTChannelAverage(float &sum, int &count, int &zeroStreak, float currentValue) {
+  sum = currentValue;
+  count = 1;
+  zeroStreak = 0;
+}
+
+void updateMQTTAverages(float voltage_rms,
+                        float current1_rms,
+                        float current2_rms,
+                        float current3_rms,
+                        float current_total,
+                        float power_W) {
+  mqttAverage.voltageSum += voltage_rms;
+  mqttAverage.voltageCount++;
+
+  mqttAverage.powerSum += power_W;
+  mqttAverage.powerCount++;
+
+  mqttAverage.totalCurrentSum += current_total;
+  mqttAverage.totalCurrentCount++;
+
+  if (current1_rms <= MQTT_RESET_CURRENT_LEVEL) {
+    mqttAverage.zeroStreak1++;
+    if (mqttAverage.zeroStreak1 >= MQTT_RESET_ZERO_STREAK) {
+      resetMQTTChannelAverage(mqttAverage.current1Sum, mqttAverage.current1Count, mqttAverage.zeroStreak1, current1_rms);
+    } else {
+      mqttAverage.current1Sum += current1_rms;
+      mqttAverage.current1Count++;
+    }
+  } else {
+    mqttAverage.zeroStreak1 = 0;
+    mqttAverage.current1Sum += current1_rms;
+    mqttAverage.current1Count++;
+  }
+
+  if (current2_rms <= MQTT_RESET_CURRENT_LEVEL) {
+    mqttAverage.zeroStreak2++;
+    if (mqttAverage.zeroStreak2 >= MQTT_RESET_ZERO_STREAK) {
+      resetMQTTChannelAverage(mqttAverage.current2Sum, mqttAverage.current2Count, mqttAverage.zeroStreak2, current2_rms);
+    } else {
+      mqttAverage.current2Sum += current2_rms;
+      mqttAverage.current2Count++;
+    }
+  } else {
+    mqttAverage.zeroStreak2 = 0;
+    mqttAverage.current2Sum += current2_rms;
+    mqttAverage.current2Count++;
+  }
+
+  if (current3_rms <= MQTT_RESET_CURRENT_LEVEL) {
+    mqttAverage.zeroStreak3++;
+    if (mqttAverage.zeroStreak3 >= MQTT_RESET_ZERO_STREAK) {
+      resetMQTTChannelAverage(mqttAverage.current3Sum, mqttAverage.current3Count, mqttAverage.zeroStreak3, current3_rms);
+    } else {
+      mqttAverage.current3Sum += current3_rms;
+      mqttAverage.current3Count++;
+    }
+  } else {
+    mqttAverage.zeroStreak3 = 0;
+    mqttAverage.current3Sum += current3_rms;
+    mqttAverage.current3Count++;
+  }
+}
+
+float safeAverage(float sum, int count, float fallbackValue) {
+  if (count <= 0) {
+    return fallbackValue;
+  }
+  return sum / (float)count;
+}
+
+void clearMQTTAverages() {
+  mqttAverage = {0};
+}
+
+bool isRelayOn(uint8_t relayPin) {
+  return digitalRead(relayPin) == LOW;
+}
+
+void syncRelayStatesFromPins() {
+  relay1State = isRelayOn(RELAY1_PIN);
+  relay2State = isRelayOn(RELAY2_PIN);
+  relay3State = isRelayOn(RELAY3_PIN);
+}
+
+//-----------------------------------------------------------
+// CALLBACK MQTT – CONTROL RELEE
 //-----------------------------------------------------------
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String msg = "";
-  for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
+  for (unsigned int i = 0; i < length; i++) {
+    msg += (char)payload[i];
+  }
 
   msg.trim();
   msg.toUpperCase();
 
   if (String(topic) == mqtt_topic_cmd) {
-    // JSON format: {"relay":1,"state":"on"}
+    // Format JSON: {"relay":1,"state":"on"}
     int relayPos = msg.indexOf("RELAY");
     int statePos = msg.indexOf("STATE");
 
@@ -123,7 +301,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       stateValue.replace("}", "");
       stateValue.trim();
 
-      bool turnOn = stateValue == "ON";
+      bool turnOn = (stateValue == "ON");
 
       if (relayId == 1) {
         digitalWrite(RELAY1_PIN, turnOn ? LOW : HIGH);
@@ -143,7 +321,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       return;
     }
 
-    // Compatibilitate veche (control doar releu 1)
+    // Compatibilitate simpla
     if (msg == "ON") {
       digitalWrite(RELAY1_PIN, LOW);
       relay1State = true;
@@ -157,7 +335,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 
 //-----------------------------------------------------------
-// MQTT RECONNECT + SUBSCRIBE CMD
+// MQTT RECONNECT
 //-----------------------------------------------------------
 void reconnectMQTT() {
   while (!client.connected()) {
@@ -166,7 +344,7 @@ void reconnectMQTT() {
 
     if (client.connect(clientId.c_str())) {
       Serial.println("OK");
-      client.subscribe(mqtt_topic_cmd); // IMPORTANT
+      client.subscribe(mqtt_topic_cmd);
       Serial.print("Subscribed: ");
       Serial.println(mqtt_topic_cmd);
     } else {
@@ -179,7 +357,7 @@ void reconnectMQTT() {
 }
 
 //-----------------------------------------------------------
-// COMANDA SERIALA – NON BLOCKING
+// COMENZI DIN SERIAL
 //-----------------------------------------------------------
 void handleSerial() {
   while (Serial.available()) {
@@ -246,12 +424,11 @@ void handleSerial() {
         Serial.println(relay3State ? "PORNIT" : "OPRIT");
       }
       else if (serialBuffer == "HELP") {
-        Serial.println("Comenzi seriale: ON/OFF, R1_ON/R1_OFF, R2_ON/R2_OFF, R3_ON/R3_OFF, ALL_ON/ALL_OFF, STATUS, HELP");
+        Serial.println("Comenzi: ON/OFF, R1_ON/R1_OFF, R2_ON/R2_OFF, R3_ON/R3_OFF, ALL_ON/ALL_OFF, STATUS, HELP");
       }
       else if (serialBuffer.length() > 0) {
         Serial.print("Comanda necunoscuta: ");
         Serial.println(serialBuffer);
-        Serial.println("Scrie HELP pentru lista de comenzi.");
       }
 
       serialBuffer = "";
@@ -262,49 +439,111 @@ void handleSerial() {
 }
 
 //-----------------------------------------------------------
-// MASURARE RMS ACS712 – ZERO NOISE + DETECTARE MICĂ
+// MASURARE CURENT RMS CU COMPENSARE DE NOISE FLOOR
 //-----------------------------------------------------------
-float readCurrentRMS(int currentPin, float noiseOffset, float &smoothState) {
-  const int samples = CURRENT_RMS_SAMPLES;
+float readCurrentRMS(int currentPin, float noiseFloor, float &smoothState) {
+  float current = measureCurrentRMSRaw(currentPin) - noiseFloor;
 
-  // offset ADC
-  float offset = 0;
-  for (int i = 0; i < CURRENT_OFFSET_SAMPLES; i++) {
-    offset += analogRead(currentPin);
-    watchdogFriendlyYield(i);
-  }
-  offset /= (float)CURRENT_OFFSET_SAMPLES;
-
-  // RMS
-  float sum = 0;
-  for (int i = 0; i < samples; i++) {
-    float raw = analogRead(currentPin);
-    float v_adc = (raw - offset) * (vRef / resolution);
-    sum += v_adc * v_adc;
-    watchdogFriendlyYield(i);
+  if (current < 0.0) {
+    current = 0.0;
   }
 
-  float v_rms = sqrt(sum / samples);
-  float current = v_rms / sensitivity;
+  if (current < MIN_CURRENT_THRESHOLD) {
+    current = 0.0;
+  }
 
-  float threshold = noiseOffset + 0.01;
+  // Pentru consumatori mici vrem mai multa stabilitate decat reactie instantanee.
+  float filterAlpha = (current < LOW_CURRENT_STABILIZE_THRESHOLD)
+                        ? LOW_CURRENT_FILTER_ALPHA
+                        : NORMAL_CURRENT_FILTER_ALPHA;
+  smoothState = smoothState * (1.0 - filterAlpha) + current * filterAlpha;
 
-  if (current <= threshold) current = 0;
-  else current -= noiseOffset;
-
-  // filtru exponential moale
-  smoothState = smoothState * 0.6 + current * 0.4;
+  if (smoothState < CURRENT_HOLD_ZERO_THRESHOLD) {
+    smoothState = 0.0;
+  }
 
   return smoothState;
 }
 
+void applyDominanceFilter(float &current1, float &current2, float &current3) {
+  float dominant = current1;
+  if (current2 > dominant) {
+    dominant = current2;
+  }
+  if (current3 > dominant) {
+    dominant = current3;
+  }
+
+  if (dominant < DOMINANCE_MIN_ACTIVE_CURRENT) {
+    return;
+  }
+
+  if (current1 > 0.0 && current1 < (dominant * DOMINANCE_RATIO_THRESHOLD)) {
+    current1 = 0.0;
+  }
+  if (current2 > 0.0 && current2 < (dominant * DOMINANCE_RATIO_THRESHOLD)) {
+    current2 = 0.0;
+  }
+  if (current3 > 0.0 && current3 < (dominant * DOMINANCE_RATIO_THRESHOLD)) {
+    current3 = 0.0;
+  }
+}
+
+void applyCrosstalkCompensation(float &current1, float &current2, float &current3) {
+  float raw1 = current1;
+  float raw2 = current2;
+  float raw3 = current3;
+
+  // Compensarea de crosstalk functioneaza bine cand exista un canal dominant.
+  // Daca doua canale au sarcini reale apropiate, nu mai aplicam matricea ca sa nu
+  // "furam" curent dintr-un consumator si sa il mutam pe alt canal.
+  float maxCurrent = raw1;
+  if (raw2 > maxCurrent) {
+    maxCurrent = raw2;
+  }
+  if (raw3 > maxCurrent) {
+    maxCurrent = raw3;
+  }
+
+  if (maxCurrent >= MULTI_LOAD_ACTIVE_THRESHOLD) {
+    int nearMaxCount = 0;
+    if (raw1 >= (maxCurrent * MULTI_LOAD_PAIR_RATIO_THRESHOLD)) {
+      nearMaxCount++;
+    }
+    if (raw2 >= (maxCurrent * MULTI_LOAD_PAIR_RATIO_THRESHOLD)) {
+      nearMaxCount++;
+    }
+    if (raw3 >= (maxCurrent * MULTI_LOAD_PAIR_RATIO_THRESHOLD)) {
+      nearMaxCount++;
+    }
+
+    if (nearMaxCount >= 2) {
+      return;
+    }
+  }
+
+  current1 = raw1 - (raw2 * CROSSTALK_12) - (raw3 * CROSSTALK_13);
+  current2 = raw2 - (raw1 * CROSSTALK_21) - (raw3 * CROSSTALK_23);
+  current3 = raw3 - (raw1 * CROSSTALK_31) - (raw2 * CROSSTALK_32);
+
+  if (current1 < 0.0) {
+    current1 = 0.0;
+  }
+  if (current2 < 0.0) {
+    current2 = 0.0;
+  }
+  if (current3 < 0.0) {
+    current3 = 0.0;
+  }
+}
+
 //-----------------------------------------------------------
-// MASURARE RMS TENSIUNE – ZMPT101B
+// MASURARE TENSIUNE RMS – ZMPT101B
 //-----------------------------------------------------------
 float readVoltageRMS() {
-  // 1) Measure ADC offset in a fixed time window (more stable than fixed sample count).
-  float offset = 0;
+  float offset = 0.0;
   int offsetCount = 0;
+
   unsigned long offsetStart = micros();
   while ((micros() - offsetStart) < VOLTAGE_OFFSET_WINDOW_US) {
     offset += analogRead(VOLTAGE_PIN);
@@ -313,14 +552,14 @@ float readVoltageRMS() {
   }
 
   if (offsetCount <= 0) {
-    return 0;
+    return 0.0;
   }
 
-  offset /= (float) offsetCount;
+  offset /= (float)offsetCount;
 
-  // 2) Measure RMS over ~10 mains cycles to reduce cycle-to-cycle jitter.
-  float sum = 0;
+  float sum = 0.0;
   int rmsCount = 0;
+
   unsigned long rmsStart = micros();
   while ((micros() - rmsStart) < VOLTAGE_RMS_WINDOW_US) {
     float raw = analogRead(VOLTAGE_PIN);
@@ -331,14 +570,14 @@ float readVoltageRMS() {
   }
 
   if (rmsCount <= 0) {
-    return 0;
+    return 0.0;
   }
 
-  float moduleRMS = sqrt(sum / (float) rmsCount);
+  float moduleRMS = sqrt(sum / (float)rmsCount);
   float voltageRaw = moduleRMS * voltageCalibration;
 
-  // 3) Smooth final voltage to suppress fast spikes.
-  static float voltageFiltered = 230.0;
+  // Pornim filtrarea dintr-o valoare implicita stabila, nu din prima citire.
+  static float voltageFiltered = DEFAULT_VOLTAGE_RMS;
   voltageFiltered += VOLTAGE_FILTER_ALPHA * (voltageRaw - voltageFiltered);
 
   Serial.print("moduleRMS: ");
@@ -349,16 +588,30 @@ float readVoltageRMS() {
 }
 
 //-----------------------------------------------------------
-// TRIMITERE MQTT (DATA)
+// TRIMITERE MQTT
 //-----------------------------------------------------------
-void sendMQTT(float voltage_rms, float current1_rms, float current2_rms, float current3_rms, float current_total, float power_W, double energy_kWh) {
-  if (!client.connected()) reconnectMQTT();
+void sendMQTT(float voltage_rms,
+              float current1_rms,
+              float current2_rms,
+              float current3_rms,
+              float current_total,
+              float power_W,
+              double energy_kWh) {
+  if (!client.connected()) {
+    reconnectMQTT();
+  }
   client.loop();
 
   char payload[256];
   snprintf(payload, sizeof(payload),
            "{\"voltage\":%.1f,\"current\":%.3f,\"current_1\":%.3f,\"current_2\":%.3f,\"current_3\":%.3f,\"power\":%.1f,\"energy\":%.5f,\"relay_1\":%s,\"relay_2\":%s,\"relay_3\":%s}",
-           voltage_rms, current_total, current1_rms, current2_rms, current3_rms, power_W, energy_kWh,
+           voltage_rms,
+           current_total,
+           current1_rms,
+           current2_rms,
+           current3_rms,
+           power_W,
+           energy_kWh,
            relay1State ? "true" : "false",
            relay2State ? "true" : "false",
            relay3State ? "true" : "false");
@@ -370,7 +623,7 @@ void sendMQTT(float voltage_rms, float current1_rms, float current2_rms, float c
 }
 
 //-----------------------------------------------------------
-// SETUP – CALIBRARE NOISE + WIFI + MQTT
+// SETUP
 //-----------------------------------------------------------
 void setup() {
   Serial.begin(115200);
@@ -383,9 +636,16 @@ void setup() {
   pinMode(RELAY1_PIN, OUTPUT);
   pinMode(RELAY2_PIN, OUTPUT);
   pinMode(RELAY3_PIN, OUTPUT);
-  digitalWrite(RELAY1_PIN, HIGH);
+
+  // RELEU 1 PORNIT IMEDIAT LA START
+  digitalWrite(RELAY1_PIN, LOW);   // active LOW => ON
+  relay1State = true;
+
+  // celelalte doua oprite
   digitalWrite(RELAY2_PIN, HIGH);
   digitalWrite(RELAY3_PIN, HIGH);
+  relay2State = false;
+  relay3State = false;
 
   setup_wifi();
   client.setServer(mqtt_server, mqtt_port);
@@ -393,68 +653,133 @@ void setup() {
 
   delay(500);
 
-  Serial.println("Calibrare noise ACS712 (3 canale)...");
-
-  const int baseSamples = CALIBRATION_SAMPLES;
-  int acsPins[3] = {CURRENT1_PIN, CURRENT2_PIN, CURRENT3_PIN};
-  float* offsets[3] = {&noiseOffset1, &noiseOffset2, &noiseOffset3};
-
-  for (int ch = 0; ch < 3; ch++) {
-    int base = 0;
-    for (int i = 0; i < baseSamples; i++) {
-      base += analogRead(acsPins[ch]);
-      watchdogFriendlyYield(i);
-    }
-    base /= baseSamples;
-
-    float noiseSum = 0;
-    for (int i = 0; i < baseSamples; i++) {
-      int val = analogRead(acsPins[ch]);
-      noiseSum += abs(val - base);
-      watchdogFriendlyYield(i);
-    }
-
-    float noiseADC = noiseSum / baseSamples;
-    float noiseVolt = noiseADC * (vRef / resolution);
-    *offsets[ch] = noiseVolt / sensitivity;
-
-    Serial.print("ACS");
-    Serial.print(ch + 1);
-    Serial.print(" (pin ");
-    Serial.print(acsPins[ch]);
-    Serial.print(") noise: ");
-    Serial.println(*offsets[ch], 5);
-  }
-
-  delay(300);
-
-  lastMillis = millis();
-  lastMQTT = millis();
   Serial.println("Sistem pornit.");
+  Serial.print("FW: ");
+  Serial.println(FW_VERSION);
+  Serial.println("Relay 1 este PORNIT automat la startup.");
+  Serial.println("Calibrare noise floor ACS la startup: ACTIVA");
+
+  currentNoiseFloor1 = calibrateCurrentNoiseFloor(CURRENT1_PIN);
+  currentNoiseFloor2 = calibrateCurrentNoiseFloor(CURRENT2_PIN);
+  currentNoiseFloor3 = calibrateCurrentNoiseFloor(CURRENT3_PIN);
+
+  Serial.print("Noise floor ACS1: ");
+  Serial.print(currentNoiseFloor1, 4);
+  Serial.println(" A");
+  Serial.print("Noise floor ACS2: ");
+  Serial.print(currentNoiseFloor2, 4);
+  Serial.println(" A");
+  Serial.print("Noise floor ACS3: ");
+  Serial.print(currentNoiseFloor3, 4);
+  Serial.println(" A");
+
+  Serial.println("Se foloseste offset ADC recalculat la fiecare citire + compensare noise floor + filtru de dominanta intre socket-uri.");
+  Serial.println("Tensiunea filtrata porneste din valoarea implicita 224V.");
   Serial.println("Mapare pini ACS: ACS1=12, ACS2=13, ACS3=14");
   Serial.println("Mapare relee: R1=15, R2=16, R3=17");
   Serial.println("Comenzi seriale: ON/OFF, R1_ON/R1_OFF, R2_ON/R2_OFF, R3_ON/R3_OFF, ALL_ON/ALL_OFF, STATUS, HELP");
+
+  lastMillis = millis();
+  lastMQTT = millis();
 }
 
 //-----------------------------------------------------------
-// LOOP PRINCIPAL
+// LOOP
 //-----------------------------------------------------------
 void loop() {
   handleSerial();
+  syncRelayStatesFromPins();
 
-  if (!client.connected()) reconnectMQTT();
+  if (!client.connected()) {
+    reconnectMQTT();
+  }
   client.loop();
+  syncRelayStatesFromPins();
 
-  static float smooth1 = 0;
-  static float smooth2 = 0;
-  static float smooth3 = 0;
+  static float smooth1 = 0.0;
+  static float smooth2 = 0.0;
+  static float smooth3 = 0.0;
+  static bool lastRelay1State = relay1State;
+  static bool lastRelay2State = relay2State;
+  static bool lastRelay3State = relay3State;
+  static unsigned long lastRelayChangeMillis = 0;
+  bool relay1On = relay1State;
+  bool relay2On = relay2State;
+  bool relay3On = relay3State;
 
-  float current1_rms = readCurrentRMS(CURRENT1_PIN, noiseOffset1, smooth1);
-  float current2_rms = readCurrentRMS(CURRENT2_PIN, noiseOffset2, smooth2);
-  float current3_rms = readCurrentRMS(CURRENT3_PIN, noiseOffset3, smooth3);
+  if (relay1On != lastRelay1State) {
+    smooth1 = 0.0;
+    clearMQTTAverages();
+    lastRelayChangeMillis = millis();
+    lastRelay1State = relay1On;
+  }
+  if (relay2On != lastRelay2State) {
+    smooth2 = 0.0;
+    clearMQTTAverages();
+    lastRelayChangeMillis = millis();
+    lastRelay2State = relay2On;
+  }
+  if (relay3On != lastRelay3State) {
+    smooth3 = 0.0;
+    clearMQTTAverages();
+    lastRelayChangeMillis = millis();
+    lastRelay3State = relay3On;
+  }
+
+  bool relaySettling = (millis() - lastRelayChangeMillis) < RELAY_SETTLE_MS;
+
+  float current1_rms = readCurrentRMS(CURRENT1_PIN, currentNoiseFloor1, smooth1);
+  float current2_rms = readCurrentRMS(CURRENT2_PIN, currentNoiseFloor2, smooth2);
+  float current3_rms = readCurrentRMS(CURRENT3_PIN, currentNoiseFloor3, smooth3);
+
+  // Daca releul este oprit, canalul respectiv nu poate avea consum real.
+  if (!relay1On) {
+    current1_rms = 0.0;
+    smooth1 = 0.0;
+  }
+  if (!relay2On) {
+    current2_rms = 0.0;
+    smooth2 = 0.0;
+  }
+  if (!relay3On) {
+    current3_rms = 0.0;
+    smooth3 = 0.0;
+  }
+
+  applyCrosstalkCompensation(current1_rms, current2_rms, current3_rms);
+  applyDominanceFilter(current1_rms, current2_rms, current3_rms);
+
+  // Safety clamp final: niciun canal cu releu OFF nu trebuie sa mai reapara.
+  if (!relay1On) {
+    current1_rms = 0.0;
+  }
+  if (!relay2On) {
+    current2_rms = 0.0;
+  }
+  if (!relay3On) {
+    current3_rms = 0.0;
+  }
+
   float current_total = current1_rms + current2_rms + current3_rms;
   float voltage_rms = readVoltageRMS();
-  float power_W = voltage_rms * current_total;
+
+  static float filteredCurrentTotal = 0.0;
+  static float filteredPowerW = 0.0;
+  float rawPowerW = voltage_rms * current_total;
+  float powerFilterAlpha = (rawPowerW < LOW_POWER_STABILIZE_THRESHOLD_W)
+                             ? LOW_POWER_FILTER_ALPHA
+                             : POWER_FILTER_ALPHA;
+  filteredCurrentTotal += powerFilterAlpha * (current_total - filteredCurrentTotal);
+  filteredPowerW += powerFilterAlpha * ((voltage_rms * filteredCurrentTotal) - filteredPowerW);
+
+  current_total = filteredCurrentTotal;
+  float power_W = filteredPowerW;
+  if (current_total < MIN_CURRENT_THRESHOLD) {
+    current_total = 0.0;
+    power_W = 0.0;
+    filteredCurrentTotal = 0.0;
+    filteredPowerW = 0.0;
+  }
 
   unsigned long now = millis();
   float deltaHours = (now - lastMillis) / 3600000.0;
@@ -477,10 +802,50 @@ void loop() {
   Serial.print(" W | kWh: ");
   Serial.println(energy_kWh, 5);
 
-  // PUBLICĂ MQTT O DATĂ LA 10 SECUNDE (MQTT_INTERVAL)
-  if (millis() - lastMQTT >= MQTT_INTERVAL) {
-    sendMQTT(voltage_rms, current1_rms, current2_rms, current3_rms, current_total, power_W, energy_kWh);
+  if (!relaySettling) {
+    updateMQTTAverages(voltage_rms,
+                       current1_rms,
+                       current2_rms,
+                       current3_rms,
+                       current_total,
+                       power_W);
+  }
+
+  if (!relaySettling && millis() - lastMQTT >= MQTT_INTERVAL) {
+    float mqttVoltage = safeAverage(mqttAverage.voltageSum, mqttAverage.voltageCount, voltage_rms);
+    float mqttCurrent1 = safeAverage(mqttAverage.current1Sum, mqttAverage.current1Count, current1_rms);
+    float mqttCurrent2 = safeAverage(mqttAverage.current2Sum, mqttAverage.current2Count, current2_rms);
+    float mqttCurrent3 = safeAverage(mqttAverage.current3Sum, mqttAverage.current3Count, current3_rms);
+    float mqttPower = safeAverage(mqttAverage.powerSum, mqttAverage.powerCount, power_W);
+
+    applyCrosstalkCompensation(mqttCurrent1, mqttCurrent2, mqttCurrent3);
+    applyDominanceFilter(mqttCurrent1, mqttCurrent2, mqttCurrent3);
+
+    if (!relay1On) {
+      mqttCurrent1 = 0.0;
+    }
+    if (!relay2On) {
+      mqttCurrent2 = 0.0;
+    }
+    if (!relay3On) {
+      mqttCurrent3 = 0.0;
+    }
+
+    float mqttCurrentTotal = mqttCurrent1 + mqttCurrent2 + mqttCurrent3;
+    if (mqttCurrentTotal < MIN_CURRENT_THRESHOLD) {
+      mqttCurrentTotal = 0.0;
+      mqttPower = 0.0;
+    }
+
+    sendMQTT(mqttVoltage,
+             mqttCurrent1,
+             mqttCurrent2,
+             mqttCurrent3,
+             mqttCurrentTotal,
+             mqttPower,
+             energy_kWh);
     lastMQTT = millis();
+    clearMQTTAverages();
   }
 
   delay(500);
