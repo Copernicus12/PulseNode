@@ -83,8 +83,6 @@ const float LOW_POWER_STABILIZE_THRESHOLD_W = 30.0;
 const float LOW_POWER_FILTER_ALPHA = 0.08;
 const float DOMINANCE_RATIO_THRESHOLD = 0.35;
 const float DOMINANCE_MIN_ACTIVE_CURRENT = 0.12;
-const float MULTI_LOAD_ACTIVE_THRESHOLD = 0.08;
-const float MULTI_LOAD_PAIR_RATIO_THRESHOLD = 0.55;
 const float CROSSTALK_12 = 0.18;
 const float CROSSTALK_13 = 0.10;
 const float CROSSTALK_21 = 0.12;
@@ -493,34 +491,6 @@ void applyCrosstalkCompensation(float &current1, float &current2, float &current
   float raw1 = current1;
   float raw2 = current2;
   float raw3 = current3;
-
-  // Compensarea de crosstalk functioneaza bine cand exista un canal dominant.
-  // Daca doua canale au sarcini reale apropiate, nu mai aplicam matricea ca sa nu
-  // "furam" curent dintr-un consumator si sa il mutam pe alt canal.
-  float maxCurrent = raw1;
-  if (raw2 > maxCurrent) {
-    maxCurrent = raw2;
-  }
-  if (raw3 > maxCurrent) {
-    maxCurrent = raw3;
-  }
-
-  if (maxCurrent >= MULTI_LOAD_ACTIVE_THRESHOLD) {
-    int nearMaxCount = 0;
-    if (raw1 >= (maxCurrent * MULTI_LOAD_PAIR_RATIO_THRESHOLD)) {
-      nearMaxCount++;
-    }
-    if (raw2 >= (maxCurrent * MULTI_LOAD_PAIR_RATIO_THRESHOLD)) {
-      nearMaxCount++;
-    }
-    if (raw3 >= (maxCurrent * MULTI_LOAD_PAIR_RATIO_THRESHOLD)) {
-      nearMaxCount++;
-    }
-
-    if (nearMaxCount >= 2) {
-      return;
-    }
-  }
 
   current1 = raw1 - (raw2 * CROSSTALK_12) - (raw3 * CROSSTALK_13);
   current2 = raw2 - (raw1 * CROSSTALK_21) - (raw3 * CROSSTALK_23);
