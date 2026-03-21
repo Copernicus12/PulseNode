@@ -36,6 +36,9 @@ class DashboardController extends Controller
         $current1 = round((float) ($latest['current_1'] ?? 0), 3);
         $current2 = round((float) ($latest['current_2'] ?? 0), 3);
         $current3 = round((float) ($latest['current_3'] ?? 0), 3);
+        $power1 = round((float) ($latest['power_1'] ?? 0), 1);
+        $power2 = round((float) ($latest['power_2'] ?? 0), 1);
+        $power3 = round((float) ($latest['power_3'] ?? 0), 1);
 
         // ── Relay states ──────────────────────────────────────────────
         $relays = [
@@ -52,21 +55,21 @@ class DashboardController extends Controller
                 'label'   => 'Socket 1',
                 'is_on'   => $relays[1],
                 'current' => $current1,
-                'power'   => round($voltage * $current1, 1),
+                'power'   => $power1,
             ],
             [
                 'index'   => 2,
                 'label'   => 'Socket 2',
                 'is_on'   => $relays[2],
                 'current' => $current2,
-                'power'   => round($voltage * $current2, 1),
+                'power'   => $power2,
             ],
             [
                 'index'   => 3,
                 'label'   => 'Socket 3',
                 'is_on'   => $relays[3],
                 'current' => $current3,
-                'power'   => round($voltage * $current3, 1),
+                'power'   => $power3,
             ],
         ];
 

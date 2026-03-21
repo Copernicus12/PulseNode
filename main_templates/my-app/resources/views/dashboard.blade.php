@@ -631,14 +631,13 @@ function applyLatestDashboard(d) {
     if (el('dash-energy-total')) el('dash-energy-total').innerHTML = parseFloat(d.energy || 0).toFixed(4) + u('kWh');
     if (el('dash-raw-json')) el('dash-raw-json').textContent = JSON.stringify(d, null, 2);
 
-    var voltage = parseFloat(d.voltage || 0);
     [1, 2, 3].forEach(function(idx) {
         var relayOn = Boolean(d['relay_' + idx]);
         dashboardRelayState[idx] = relayOn;
         setDashboardToggleState(idx, relayOn, false);
 
         var current = parseFloat(d['current_' + idx] || 0);
-        var power = voltage * current;
+        var power = parseFloat(d['power_' + idx] || 0);
 
         var currentEl = el('dash-socket-current-' + idx);
         if (currentEl) currentEl.textContent = current.toFixed(3) + ' A';

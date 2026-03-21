@@ -2,158 +2,213 @@
 #include <PubSubClient.h>
 #include <math.h>
 #include <string.h>
+#include <stdio.h>
+#include <ctype.h>
 
-//-----------------------------------------------------------
-// CONFIGURARI
-//-----------------------------------------------------------
+// =====================================================
+// WIFI + MQTT
+// =====================================================
+const char* FW_VERSION = "esp32-current-refactor-v17";
 
-const char* FW_VERSION = "esp32-current-refactor-v9";
-
-// WiFi
 const char* ssid = "Test_TP";
 const char* password = "pinguin1";
 
-// MQTT
 const char* mqtt_server = "broker.hivemq.com";
 const int mqtt_port = 1883;
+
 const char* mqtt_topic_data = "razvy_esp32_2026/data";
-const char* mqtt_topic_cmd = "razvy_esp32_2026/cmd";
+const char* mqtt_topic_cmd  = "razvy_esp32_2026/cmd";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-const uint8_t CHANNEL_COUNT = 3;
-const uint8_t INVALID_CHANNEL_INDEX = 0xFF;
+// =====================================================
+// HARDWARE - ESP32-S3
+// =====================================================
+#define ACS1_PIN    4
+#define ACS2_PIN    5
+#define ACS3_PIN    6
 
-// ACS712
-const uint8_t CURRENT_PINS[CHANNEL_COUNT] = {12, 13, 14};
-const float sensitivity = 0.134;  // V/A
-const float vRef = 3.3;
-const int resolution = 4095;
-const float dividerFactor = (2.2 + 3.3) / 2.2;  // 3.3k si 2.2k
+#define VOLTAGE_PIN 7
 
-// ZMPT101B
-const uint8_t VOLTAGE_PIN = 5;
-float voltageCalibration = 990.0;
+#define RELAY1_PIN  15
+#define RELAY2_PIN  16
+#define RELAY3_PIN  17
 
-// Relee
-const uint8_t RELAY_PINS[CHANNEL_COUNT] = {15, 16, 17};
-bool relayStates[CHANNEL_COUNT] = {false, false, false};
+#define NUM_CHANNELS 3
 
-// Energie
-double energy_kWh = 0.0;
-unsigned long lastMillis = 0;
+// =====================================================
+// ADC + SENZORI
+// =====================================================
+const float ADC_VREF = 3.3f;
+const float ADC_MAX  = 4095.0f;
 
-// Timer MQTT
-unsigned long lastMQTT = 0;
-const unsigned long MQTT_INTERVAL = 10000;
+// ACS712 20A => 100mV/A
+const float ACS_SENSITIVITY = 0.100f;
 
-// Sampling
-const int CURRENT_OFFSET_SAMPLES = 240;
-const int CURRENT_RMS_SAMPLES = 480;
-const int CURRENT_OFFSET_AVERAGE_READS = 30;
-const unsigned long VOLTAGE_OFFSET_WINDOW_US = 40000;   // ~2 perioade la 50Hz
-const unsigned long VOLTAGE_RMS_WINDOW_US = 200000;     // ~10 perioade la 50Hz
+// ZMPT - calibrare dupa multimetru
+float voltageCalibration = 1000.0f;
 
-const float VOLTAGE_FILTER_ALPHA = 0.18;
-const float DEFAULT_VOLTAGE_RMS = 224.0;
+// calibrare separata pentru fiecare ACS
+float currentCalibration[NUM_CHANNELS] = {3.20f, 3.20f, 3.20f};
 
-const float MIN_CURRENT_THRESHOLD = 0.035;
-const float CURRENT_HOLD_ZERO_THRESHOLD = 0.025;
-const float LOW_CURRENT_STABILIZE_THRESHOLD = 0.18;
-const float LOW_CURRENT_FILTER_ALPHA = 0.10;
-const float NORMAL_CURRENT_FILTER_ALPHA = 0.20;
-const float POWER_FILTER_ALPHA = 0.18;
-const float LOW_POWER_STABILIZE_THRESHOLD_W = 30.0;
-const float LOW_POWER_FILTER_ALPHA = 0.08;
-const float DOMINANCE_RATIO_THRESHOLD = 0.35;
-const float DOMINANCE_MIN_ACTIVE_CURRENT = 0.12;
-const float CROSSTALK_MATRIX[CHANNEL_COUNT][CHANNEL_COUNT] = {
-  {0.0, 0.18, 0.10},
-  {0.12, 0.0, 0.10},
-  {0.08, 0.16, 0.0}
-};
-const float MQTT_RESET_CURRENT_LEVEL = 0.04;
-const int MQTT_RESET_ZERO_STREAK = 3;
-const unsigned long RELAY_SETTLE_MS = 1500;
+// zgomot RMS separat pe fiecare canal
+float currentNoiseFloorA[NUM_CHANNELS] = {0.075f, 0.075f, 0.075f};
 
-float currentNoiseFloors[CHANNEL_COUNT] = {0.0, 0.0, 0.0};
+// offset putere falsa la gol pe fiecare canal
+float idlePowerOffsetW[NUM_CHANNELS] = {5.0f, 5.0f, 5.0f};
 
-enum MQTTMetricIndex {
-  MQTT_METRIC_VOLTAGE = 0,
-  MQTT_METRIC_POWER,
-  MQTT_METRIC_COUNT
-};
+// inversare semn curent pe fiecare canal
+bool invertCurrent[NUM_CHANNELS] = {true, true, true};
 
-struct MQTTAverageBuffer {
-  float metricSums[MQTT_METRIC_COUNT];
-  float channelCurrentSums[CHANNEL_COUNT];
-  int metricCounts[MQTT_METRIC_COUNT];
-  int channelCurrentCounts[CHANNEL_COUNT];
-  int zeroStreaks[CHANNEL_COUNT];
+// praguri mici doar pentru afisaj/publicare
+const float CURRENT_ZERO_THRESHOLD_A = 0.02f;
+const float POWER_ZERO_THRESHOLD_W = 1.0f;
+
+// =====================================================
+// TIMPI
+// =====================================================
+const unsigned long SAMPLE_WINDOW_MS    = 1000;
+const unsigned long MEASURE_INTERVAL_MS = 1200;
+const unsigned long MQTT_INTERVAL_MS    = 5000;
+const unsigned long AUTO_RECALIBRATE_AFTER_RELAY_MS = 900;
+
+// =====================================================
+// STRUCTURI
+// =====================================================
+struct SensorChannel {
+  uint8_t currentPin;
+  uint8_t relayPin;
+  float adcOffset;
+  bool relayState;
+  double energy_kWh;
 };
 
-MQTTAverageBuffer mqttAverage = {};
+struct VoltageChannel {
+  uint8_t pin;
+  float adcOffset;
+};
 
-void clearMQTTAverages();
+struct Measurements {
+  float voltageRMS;
+  float currentRMS[NUM_CHANNELS];
+  float activePowerW[NUM_CHANNELS];
+  float apparentPowerVA[NUM_CHANNELS];
+  float powerFactor[NUM_CHANNELS];
 
-//-----------------------------------------------------------
-// YIELD PRIETENOS PENTRU WATCHDOG
-//-----------------------------------------------------------
-inline void watchdogFriendlyYield(int i) {
-  if ((i & 0x3F) == 0) {
-    delay(0);
+  float totalActivePowerW;
+  float totalApparentPowerVA;
+  float totalCurrentRMS;
+};
+
+SensorChannel channels[NUM_CHANNELS] = {
+  {ACS1_PIN, RELAY1_PIN, 2048.0f, false, 0.0},
+  {ACS2_PIN, RELAY2_PIN, 2048.0f, false, 0.0},
+  {ACS3_PIN, RELAY3_PIN, 2048.0f, false, 0.0}
+};
+
+VoltageChannel zmpt = {VOLTAGE_PIN, 2048.0f};
+
+Measurements meas;
+
+// =====================================================
+// STARE
+// =====================================================
+unsigned long lastMeasureMs = 0;
+unsigned long lastMqttMs = 0;
+unsigned long lastEnergyMs = 0;
+unsigned long relayCalibrationDueMs = 0;
+bool relayCalibrationPending = false;
+
+char serialBuffer[64];
+uint8_t serialIndex = 0;
+
+// =====================================================
+// UTILS
+// =====================================================
+float averageRaw(uint8_t pin, int samples) {
+  uint32_t sum = 0;
+  for (int i = 0; i < samples; i++) {
+    sum += analogRead(pin);
+    delayMicroseconds(120);
+  }
+  return (float)sum / samples;
+}
+
+float clampf(float x, float lo, float hi) {
+  if (x < lo) return lo;
+  if (x > hi) return hi;
+  return x;
+}
+
+void toUpperStr(char* s) {
+  for (size_t i = 0; i < strlen(s); i++) {
+    s[i] = toupper(s[i]);
   }
 }
 
-//-----------------------------------------------------------
-// HELPERE GENERALE
-//-----------------------------------------------------------
-const char* relayStateLabel(bool isOn) {
-  return isOn ? "PORNIT" : "OPRIT";
-}
-
-uint8_t relayIdToIndex(int relayId) {
-  switch (relayId) {
-    case 1:
-      return 0;
-    case 2:
-      return 1;
-    case 3:
-      return 2;
-    default:
-      return INVALID_CHANNEL_INDEX;
+void toLowerStr(char* s) {
+  for (size_t i = 0; i < strlen(s); i++) {
+    s[i] = tolower(s[i]);
   }
 }
 
-float sumChannels(const float values[]) {
-  float total = 0.0;
-  for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-    total += values[i];
+void compactJson(char* dst, size_t dstSize, const char* src) {
+  size_t j = 0;
+  for (size_t i = 0; src[i] != '\0' && j + 1 < dstSize; i++) {
+    if (!isspace((unsigned char)src[i])) {
+      dst[j++] = tolower((unsigned char)src[i]);
+    }
   }
-  return total;
+  dst[j] = '\0';
 }
 
-float safeAverage(float sum, int count, float fallbackValue) {
-  if (count <= 0) {
-    return fallbackValue;
+float sanitizeCurrent(float current) {
+  if (fabs(current) < CURRENT_ZERO_THRESHOLD_A) {
+    return 0.0f;
   }
-  return sum / (float)count;
+  return current;
 }
 
-//-----------------------------------------------------------
+float sanitizePower(float power) {
+  if (fabs(power) < POWER_ZERO_THRESHOLD_W) {
+    return 0.0f;
+  }
+  return power;
+}
+
+// =====================================================
+// RELEE
+// =====================================================
+void setRelay(uint8_t ch, bool on) {
+  if (ch >= NUM_CHANNELS) return;
+
+  if (channels[ch].relayState == on) return;
+
+  digitalWrite(channels[ch].relayPin, on ? LOW : HIGH);   // releu activ LOW
+  channels[ch].relayState = on;
+  relayCalibrationPending = true;
+  relayCalibrationDueMs = millis() + AUTO_RECALIBRATE_AFTER_RELAY_MS;
+}
+
+void printRelayStatus() {
+  for (int i = 0; i < NUM_CHANNELS; i++) {
+    Serial.printf("Releu %d: %s\n", i + 1, channels[i].relayState ? "PORNIT" : "OPRIT");
+  }
+}
+
+// =====================================================
 // WIFI
-//-----------------------------------------------------------
+// =====================================================
 void setup_wifi() {
   delay(100);
-  Serial.print("Conectare la WiFi: ");
-  Serial.println(ssid);
+  Serial.printf("Conectare la WiFi: %s\n", ssid);
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+    delay(400);
     Serial.print(".");
   }
 
@@ -162,346 +217,313 @@ void setup_wifi() {
   Serial.println(WiFi.localIP());
 }
 
-//-----------------------------------------------------------
-// CONTROL RELEE
-//-----------------------------------------------------------
-bool isRelayOn(uint8_t channelIndex) {
-  return digitalRead(RELAY_PINS[channelIndex]) == LOW;
+// =====================================================
+// CALIBRARE OFFSET
+// =====================================================
+void recalibrateSensors() {
+  Serial.println("Calibrare offset senzori... fara consumatori conectati / porniti!");
+
+  for (int i = 0; i < NUM_CHANNELS; i++) {
+    channels[i].adcOffset = averageRaw(channels[i].currentPin, 5000);
+    Serial.printf("ACS%d offset ADC = %.2f\n", i + 1, channels[i].adcOffset);
+  }
+
+  zmpt.adcOffset = averageRaw(zmpt.pin, 5000);
+  Serial.printf("ZMPT offset ADC = %.2f\n", zmpt.adcOffset);
 }
 
-void syncRelayStatesFromPins() {
-  for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-    relayStates[i] = isRelayOn(i);
-  }
-}
+// =====================================================
+// MASURARE PUTERE - 3 CANALE
+// =====================================================
+Measurements measurePower() {
+  Measurements m;
 
-void applyRelayState(uint8_t channelIndex, bool turnOn, const char* sourceLabel) {
-  if (channelIndex >= CHANNEL_COUNT) {
-    return;
-  }
+  m.voltageRMS = 0.0f;
+  m.totalActivePowerW = 0.0f;
+  m.totalApparentPowerVA = 0.0f;
+  m.totalCurrentRMS = 0.0f;
 
-  digitalWrite(RELAY_PINS[channelIndex], turnOn ? LOW : HIGH);
-  relayStates[channelIndex] = turnOn;
-
-  if (sourceLabel != nullptr) {
-    Serial.print("Releu ");
-    Serial.print(channelIndex + 1);
-    Serial.print(" ");
-    Serial.print(sourceLabel);
-    Serial.print(": ");
-    Serial.println(relayStateLabel(turnOn));
-  }
-}
-
-void initializeRelays() {
-  for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-    pinMode(RELAY_PINS[i], OUTPUT);
+  for (int i = 0; i < NUM_CHANNELS; i++) {
+    m.currentRMS[i] = 0.0f;
+    m.activePowerW[i] = 0.0f;
+    m.apparentPowerVA[i] = 0.0f;
+    m.powerFactor[i] = 0.0f;
   }
 
-  // Scenariu startup: releul 1 porneste implicit, celelalte raman oprite.
-  applyRelayState(0, true, nullptr);
-  applyRelayState(1, false, nullptr);
-  applyRelayState(2, false, nullptr);
-  syncRelayStatesFromPins();
-}
+  unsigned long start = millis();
 
-bool updateRelayTransitionTracking(float smoothCurrents[], unsigned long &lastRelayChangeMillis) {
-  static bool initialized = false;
-  static bool lastKnownRelayStates[CHANNEL_COUNT] = {false, false, false};
-  bool relayChanged = false;
+  double sumV2 = 0.0;
+  double sumI2[NUM_CHANNELS] = {0.0, 0.0, 0.0};
+  double sumP[NUM_CHANNELS]  = {0.0, 0.0, 0.0};
+  uint32_t count = 0;
 
-  if (!initialized) {
-    for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-      lastKnownRelayStates[i] = relayStates[i];
-    }
-    initialized = true;
-  }
+  int minI[NUM_CHANNELS] = {4095, 4095, 4095};
+  int maxI[NUM_CHANNELS] = {0, 0, 0};
+  int minV = 4095, maxV = 0;
 
-  // Scenariu: dupa o comutare de releu golim filtrele si mediile MQTT,
-  // ca sa nu publicam valori ramase din starea anterioara.
-  for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-    if (relayStates[i] != lastKnownRelayStates[i]) {
-      smoothCurrents[i] = 0.0;
-      lastKnownRelayStates[i] = relayStates[i];
-      relayChanged = true;
-    }
-  }
+  while (millis() - start < SAMPLE_WINDOW_MS) {
+    int rawV = analogRead(zmpt.pin);
+    if (rawV < minV) minV = rawV;
+    if (rawV > maxV) maxV = rawV;
 
-  if (relayChanged) {
-    clearMQTTAverages();
-    lastRelayChangeMillis = millis();
-  }
+    float centeredV = (float)rawV - zmpt.adcOffset;
+    float vAdcV = centeredV * (ADC_VREF / ADC_MAX);
+    float voltage = vAdcV * voltageCalibration;
 
-  return (millis() - lastRelayChangeMillis) < RELAY_SETTLE_MS;
-}
+    sumV2 += (double)voltage * (double)voltage;
 
-//-----------------------------------------------------------
-// MASURARE CURENT
-//-----------------------------------------------------------
-float measureCurrentRMSRaw(uint8_t currentPin) {
-  float offset = 0.0;
+    for (int i = 0; i < NUM_CHANNELS; i++) {
+      int rawI = analogRead(channels[i].currentPin);
 
-  for (int i = 0; i < CURRENT_OFFSET_SAMPLES; i++) {
-    offset += analogRead(currentPin);
-    watchdogFriendlyYield(i);
-  }
-  offset /= (float)CURRENT_OFFSET_SAMPLES;
+      if (rawI < minI[i]) minI[i] = rawI;
+      if (rawI > maxI[i]) maxI[i] = rawI;
 
-  float sum = 0.0;
-  for (int i = 0; i < CURRENT_RMS_SAMPLES; i++) {
-    float raw = analogRead(currentPin);
-    float v_adc = (raw - offset) * (vRef / resolution);
-    float v_sensor = v_adc * dividerFactor;
-    sum += v_sensor * v_sensor;
-    watchdogFriendlyYield(i);
-  }
+      float centeredI = (float)rawI - channels[i].adcOffset;
+      float vAdcI = centeredI * (ADC_VREF / ADC_MAX);
 
-  float v_rms = sqrt(sum / (float)CURRENT_RMS_SAMPLES);
-  return v_rms / sensitivity;
-}
+      float current = (vAdcI / ACS_SENSITIVITY) * currentCalibration[i];
+      if (invertCurrent[i]) current = -current;
 
-float calibrateCurrentNoiseFloor(uint8_t currentPin) {
-  float totalCurrent = 0.0;
-
-  for (int i = 0; i < CURRENT_OFFSET_AVERAGE_READS; i++) {
-    totalCurrent += measureCurrentRMSRaw(currentPin);
-    watchdogFriendlyYield(i);
-  }
-
-  return totalCurrent / (float)CURRENT_OFFSET_AVERAGE_READS;
-}
-
-float readCurrentRMS(uint8_t channelIndex, float &smoothState) {
-  float current = measureCurrentRMSRaw(CURRENT_PINS[channelIndex]) - currentNoiseFloors[channelIndex];
-
-  if (current < 0.0) {
-    current = 0.0;
-  }
-
-  if (current < MIN_CURRENT_THRESHOLD) {
-    current = 0.0;
-  }
-
-  // Scenariu: consum mic => filtrare mai calma; consum clar => raspuns mai rapid.
-  float filterAlpha = (current < LOW_CURRENT_STABILIZE_THRESHOLD)
-                        ? LOW_CURRENT_FILTER_ALPHA
-                        : NORMAL_CURRENT_FILTER_ALPHA;
-  smoothState = smoothState * (1.0 - filterAlpha) + current * filterAlpha;
-
-  if (smoothState < CURRENT_HOLD_ZERO_THRESHOLD) {
-    smoothState = 0.0;
-  }
-
-  return smoothState;
-}
-
-void readAllChannelCurrents(float channelCurrents[], float smoothCurrents[]) {
-  for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-    channelCurrents[i] = readCurrentRMS(i, smoothCurrents[i]);
-  }
-}
-
-void clampInactiveRelayChannels(float channelCurrents[], float smoothCurrents[] = nullptr) {
-  // Scenariu de siguranta: releu OFF inseamna consum imposibil pe acel canal.
-  for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-    if (!relayStates[i]) {
-      channelCurrents[i] = 0.0;
-      if (smoothCurrents != nullptr) {
-        smoothCurrents[i] = 0.0;
-      }
-    }
-  }
-}
-
-void applyCrosstalkCompensation(float channelCurrents[]) {
-  float rawCurrents[CHANNEL_COUNT];
-
-  for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-    rawCurrents[i] = channelCurrents[i];
-  }
-
-  for (uint8_t channel = 0; channel < CHANNEL_COUNT; channel++) {
-    float compensated = rawCurrents[channel];
-
-    for (uint8_t source = 0; source < CHANNEL_COUNT; source++) {
-      if (channel == source) {
-        continue;
-      }
-      compensated -= rawCurrents[source] * CROSSTALK_MATRIX[channel][source];
+      sumI2[i] += (double)current * (double)current;
+      sumP[i]  += (double)voltage * (double)current;
     }
 
-    channelCurrents[channel] = (compensated > 0.0) ? compensated : 0.0;
+    count++;
+    delayMicroseconds(150);
   }
-}
 
-void applyDominanceFilter(float channelCurrents[]) {
-  float dominant = channelCurrents[0];
+  if (count == 0) return m;
 
-  for (uint8_t i = 1; i < CHANNEL_COUNT; i++) {
-    if (channelCurrents[i] > dominant) {
-      dominant = channelCurrents[i];
+  m.voltageRMS = sqrt(sumV2 / (double)count);
+
+  for (int i = 0; i < NUM_CHANNELS; i++) {
+    m.currentRMS[i] = sqrt(sumI2[i] / (double)count);
+    m.activePowerW[i] = sumP[i] / (double)count;
+
+    float i2corr = m.currentRMS[i] * m.currentRMS[i] - currentNoiseFloorA[i] * currentNoiseFloorA[i];
+    if (i2corr < 0.0f) i2corr = 0.0f;
+    m.currentRMS[i] = sqrt(i2corr);
+
+    if (m.activePowerW[i] > 0.0f) {
+      m.activePowerW[i] -= idlePowerOffsetW[i];
+      if (m.activePowerW[i] < 0.0f) m.activePowerW[i] = 0.0f;
+    } else {
+      m.activePowerW[i] += idlePowerOffsetW[i];
+      if (m.activePowerW[i] > 0.0f) m.activePowerW[i] = 0.0f;
     }
-  }
 
-  if (dominant < DOMINANCE_MIN_ACTIVE_CURRENT) {
-    return;
-  }
+    m.apparentPowerVA[i] = m.voltageRMS * m.currentRMS[i];
 
-  for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-    if (channelCurrents[i] > 0.0 && channelCurrents[i] < (dominant * DOMINANCE_RATIO_THRESHOLD)) {
-      channelCurrents[i] = 0.0;
+    if (m.apparentPowerVA[i] > 0.5f) {
+      m.powerFactor[i] = m.activePowerW[i] / m.apparentPowerVA[i];
+    } else {
+      m.powerFactor[i] = 0.0f;
     }
+
+    m.powerFactor[i] = clampf(m.powerFactor[i], -1.0f, 1.0f);
+
+    m.currentRMS[i] = sanitizeCurrent(m.currentRMS[i]);
+    m.activePowerW[i] = sanitizePower(m.activePowerW[i]);
+    if (fabs(m.apparentPowerVA[i]) < 1.0f) m.apparentPowerVA[i] = 0.0f;
+    if (m.currentRMS[i] == 0.0f) m.powerFactor[i] = 0.0f;
+
+    m.totalCurrentRMS += m.currentRMS[i];
+    m.totalActivePowerW += m.activePowerW[i];
+    m.totalApparentPowerVA += m.apparentPowerVA[i];
+
+    Serial.printf("DEBUG ACS%d | I[min=%d max=%d off=%.1f]\n",
+                  i + 1, minI[i], maxI[i], channels[i].adcOffset);
   }
+
+  Serial.printf("DEBUG ZMPT | V[min=%d max=%d off=%.1f]\n", minV, maxV, zmpt.adcOffset);
+
+  return m;
 }
 
-void finalizeMeasuredCurrents(float channelCurrents[], float smoothCurrents[]) {
-  // Scenariu 1: daca releul este oprit, orice curent citit este tratat ca zgomot.
-  clampInactiveRelayChannels(channelCurrents, smoothCurrents);
+// =====================================================
+// STATUS
+// =====================================================
+void printStatus() {
+  Serial.println("============== STATUS ==============");
+  Serial.printf("Tensiune RMS: %.1f V\n", meas.voltageRMS);
 
-  // Scenariu 2: pentru relee active, corectam crosstalk-ul si taiem canalele slabe.
-  applyCrosstalkCompensation(channelCurrents);
-  applyDominanceFilter(channelCurrents);
+  for (int i = 0; i < NUM_CHANNELS; i++) {
+    Serial.printf("CH%d | Relay=%s | I=%.3f A | P=%.1f W | S=%.1f VA | PF=%.2f | E=%.5f kWh\n",
+                  i + 1,
+                  channels[i].relayState ? "ON" : "OFF",
+                  meas.currentRMS[i],
+                  meas.activePowerW[i],
+                  meas.apparentPowerVA[i],
+                  meas.powerFactor[i],
+                  channels[i].energy_kWh);
+  }
 
-  // Scenariu 3: dupa compensari, facem un clamp final pentru canalele cu releu OFF.
-  clampInactiveRelayChannels(channelCurrents);
+  Serial.printf("TOTAL | I=%.3f A | P=%.1f W | S=%.1f VA\n",
+                meas.totalCurrentRMS,
+                meas.totalActivePowerW,
+                meas.totalApparentPowerVA);
+  Serial.println("====================================");
 }
 
-//-----------------------------------------------------------
-// MEDII MQTT
-//-----------------------------------------------------------
-void clearMQTTAverages() {
-  mqttAverage = {};
-}
-
-void addMQTTMetricSample(MQTTMetricIndex metric, float value) {
-  mqttAverage.metricSums[metric] += value;
-  mqttAverage.metricCounts[metric]++;
-}
-
-void resetMQTTChannelAverage(uint8_t channelIndex, float currentValue) {
-  mqttAverage.channelCurrentSums[channelIndex] = currentValue;
-  mqttAverage.channelCurrentCounts[channelIndex] = 1;
-  mqttAverage.zeroStreaks[channelIndex] = 0;
-}
-
-void updateMQTTChannelAverage(uint8_t channelIndex, float currentValue) {
-  // Scenariu: dupa mai multe probe aproape de zero, resetam media
-  // canalului ca sa nu ramana "consum fantoma" in payload-ul MQTT.
-  if (currentValue <= MQTT_RESET_CURRENT_LEVEL) {
-    mqttAverage.zeroStreaks[channelIndex]++;
-    if (mqttAverage.zeroStreaks[channelIndex] >= MQTT_RESET_ZERO_STREAK) {
-      resetMQTTChannelAverage(channelIndex, currentValue);
-      return;
+// =====================================================
+// COMENZI
+// =====================================================
+void processCommand(const char* cmd) {
+  if (strcmp(cmd, "ON1") == 0) {
+    setRelay(0, true);
+    Serial.println("Releu 1: PORNIT");
+  }
+  else if (strcmp(cmd, "OFF1") == 0) {
+    setRelay(0, false);
+    Serial.println("Releu 1: OPRIT");
+  }
+  else if (strcmp(cmd, "ON2") == 0) {
+    setRelay(1, true);
+    Serial.println("Releu 2: PORNIT");
+  }
+  else if (strcmp(cmd, "OFF2") == 0) {
+    setRelay(1, false);
+    Serial.println("Releu 2: OPRIT");
+  }
+  else if (strcmp(cmd, "ON3") == 0) {
+    setRelay(2, true);
+    Serial.println("Releu 3: PORNIT");
+  }
+  else if (strcmp(cmd, "OFF3") == 0) {
+    setRelay(2, false);
+    Serial.println("Releu 3: OPRIT");
+  }
+  else if (strcmp(cmd, "ALL_ON") == 0) {
+    for (int i = 0; i < NUM_CHANNELS; i++) setRelay(i, true);
+    Serial.println("Toate releele: PORNITE");
+  }
+  else if (strcmp(cmd, "ALL_OFF") == 0) {
+    for (int i = 0; i < NUM_CHANNELS; i++) setRelay(i, false);
+    Serial.println("Toate releele: OPRITE");
+  }
+  else if (strcmp(cmd, "STATUS") == 0) {
+    printStatus();
+  }
+  else if (strcmp(cmd, "CAL") == 0) {
+    recalibrateSensors();
+  }
+  else if (strcmp(cmd, "RESET_ENERGY") == 0) {
+    for (int i = 0; i < NUM_CHANNELS; i++) {
+      channels[i].energy_kWh = 0.0;
     }
-  } else {
-    mqttAverage.zeroStreaks[channelIndex] = 0;
+    Serial.println("Energia a fost resetata pe toate canalele.");
   }
-
-  mqttAverage.channelCurrentSums[channelIndex] += currentValue;
-  mqttAverage.channelCurrentCounts[channelIndex]++;
-}
-
-void updateMQTTAverages(float voltageRms,
-                        const float channelCurrents[],
-                        float powerW) {
-  addMQTTMetricSample(MQTT_METRIC_VOLTAGE, voltageRms);
-  addMQTTMetricSample(MQTT_METRIC_POWER, powerW);
-
-  for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-    updateMQTTChannelAverage(i, channelCurrents[i]);
+  else if (strcmp(cmd, "HELP") == 0) {
+    Serial.println("Comenzi:");
+    Serial.println("ON1 OFF1 ON2 OFF2 ON3 OFF3");
+    Serial.println("ALL_ON ALL_OFF");
+    Serial.println("STATUS CAL RESET_ENERGY HELP");
+  }
+  else if (strlen(cmd) > 0) {
+    Serial.print("Comanda necunoscuta: ");
+    Serial.println(cmd);
   }
 }
 
-float getMQTTMetricAverage(MQTTMetricIndex metric, float fallbackValue) {
-  return safeAverage(mqttAverage.metricSums[metric], mqttAverage.metricCounts[metric], fallbackValue);
-}
+// =====================================================
+// MQTT PARSE
+// compatibil si cu dashboard-ul tau:
+// {"relay_1":true,"relay_2":false,"relay_3":true}
+// {"relay1":"on"}
+// {"relay2":"off"}
+// {"relay3":"on"}
+// {"all":"off"}
+// =====================================================
+void parseMqttJson(const char* msg) {
+  char normalized[160];
+  compactJson(normalized, sizeof(normalized), msg);
 
-float getMQTTChannelAverage(uint8_t channelIndex, float fallbackValue) {
-  return safeAverage(mqttAverage.channelCurrentSums[channelIndex],
-                     mqttAverage.channelCurrentCounts[channelIndex],
-                     fallbackValue);
-}
-
-//-----------------------------------------------------------
-// MQTT CONTROL
-//-----------------------------------------------------------
-String payloadToUpperMessage(byte* payload, unsigned int length) {
-  String msg = "";
-  msg.reserve(length);
-
-  for (unsigned int i = 0; i < length; i++) {
-    msg += (char)payload[i];
+  if (strstr(normalized, "\"relay_1\":true") ||
+      strstr(normalized, "\"relay_1\":\"true\"") ||
+      strstr(normalized, "\"relay_1\":1") ||
+      strstr(normalized, "\"relay1\":\"on\"") ||
+      strstr(normalized, "\"relay\":1,\"state\":\"on\"") ||
+      strstr(normalized, "\"relay\":\"1\",\"state\":\"on\"")) {
+    setRelay(0, true);
+  } else if (strstr(normalized, "\"relay_1\":false") ||
+             strstr(normalized, "\"relay_1\":\"false\"") ||
+             strstr(normalized, "\"relay_1\":0") ||
+             strstr(normalized, "\"relay1\":\"off\"") ||
+             strstr(normalized, "\"relay\":1,\"state\":\"off\"") ||
+             strstr(normalized, "\"relay\":\"1\",\"state\":\"off\"")) {
+    setRelay(0, false);
   }
 
-  msg.trim();
-  msg.toUpperCase();
-  return msg;
-}
-
-bool parseRelayJsonCommand(const String &msg, uint8_t &channelIndex, bool &turnOn) {
-  int relayPos = msg.indexOf("RELAY");
-  int statePos = msg.indexOf("STATE");
-
-  if (!msg.startsWith("{") || relayPos == -1 || statePos == -1) {
-    return false;
+  if (strstr(normalized, "\"relay_2\":true") ||
+      strstr(normalized, "\"relay_2\":\"true\"") ||
+      strstr(normalized, "\"relay_2\":1") ||
+      strstr(normalized, "\"relay2\":\"on\"") ||
+      strstr(normalized, "\"relay\":2,\"state\":\"on\"") ||
+      strstr(normalized, "\"relay\":\"2\",\"state\":\"on\"")) {
+    setRelay(1, true);
+  } else if (strstr(normalized, "\"relay_2\":false") ||
+             strstr(normalized, "\"relay_2\":\"false\"") ||
+             strstr(normalized, "\"relay_2\":0") ||
+             strstr(normalized, "\"relay2\":\"off\"") ||
+             strstr(normalized, "\"relay\":2,\"state\":\"off\"") ||
+             strstr(normalized, "\"relay\":\"2\",\"state\":\"off\"")) {
+    setRelay(1, false);
   }
 
-  int relaySeparator = msg.indexOf(":", relayPos);
-  int stateSeparator = msg.indexOf(":", statePos);
-  if (relaySeparator == -1 || stateSeparator == -1) {
-    return false;
+  if (strstr(normalized, "\"relay_3\":true") ||
+      strstr(normalized, "\"relay_3\":\"true\"") ||
+      strstr(normalized, "\"relay_3\":1") ||
+      strstr(normalized, "\"relay3\":\"on\"") ||
+      strstr(normalized, "\"relay\":3,\"state\":\"on\"") ||
+      strstr(normalized, "\"relay\":\"3\",\"state\":\"on\"")) {
+    setRelay(2, true);
+  } else if (strstr(normalized, "\"relay_3\":false") ||
+             strstr(normalized, "\"relay_3\":\"false\"") ||
+             strstr(normalized, "\"relay_3\":0") ||
+             strstr(normalized, "\"relay3\":\"off\"") ||
+             strstr(normalized, "\"relay\":3,\"state\":\"off\"") ||
+             strstr(normalized, "\"relay\":\"3\",\"state\":\"off\"")) {
+    setRelay(2, false);
   }
 
-  channelIndex = relayIdToIndex(msg.substring(relaySeparator + 1).toInt());
-  if (channelIndex == INVALID_CHANNEL_INDEX) {
-    return false;
+  if (strstr(normalized, "\"all\":\"on\"") ||
+      strstr(normalized, "\"all\":true") ||
+      strstr(normalized, "\"all\":\"true\"") ||
+      strstr(normalized, "\"all\":1")) {
+    for (int i = 0; i < NUM_CHANNELS; i++) setRelay(i, true);
+  } else if (strstr(normalized, "\"all\":\"off\"") ||
+             strstr(normalized, "\"all\":false") ||
+             strstr(normalized, "\"all\":\"false\"") ||
+             strstr(normalized, "\"all\":0")) {
+    for (int i = 0; i < NUM_CHANNELS; i++) setRelay(i, false);
   }
-
-  String stateValue = msg.substring(stateSeparator + 1);
-  stateValue.replace("\"", "");
-  stateValue.replace("}", "");
-  stateValue.trim();
-
-  if (stateValue == "ON") {
-    turnOn = true;
-    return true;
-  }
-
-  if (stateValue == "OFF") {
-    turnOn = false;
-    return true;
-  }
-
-  return false;
 }
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
-  if (strcmp(topic, mqtt_topic_cmd) != 0) {
-    return;
-  }
+  char msg[128];
+  unsigned int n = (length < sizeof(msg) - 1) ? length : sizeof(msg) - 1;
 
-  String msg = payloadToUpperMessage(payload, length);
-  uint8_t channelIndex = INVALID_CHANNEL_INDEX;
-  bool turnOn = false;
+  memcpy(msg, payload, n);
+  msg[n] = '\0';
 
-  // Scenariu principal: dashboard-ul trimite JSON cu relay + state.
-  if (parseRelayJsonCommand(msg, channelIndex, turnOn)) {
-    applyRelayState(channelIndex, turnOn, "MQTT");
-    return;
-  }
+  if (strcmp(topic, mqtt_topic_cmd) == 0) {
+    if (msg[0] == '{') {
+      parseMqttJson(msg);
+      return;
+    }
 
-  // Scenariu legacy: pastram compatibilitatea pentru ON/OFF pe releul 1.
-  if (msg == "ON") {
-    applyRelayState(0, true, "MQTT");
-  } else if (msg == "OFF") {
-    applyRelayState(0, false, "MQTT");
+    for (unsigned int i = 0; i < n; i++) {
+      msg[i] = toupper(msg[i]);
+    }
+
+    processCommand(msg);
   }
 }
 
 void reconnectMQTT() {
   while (!client.connected()) {
     Serial.print("Conectare la MQTT...");
-    String clientId = "ESP32_Priza_1";
+    String clientId = "ESP32S3_3ACS_3RELAY";
 
     if (client.connect(clientId.c_str())) {
       Serial.println("OK");
@@ -509,253 +531,175 @@ void reconnectMQTT() {
       Serial.print("Subscribed: ");
       Serial.println(mqtt_topic_cmd);
     } else {
-      Serial.print("Eroare, rc=");
+      Serial.print("Eroare rc=");
       Serial.print(client.state());
-      Serial.println(" reincerc peste 2 sec");
+      Serial.println(" -> retry in 2 sec");
       delay(2000);
     }
   }
 }
 
-void ensureMQTTConnection() {
-  if (!client.connected()) {
-    reconnectMQTT();
-  }
+void publishMQTT() {
+  if (!client.connected()) reconnectMQTT();
   client.loop();
-}
 
-//-----------------------------------------------------------
-// MASURARE TENSIUNE
-//-----------------------------------------------------------
-float readVoltageRMS() {
-  float offset = 0.0;
-  int offsetCount = 0;
+  float publishCurrent[NUM_CHANNELS] = {
+    meas.currentRMS[0],
+    meas.currentRMS[1],
+    meas.currentRMS[2]
+  };
+  float publishPower[NUM_CHANNELS] = {
+    meas.activePowerW[0],
+    meas.activePowerW[1],
+    meas.activePowerW[2]
+  };
+  float totalCurrent = meas.totalCurrentRMS;
+  float totalPower = meas.totalActivePowerW;
 
-  unsigned long offsetStart = micros();
-  while ((micros() - offsetStart) < VOLTAGE_OFFSET_WINDOW_US) {
-    offset += analogRead(VOLTAGE_PIN);
-    offsetCount++;
-    watchdogFriendlyYield(offsetCount);
+  for (int i = 0; i < NUM_CHANNELS; i++) {
+    if (publishPower[i] == 0.0f) {
+      publishCurrent[i] = 0.0f;
+    }
   }
 
-  if (offsetCount <= 0) {
-    return 0.0;
+  totalCurrent = publishCurrent[0] + publishCurrent[1] + publishCurrent[2];
+  totalPower = publishPower[0] + publishPower[1] + publishPower[2];
+
+  if (totalPower == 0.0f) {
+    totalCurrent = 0.0f;
   }
 
-  offset /= (float)offsetCount;
-
-  float sum = 0.0;
-  int rmsCount = 0;
-
-  unsigned long rmsStart = micros();
-  while ((micros() - rmsStart) < VOLTAGE_RMS_WINDOW_US) {
-    float raw = analogRead(VOLTAGE_PIN);
-    float v_adc = (raw - offset) * (vRef / resolution);
-    sum += v_adc * v_adc;
-    rmsCount++;
-    watchdogFriendlyYield(rmsCount);
-  }
-
-  if (rmsCount <= 0) {
-    return 0.0;
-  }
-
-  float moduleRMS = sqrt(sum / (float)rmsCount);
-  float voltageRaw = moduleRMS * voltageCalibration;
-
-  // Scenariu startup: filtrul de tensiune pleaca dintr-o valoare stabila,
-  // nu din prima citire care poate fi zgomotoasa.
-  static float voltageFiltered = DEFAULT_VOLTAGE_RMS;
-  voltageFiltered += VOLTAGE_FILTER_ALPHA * (voltageRaw - voltageFiltered);
-
-  Serial.print("moduleRMS: ");
-  Serial.print(moduleRMS, 4);
-  Serial.print(" | ");
-
-  return voltageFiltered;
-}
-
-//-----------------------------------------------------------
-// AGREGARE SI TELEMETRIE
-//-----------------------------------------------------------
-float filterPowerReadings(float voltageRms, float &currentTotal) {
-  static float filteredCurrentTotal = 0.0;
-  static float filteredPowerW = 0.0;
-
-  float rawPowerW = voltageRms * currentTotal;
-  float powerFilterAlpha = (rawPowerW < LOW_POWER_STABILIZE_THRESHOLD_W)
-                             ? LOW_POWER_FILTER_ALPHA
-                             : POWER_FILTER_ALPHA;
-
-  filteredCurrentTotal += powerFilterAlpha * (currentTotal - filteredCurrentTotal);
-  filteredPowerW += powerFilterAlpha * ((voltageRms * filteredCurrentTotal) - filteredPowerW);
-
-  currentTotal = filteredCurrentTotal;
-  if (currentTotal < MIN_CURRENT_THRESHOLD) {
-    currentTotal = 0.0;
-    filteredCurrentTotal = 0.0;
-    filteredPowerW = 0.0;
-    return 0.0;
-  }
-
-  return filteredPowerW;
-}
-
-void updateEnergy(float powerW) {
-  unsigned long now = millis();
-  float deltaHours = (now - lastMillis) / 3600000.0;
-  lastMillis = now;
-  energy_kWh += (powerW * deltaHours) / 1000.0;
-}
-
-void printMeasurements(float voltageRms,
-                       const float channelCurrents[],
-                       float currentTotal,
-                       float powerW) {
-  Serial.print("U_RMS: ");
-  Serial.print(voltageRms, 1);
-  Serial.print(" V | I1: ");
-  Serial.print(channelCurrents[0], 3);
-  Serial.print(" A | I2: ");
-  Serial.print(channelCurrents[1], 3);
-  Serial.print(" A | I3: ");
-  Serial.print(channelCurrents[2], 3);
-  Serial.print(" A | I_TOTAL: ");
-  Serial.print(currentTotal, 3);
-  Serial.print(" A | P: ");
-  Serial.print(powerW, 1);
-  Serial.print(" W | kWh: ");
-  Serial.println(energy_kWh, 5);
-}
-
-void sendMQTT(float voltageRms,
-              const float channelCurrents[],
-              float currentTotal,
-              float powerW,
-              double energyKWh) {
-  ensureMQTTConnection();
-
-  char payload[256];
+  char payload[384];
   snprintf(payload, sizeof(payload),
-           "{\"voltage\":%.1f,\"current\":%.3f,\"current_1\":%.3f,\"current_2\":%.3f,\"current_3\":%.3f,\"power\":%.1f,\"energy\":%.5f,\"relay_1\":%s,\"relay_2\":%s,\"relay_3\":%s}",
-           voltageRms,
-           currentTotal,
-           channelCurrents[0],
-           channelCurrents[1],
-           channelCurrents[2],
-           powerW,
-           energyKWh,
-           relayStates[0] ? "true" : "false",
-           relayStates[1] ? "true" : "false",
-           relayStates[2] ? "true" : "false");
-
-  Serial.print("MQTT publish: ");
-  Serial.println(payload);
+           "{\"voltage\":%.1f,\"current\":%.3f,\"current_1\":%.3f,\"current_2\":%.3f,\"current_3\":%.3f,\"power\":%.1f,\"power_1\":%.1f,\"power_2\":%.1f,\"power_3\":%.1f,\"energy\":%.5f,\"relay_1\":%s,\"relay_2\":%s,\"relay_3\":%s}",
+           meas.voltageRMS,
+           totalCurrent,
+           publishCurrent[0],
+           publishCurrent[1],
+           publishCurrent[2],
+           totalPower,
+           publishPower[0],
+           publishPower[1],
+           publishPower[2],
+           channels[0].energy_kWh + channels[1].energy_kWh + channels[2].energy_kWh,
+           channels[0].relayState ? "true" : "false",
+           channels[1].relayState ? "true" : "false",
+           channels[2].relayState ? "true" : "false");
 
   client.publish(mqtt_topic_data, payload);
+  Serial.print("MQTT publish: ");
+  Serial.println(payload);
 }
 
-void publishAveragedMQTT(float liveVoltageRms,
-                         const float liveChannelCurrents[],
-                         float livePowerW) {
-  float mqttChannelCurrents[CHANNEL_COUNT];
+// =====================================================
+// SERIAL
+// =====================================================
+void handleSerial() {
+  while (Serial.available()) {
+    char c = Serial.read();
 
-  for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-    mqttChannelCurrents[i] = getMQTTChannelAverage(i, liveChannelCurrents[i]);
+    if (c == '\n' || c == '\r') {
+      if (serialIndex > 0) {
+        serialBuffer[serialIndex] = '\0';
+        toUpperStr(serialBuffer);
+        processCommand(serialBuffer);
+        serialIndex = 0;
+      }
+    } else {
+      if (serialIndex < sizeof(serialBuffer) - 1) {
+        serialBuffer[serialIndex++] = c;
+      }
+    }
   }
-
-  float mqttVoltage = getMQTTMetricAverage(MQTT_METRIC_VOLTAGE, liveVoltageRms);
-  float mqttPower = getMQTTMetricAverage(MQTT_METRIC_POWER, livePowerW);
-
-  applyCrosstalkCompensation(mqttChannelCurrents);
-  applyDominanceFilter(mqttChannelCurrents);
-  clampInactiveRelayChannels(mqttChannelCurrents);
-
-  float mqttCurrentTotal = sumChannels(mqttChannelCurrents);
-  if (mqttCurrentTotal < MIN_CURRENT_THRESHOLD) {
-    mqttCurrentTotal = 0.0;
-    mqttPower = 0.0;
-  }
-
-  sendMQTT(mqttVoltage, mqttChannelCurrents, mqttCurrentTotal, mqttPower, energy_kWh);
-  clearMQTTAverages();
 }
 
-//-----------------------------------------------------------
+// =====================================================
 // SETUP
-//-----------------------------------------------------------
+// =====================================================
 void setup() {
   Serial.begin(115200);
+  delay(500);
 
-  for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-    analogSetPinAttenuation(CURRENT_PINS[i], ADC_11db);
-  }
+  analogReadResolution(12);
+
+  analogSetPinAttenuation(ACS1_PIN, ADC_11db);
+  analogSetPinAttenuation(ACS2_PIN, ADC_11db);
+  analogSetPinAttenuation(ACS3_PIN, ADC_11db);
   analogSetPinAttenuation(VOLTAGE_PIN, ADC_11db);
 
-  initializeRelays();
+  for (int i = 0; i < NUM_CHANNELS; i++) {
+    pinMode(channels[i].relayPin, OUTPUT);
+    digitalWrite(channels[i].relayPin, HIGH);   // releu activ LOW => initial OPRIT
+    channels[i].relayState = false;
+  }
+
   setup_wifi();
 
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(mqttCallback);
 
-  delay(500);
+  recalibrateSensors();
+
+  lastMeasureMs = millis();
+  lastMqttMs = millis();
+  lastEnergyMs = millis();
 
   Serial.println("Sistem pornit.");
   Serial.print("FW: ");
   Serial.println(FW_VERSION);
-  Serial.println("Relay 1 este PORNIT automat la startup.");
-  Serial.println("Calibrare noise floor ACS la startup: ACTIVA");
-
-  for (uint8_t i = 0; i < CHANNEL_COUNT; i++) {
-    currentNoiseFloors[i] = calibrateCurrentNoiseFloor(CURRENT_PINS[i]);
-    Serial.print("Noise floor ACS");
-    Serial.print(i + 1);
-    Serial.print(": ");
-    Serial.print(currentNoiseFloors[i], 4);
-    Serial.println(" A");
-  }
-
-  Serial.println("Se foloseste offset ADC recalculat la fiecare citire + compensare noise floor + filtru de dominanta intre socket-uri.");
-  Serial.println("Tensiunea filtrata porneste din valoarea implicita 224V.");
-  Serial.println("Mapare pini ACS: ACS1=12, ACS2=13, ACS3=14");
-  Serial.println("Mapare relee: R1=15, R2=16, R3=17");
-  Serial.println("Control relee: exclusiv prin MQTT din dashboard.");
-
-  lastMillis = millis();
-  lastMQTT = millis();
+  Serial.println("Toate releele pornesc OPRITE la startup.");
+  Serial.println("Control relee: exclusiv prin MQTT din dashboard sau prin Serial.");
+  Serial.println("Payload MQTT compatibil site: voltage/current/current_1/current_2/current_3/power/energy/relay_1/relay_2/relay_3");
+  Serial.println("Comenzi: ON1 OFF1 ON2 OFF2 ON3 OFF3 ALL_ON ALL_OFF STATUS CAL RESET_ENERGY HELP");
 }
 
-//-----------------------------------------------------------
+// =====================================================
 // LOOP
-//-----------------------------------------------------------
+// =====================================================
 void loop() {
-  static float smoothCurrents[CHANNEL_COUNT] = {0.0, 0.0, 0.0};
-  static unsigned long lastRelayChangeMillis = 0;
+  handleSerial();
 
-  ensureMQTTConnection();
-  syncRelayStatesFromPins();
+  if (!client.connected()) reconnectMQTT();
+  client.loop();
 
-  bool relaySettling = updateRelayTransitionTracking(smoothCurrents, lastRelayChangeMillis);
+  unsigned long now = millis();
 
-  float channelCurrents[CHANNEL_COUNT] = {0.0, 0.0, 0.0};
-  readAllChannelCurrents(channelCurrents, smoothCurrents);
-  finalizeMeasuredCurrents(channelCurrents, smoothCurrents);
-
-  float currentTotal = sumChannels(channelCurrents);
-  float voltageRms = readVoltageRMS();
-  float powerW = filterPowerReadings(voltageRms, currentTotal);
-
-  updateEnergy(powerW);
-  printMeasurements(voltageRms, channelCurrents, currentTotal, powerW);
-
-  if (!relaySettling) {
-    updateMQTTAverages(voltageRms, channelCurrents, powerW);
+  if (relayCalibrationPending && now >= relayCalibrationDueMs) {
+    recalibrateSensors();
+    relayCalibrationPending = false;
   }
 
-  if (!relaySettling && millis() - lastMQTT >= MQTT_INTERVAL) {
-    publishAveragedMQTT(voltageRms, channelCurrents, powerW);
-    lastMQTT = millis();
+  if (now - lastMeasureMs >= MEASURE_INTERVAL_MS) {
+    meas = measurePower();
+
+    float deltaHours = (now - lastEnergyMs) / 3600000.0f;
+    lastEnergyMs = now;
+
+    for (int i = 0; i < NUM_CHANNELS; i++) {
+      channels[i].energy_kWh += (meas.activePowerW[i] * deltaHours) / 1000.0;
+      if (channels[i].energy_kWh < 0.0) channels[i].energy_kWh = 0.0;
+    }
+
+    Serial.printf("U_RMS: %.1f V\n", meas.voltageRMS);
+    for (int i = 0; i < NUM_CHANNELS; i++) {
+      Serial.printf("CH%d | I: %.3f A | P: %.1f W | S: %.1f VA | PF: %.2f | kWh: %.5f\n",
+                    i + 1,
+                    meas.currentRMS[i],
+                    meas.activePowerW[i],
+                    meas.apparentPowerVA[i],
+                    meas.powerFactor[i],
+                    channels[i].energy_kWh);
+    }
+    Serial.printf("TOTAL | I: %.3f A | P: %.1f W | S: %.1f VA\n",
+                  meas.totalCurrentRMS,
+                  meas.totalActivePowerW,
+                  meas.totalApparentPowerVA);
+
+    lastMeasureMs = now;
   }
 
-  delay(500);
+  if (now - lastMqttMs >= MQTT_INTERVAL_MS) {
+    publishMQTT();
+    lastMqttMs = now;
+  }
 }
