@@ -161,7 +161,7 @@
                 <div class="flex items-start justify-between">
                     <div>
                         <h3 class="text-lg font-bold">Energy Usage</h3>
-                        <p class="text-sm text-muted-foreground">Average value for the last day</p>
+                        <p class="text-sm text-muted-foreground">Weekly consumption overview</p>
                     </div>
                     <div class="text-right">
                         <span class="text-lg font-bold tabular-nums" id="dash-energy-total">{{ $energy }} <span class="text-sm font-normal text-muted-foreground">kWh</span></span>
@@ -180,28 +180,31 @@
                     <span id="dash-energy-today-progress" class="ml-2 font-semibold tabular-nums text-primary">{{ number_format($todayProgress, 4) }} kWh</span>
                 </div>
 
-                <div class="mt-6 flex items-end gap-3" style="height: 210px" id="energy-bars-container">
+                <div class="mt-6 flex items-end gap-3" style="height: 260px" id="energy-bars-container">
                     @foreach($weekEnergy as $day)
                         @php
                             $dayTotal = (float) $day['total'];
                             $barPct = max(12, ($dayTotal / $maxDayTotal) * 100);
                         @endphp
                         <button type="button"
-                                class="energy-day group flex flex-1 flex-col items-center gap-2"
+                                class="energy-day group flex h-full flex-1 flex-col items-center justify-end gap-3"
                                 data-energy-date="{{ $day['date'] }}"
                                 data-energy-day="{{ $day['day_short'] }}"
                                 data-energy-total="{{ $dayTotal }}"
                                 aria-label="Open details for {{ $day['day_short'] }}">
-                            <span class="h-5 text-[11px] font-medium tabular-nums {{ $day['is_today'] ? 'text-primary' : 'text-muted-foreground' }}" data-role="day-value">
-                                {{ $day['is_today'] ? number_format($dayTotal, 4).' kWh' : '' }}
+                            <span class="min-h-[2.75rem] text-center text-[12px] font-semibold leading-tight tabular-nums {{ $day['is_today'] ? 'text-primary' : 'text-foreground/85' }}" data-role="day-value">
+                                {{ number_format($dayTotal, 4) }}<br><span class="text-[10px] font-medium {{ $day['is_today'] ? 'text-primary/80' : 'text-muted-foreground' }}">kWh</span>
                             </span>
-                            <span class="relative block h-[145px] w-full rounded-3xl bg-muted/50 p-1">
-                                <span data-role="bar-fill"
-                                      class="absolute inset-x-1 bottom-1 rounded-[22px] transition-all duration-500 {{ $day['is_today'] ? 'bg-primary/90 shadow-[0_0_0_1px_rgba(220,245,170,0.2)]' : 'bg-muted' }}"
-                                      style="height: {{ $barPct }}%"></span>
-                                <span class="pointer-events-none absolute inset-0 rounded-3xl opacity-0 transition-opacity duration-200 group-hover:opacity-100 {{ $day['is_today'] ? 'bg-primary/5' : 'bg-white/[0.02]' }}"></span>
+                            <span class="relative block h-[150px] w-full overflow-hidden rounded-[2rem] bg-muted/35 ring-1 ring-white/4">
+                                <span class="absolute inset-x-2 bottom-2 top-2 rounded-[1.6rem] bg-background/35"></span>
+                                <span data-role="bar-track" class="absolute inset-x-2 bottom-2 top-2 flex items-end overflow-hidden rounded-[1.6rem]">
+                                    <span data-role="bar-fill"
+                                          class="block w-full rounded-[1.6rem] transition-all duration-500 {{ $day['is_today'] ? 'bg-primary shadow-[0_0_0_1px_rgba(216,228,132,0.24),0_14px_30px_rgba(216,228,132,0.18)]' : 'bg-primary/38' }}"
+                                          style="height: {{ $barPct }}%"></span>
+                                </span>
+                                <span class="pointer-events-none absolute inset-0 rounded-[2rem] opacity-0 transition-opacity duration-200 group-hover:opacity-100 {{ $day['is_today'] ? 'bg-primary/6' : 'bg-white/[0.02]' }}"></span>
                             </span>
-                            <span class="text-[11px] font-medium {{ $day['is_today'] ? 'text-primary' : 'text-muted-foreground' }}">{{ $day['day_short'] }}</span>
+                            <span class="text-[13px] font-semibold tracking-[0.16em] {{ $day['is_today'] ? 'text-primary' : 'text-muted-foreground' }}">{{ $day['day_short'] }}</span>
                         </button>
                     @endforeach
                 </div>
@@ -248,10 +251,6 @@
                         </div>
                     </div>
 
-                    <div class="mt-5 rounded-2xl bg-background p-4">
-                        <h4 class="text-sm font-semibold">Hourly energy / power</h4>
-                        <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" id="energy-modal-hourly"></div>
-                    </div>
                 </div>
             </div>
 
@@ -453,17 +452,17 @@ function renderEnergyBars(payload) {
 
         var valueEl = bar.querySelector('[data-role="day-value"]');
         if (valueEl) {
-            valueEl.textContent = day.is_today ? kwh(total) : '';
-            valueEl.className = 'h-5 text-[11px] font-medium tabular-nums ' + (day.is_today ? 'text-primary' : 'text-muted-foreground');
+            valueEl.innerHTML = Number(total).toFixed(4) + '<br><span class="text-[10px] font-medium ' + (day.is_today ? 'text-primary/80' : 'text-muted-foreground') + '">kWh</span>';
+            valueEl.className = 'min-h-[2.75rem] text-center text-[12px] font-semibold leading-tight tabular-nums ' + (day.is_today ? 'text-primary' : 'text-foreground/85');
         }
 
         var fill = bar.querySelector('[data-role="bar-fill"]');
         if (fill) {
             fill.style.height = pct + '%';
-            fill.className = 'absolute inset-x-1 bottom-1 rounded-[22px] transition-all duration-500 ' +
+            fill.className = 'block w-full rounded-[1.6rem] transition-all duration-500 ' +
                 (day.is_today
-                    ? 'bg-primary/90 shadow-[0_0_0_1px_rgba(220,245,170,0.2)]'
-                    : 'bg-muted');
+                    ? 'bg-primary shadow-[0_0_0_1px_rgba(216,228,132,0.24),0_14px_30px_rgba(216,228,132,0.18)]'
+                    : 'bg-primary/38');
         }
     });
 
@@ -480,7 +479,6 @@ function populateEnergyModal(data) {
     var voltage = document.getElementById('energy-modal-voltage');
     var sockets = document.getElementById('energy-modal-sockets');
     var intervals = document.getElementById('energy-modal-intervals');
-    var hourly = document.getElementById('energy-modal-hourly');
 
     if (subtitle) subtitle.textContent = data.day_short + ' · ' + data.date;
     if (total) total.textContent = kwh(data.total_kwh || 0);
@@ -514,19 +512,6 @@ function populateEnergyModal(data) {
         }
     }
 
-    if (hourly) {
-        hourly.innerHTML = (data.hourly || []).map(function(item) {
-            var level = item.warnings && item.warnings.overload > 0
-                ? 'text-red-400'
-                : ((item.warnings && item.warnings.high > 0) ? 'text-amber-400' : 'text-muted-foreground');
-
-            return '<div class="rounded-xl bg-card px-2 py-2 ring-1 ring-border/20">'
-                + '<p class="text-[10px] ' + level + '">' + item.hour + '</p>'
-                + '<p class="mt-1 text-xs font-medium tabular-nums">' + Number(item.energy_kwh || 0).toFixed(3) + ' kWh</p>'
-                + '<p class="text-[10px] text-muted-foreground">avg ' + Number(item.avg_power_w || 0).toFixed(0) + 'W / peak ' + Number(item.peak_power_w || 0).toFixed(0) + 'W</p>'
-                + '</div>';
-        }).join('');
-    }
 }
 
 function openEnergyModal(date, trigger) {
