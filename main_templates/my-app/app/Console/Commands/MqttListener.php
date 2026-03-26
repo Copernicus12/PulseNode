@@ -42,7 +42,7 @@ class MqttListener extends Command
                 try {
                     $data = json_decode($message, true);
                     if ($data) {
-                        $this->store->update($data);
+                        $this->store->updateTelemetry($data);
                         $this->info('Data stored successfully');
                     }
                 } catch (\Exception $e) {

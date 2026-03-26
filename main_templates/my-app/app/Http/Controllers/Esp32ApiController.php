@@ -62,7 +62,7 @@ class Esp32ApiController extends Controller
             ], 503);
         }
 
-        $latest = $store->update([
+        $latest = $store->updateRelayState([
             'relay_1' => $relayId === 1 ? $state === 'on' : (bool) ($latestState['relay_1'] ?? false),
             'relay_2' => $relayId === 2 ? $state === 'on' : (bool) ($latestState['relay_2'] ?? false),
             'relay_3' => $relayId === 3 ? $state === 'on' : (bool) ($latestState['relay_3'] ?? false),
@@ -102,7 +102,7 @@ class Esp32ApiController extends Controller
             'relay_3' => ['sometimes', 'boolean'],
         ]);
 
-        $latest = $store->update($payload);
+        $latest = $store->updateTelemetry($payload);
 
         return response()->json([
             'status' => 'ok',

@@ -64,4 +64,69 @@ class RelayCommandAvailabilityTest extends TestCase
             $response->assertDontSee('id="relay-command-alert-root"', false);
         }
     }
+
+    public function test_relay_command_updates_state_without_refreshing_last_telemetry_timestamp(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+
+        $staleTelemetryAt = now()->subMinutes(4)->toIso8601String();
+
+        $store = Mockery::mock(Esp32StateStore::class);
+        $store->shouldReceive('latest')
+            ->once()
+            ->andReturn([
+                'voltage' => 229.8,
+                'current' => 0.18,
+                'current_1' => 0.18,
+                'current_2' => 0.0,
+                'current_3' => 0.0,
+                'power' => 41.4,
+                'energy' => 1.24,
+                'relay_1' => true,
+                'relay_2' => false,
+                'relay_3' => false,
+                'updated_at' => $staleTelemetryAt,
+            ]);
+        $store->shouldReceive('updateRelayState')
+            ->once()
+            ->with(Mockery::on(function (array $payload): bool {
+                return $payload['relay_1'] === false
+                    && $payload['relay_2'] === false
+                    && $payload['relay_3'] === false;
+            }))
+            ->andReturn([
+                'voltage' => 229.8,
+                'current' => 0.18,
+                'current_1' => 0.18,
+                'current_2' => 0.0,
+                'current_3' => 0.0,
+                'power' => 41.4,
+                'energy' => 1.24,
+                'relay_1' => false,
+                'relay_2' => false,
+                'relay_3' => false,
+                'updated_at' => $staleTelemetryAt,
+            ]);
+
+        $publisher = Mockery::mock(Esp32RelayPublisher::class);
+        $publisher->shouldReceive('publish')
+            ->once()
+            ->with(1, 'off')
+            ->andReturn([
+                'sent' => '{"relay":1,"state":"off"}',
+                'published' => true,
+                'message' => 'MQTT command published.',
+            ]);
+
+        $this->app->instance(Esp32StateStore::class, $store);
+        $this->app->instance(Esp32RelayPublisher::class, $publisher);
+
+        $response = $this->get(route('api.relay', ['relayId' => 1, 'state' => 'off']));
+
+        $response->assertOk();
+        $response->assertJsonPath('status', 'ok');
+        $response->assertJsonPath('latest.relay_1', false);
+        $response->assertJsonPath('latest.updated_at', $staleTelemetryAt);
+    }
 }

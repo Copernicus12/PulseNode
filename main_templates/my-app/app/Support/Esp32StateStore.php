@@ -31,33 +31,42 @@ class Esp32StateStore
             return $defaults;
         }
 
-        $updatedAt = null;
-        if (isset($doc['received_at']) && $doc['received_at'] instanceof UTCDateTime) {
+        $updatedAt = $payload['updated_at'] ?? null;
+        if (
+            (! is_string($updatedAt) || trim($updatedAt) === '')
+            && isset($doc['received_at'])
+            && $doc['received_at'] instanceof UTCDateTime
+        ) {
             $updatedAt = $doc['received_at']->toDateTime()->format(DATE_ATOM);
         }
 
-        if ($updatedAt !== null) {
+        if (is_string($updatedAt) && trim($updatedAt) !== '') {
             $payload['updated_at'] = $updatedAt;
         }
 
         return $this->normalize(array_merge($defaults, $payload));
     }
 
-    public function update(array $payload): array
+    public function updateTelemetry(array $payload): array
     {
         $state = $this->normalize(array_merge($this->latest(), $payload));
         $state['updated_at'] = now()->toIso8601String();
-        $collection = $this->collection();
 
-        if ($collection !== null) {
-            $collection->insertOne([
-                'topic' => config('esp32.mqtt.data_topic', 'razvy_esp32_2026/data'),
-                'received_at' => new UTCDateTime(),
-                'payload' => $state,
-            ]);
-        }
+        return $this->persist($state, 'telemetry');
+    }
 
-        return $state;
+    public function updateRelayState(array $payload): array
+    {
+        $latest = $this->latest();
+        $state = $this->normalize(array_merge($latest, $payload));
+        $state['updated_at'] = $latest['updated_at'] ?? null;
+
+        return $this->persist($state, 'command');
+    }
+
+    public function update(array $payload): array
+    {
+        return $this->updateTelemetry($payload);
     }
 
     private function collection(): ?\MongoDB\Collection
@@ -96,6 +105,22 @@ class Esp32StateStore
             'relay_3' => false,
             'updated_at' => null,
         ];
+    }
+
+    private function persist(array $state, string $source): array
+    {
+        $collection = $this->collection();
+
+        if ($collection !== null) {
+            $collection->insertOne([
+                'topic' => config('esp32.mqtt.data_topic', 'razvy_esp32_2026/data'),
+                'source' => $source,
+                'received_at' => new UTCDateTime(),
+                'payload' => $state,
+            ]);
+        }
+
+        return $state;
     }
 
     private function normalize(array $payload): array
