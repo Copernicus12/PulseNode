@@ -26,12 +26,14 @@ class SocketProfile:
     jitter: float
     spike_probability: float
     spike_current: float
+    min_power_factor: float
+    max_power_factor: float
 
 
 PROFILES: dict[int, SocketProfile] = {
-    1: SocketProfile("Workstation", 0.42, 0.14, 0.16, 0.55),
-    2: SocketProfile("Display", 0.25, 0.09, 0.08, 0.20),
-    3: SocketProfile("Appliance", 0.55, 0.22, 0.14, 0.95),
+    1: SocketProfile("Workstation", 0.42, 0.14, 0.16, 0.55, 0.88, 0.97),
+    2: SocketProfile("Display", 0.25, 0.09, 0.08, 0.20, 0.91, 0.99),
+    3: SocketProfile("Appliance", 0.55, 0.22, 0.14, 0.95, 0.82, 0.94),
 }
 
 
@@ -130,6 +132,15 @@ def sample_current(profile: SocketProfile, relay_on: bool, wave_factor: float, a
     return round(max(0.0, current), 3)
 
 
+def sample_power(voltage: float, current: float, profile: SocketProfile) -> float:
+    if current <= 0.0:
+        return 0.0
+
+    power_factor = random.uniform(profile.min_power_factor, profile.max_power_factor)
+    power = voltage * current * power_factor
+    return round(max(0.0, power), 1)
+
+
 def build_payload(
     voltage: float,
     relay_state: dict[int, bool],
@@ -142,8 +153,22 @@ def build_payload(
     c2 = sample_current(PROFILES[2], relay_state[2], wave_factor, activity_factor)
     c3 = sample_current(PROFILES[3], relay_state[3], wave_factor, activity_factor)
 
+    p1 = sample_power(voltage, c1, PROFILES[1])
+    p2 = sample_power(voltage, c2, PROFILES[2])
+    p3 = sample_power(voltage, c3, PROFILES[3])
+
+    if p1 == 0.0:
+        c1 = 0.0
+    if p2 == 0.0:
+        c2 = 0.0
+    if p3 == 0.0:
+        c3 = 0.0
+
     total_current = round(c1 + c2 + c3, 3)
-    total_power = round(voltage * total_current, 1)
+    total_power = round(p1 + p2 + p3, 1)
+
+    if total_power == 0.0:
+        total_current = 0.0
 
     delta_energy = (total_power * (delta_seconds / 3600.0)) / 1000.0
     new_energy = accumulated_energy_kwh + delta_energy
@@ -155,6 +180,9 @@ def build_payload(
         "current_2": c2,
         "current_3": c3,
         "power": total_power,
+        "power_1": p1,
+        "power_2": p2,
+        "power_3": p3,
         "energy": round(new_energy, 5),
         "relay_1": relay_state[1],
         "relay_2": relay_state[2],
@@ -241,6 +269,7 @@ def main() -> int:
         short = (
             f"{ts} | I={payload['current']:.3f}A "
             f"P={payload['power']:.1f}W "
+            f"Pch=[{payload['power_1']:.1f},{payload['power_2']:.1f},{payload['power_3']:.1f}] "
             f"E={payload['energy']:.5f}kWh "
             f"R=[{int(payload['relay_1'])},{int(payload['relay_2'])},{int(payload['relay_3'])}] "
             f"wave={wave_factor:.2f}"

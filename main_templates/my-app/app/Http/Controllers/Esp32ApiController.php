@@ -9,6 +9,7 @@ use App\Support\Esp32ConnectionHealth;
 use App\Support\DeviceProfiler;
 use App\Support\Esp32RelayPublisher;
 use App\Support\Esp32StateStore;
+use App\Support\NotificationCenter;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,7 +23,7 @@ class Esp32ApiController extends Controller
         return response()->json($store->latest());
     }
 
-    public function relay(int $relayId, string $state, Esp32StateStore $store, Esp32RelayPublisher $publisher, Esp32ConnectionHealth $connectionHealth): JsonResponse
+    public function relay(int $relayId, string $state, Esp32StateStore $store, Esp32RelayPublisher $publisher, Esp32ConnectionHealth $connectionHealth, NotificationCenter $notifications): JsonResponse
     {
         if (! in_array($state, ['on', 'off'], true)) {
             return response()->json([
@@ -42,6 +43,8 @@ class Esp32ApiController extends Controller
         $relayCommandGuard = $connectionHealth->relayCommandAvailability($latestState);
 
         if ($state === 'on' && ! $relayCommandGuard['can_turn_on']) {
+            $notifications->relayCommandBlocked($relayId, $relayCommandGuard);
+
             return response()->json([
                 'status' => 'unavailable',
                 'sent' => strtoupper($state),
@@ -54,6 +57,8 @@ class Esp32ApiController extends Controller
         try {
             $publishResult = $publisher->publish($relayId, $state);
         } catch (RuntimeException $exception) {
+            $notifications->relayCommandFailed($relayId, $state, $exception->getMessage());
+
             return response()->json([
                 'status' => 'error',
                 'sent' => strtoupper($state),
@@ -67,6 +72,7 @@ class Esp32ApiController extends Controller
             'relay_2' => $relayId === 2 ? $state === 'on' : (bool) ($latestState['relay_2'] ?? false),
             'relay_3' => $relayId === 3 ? $state === 'on' : (bool) ($latestState['relay_3'] ?? false),
         ]);
+        $notifications->relayCommandSent($relayId, $state);
 
         return response()->json([
             'status' => 'ok',
@@ -76,7 +82,7 @@ class Esp32ApiController extends Controller
         ]);
     }
 
-    public function ingest(Request $request, Esp32StateStore $store): JsonResponse
+    public function ingest(Request $request, Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth, NotificationCenter $notifications): JsonResponse
     {
         $configuredToken = (string) config('esp32.ingest.token', '');
         if ($configuredToken !== '' && $request->header('X-ESP32-TOKEN') !== $configuredToken) {
@@ -102,7 +108,9 @@ class Esp32ApiController extends Controller
             'relay_3' => ['sometimes', 'boolean'],
         ]);
 
+        $previous = $store->latest();
         $latest = $store->updateTelemetry($payload);
+        $notifications->recordTelemetryUpdate($previous, $latest, $connectionHealth);
 
         return response()->json([
             'status' => 'ok',
@@ -159,7 +167,7 @@ class Esp32ApiController extends Controller
         ]);
     }
 
-    public function restartMqttListener(): JsonResponse
+    public function restartMqttListener(NotificationCenter $notifications): JsonResponse
     {
         if (app()->environment('production')) {
             return response()->json([
@@ -178,11 +186,16 @@ class Esp32ApiController extends Controller
         $process->run();
 
         if (! $process->isSuccessful()) {
+            $message = trim($process->getErrorOutput()) ?: 'Failed to restart MQTT listener.';
+            $notifications->mqttRestartFailed($message);
+
             return response()->json([
                 'status' => 'error',
-                'message' => trim($process->getErrorOutput()) ?: 'Failed to restart MQTT listener.',
+                'message' => $message,
             ], 500);
         }
+
+        $notifications->mqttRestarted();
 
         return response()->json([
             'status' => 'ok',

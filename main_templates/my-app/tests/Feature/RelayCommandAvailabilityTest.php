@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Support\AppNotificationStore;
 use App\Support\Esp32RelayPublisher;
 use App\Support\Esp32StateStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -37,9 +38,19 @@ class RelayCommandAvailabilityTest extends TestCase
 
         $publisher = Mockery::mock(Esp32RelayPublisher::class);
         $publisher->shouldNotReceive('publish');
+        $notifications = Mockery::mock(AppNotificationStore::class);
+        $notifications->shouldReceive('store')
+            ->once()
+            ->with(
+                Mockery::on(fn (array $payload): bool => $payload['type'] === 'relay_blocked'
+                    && $payload['level'] === 'warning'
+                    && $payload['title'] === 'Socket 1 command blocked'),
+                30
+            );
 
         $this->app->instance(Esp32StateStore::class, $store);
         $this->app->instance(Esp32RelayPublisher::class, $publisher);
+        $this->app->instance(AppNotificationStore::class, $notifications);
 
         $response = $this->get(route('api.relay', ['relayId' => 1, 'state' => 'on']));
 
@@ -118,9 +129,19 @@ class RelayCommandAvailabilityTest extends TestCase
                 'published' => true,
                 'message' => 'MQTT command published.',
             ]);
+        $notifications = Mockery::mock(AppNotificationStore::class);
+        $notifications->shouldReceive('store')
+            ->once()
+            ->with(
+                Mockery::on(fn (array $payload): bool => $payload['type'] === 'relay_sent'
+                    && $payload['level'] === 'info'
+                    && $payload['title'] === 'Socket 1 turned OFF'),
+                0
+            );
 
         $this->app->instance(Esp32StateStore::class, $store);
         $this->app->instance(Esp32RelayPublisher::class, $publisher);
+        $this->app->instance(AppNotificationStore::class, $notifications);
 
         $response = $this->get(route('api.relay', ['relayId' => 1, 'state' => 'off']));
 

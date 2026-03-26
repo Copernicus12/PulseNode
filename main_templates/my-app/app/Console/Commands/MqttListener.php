@@ -4,6 +4,8 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use App\Support\Esp32StateStore;
+use App\Support\Esp32ConnectionHealth;
+use App\Support\NotificationCenter;
 use PhpMqtt\Client\MqttClient;
 use PhpMqtt\Client\ConnectionSettings;
 
@@ -13,11 +15,15 @@ class MqttListener extends Command
     protected $description = 'Listen to ESP32 MQTT messages and store data';
 
     private $store;
+    private $connectionHealth;
+    private $notifications;
 
-    public function __construct(Esp32StateStore $store)
+    public function __construct(Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth, NotificationCenter $notifications)
     {
         parent::__construct();
         $this->store = $store;
+        $this->connectionHealth = $connectionHealth;
+        $this->notifications = $notifications;
     }
 
     public function handle()
@@ -42,7 +48,9 @@ class MqttListener extends Command
                 try {
                     $data = json_decode($message, true);
                     if ($data) {
-                        $this->store->updateTelemetry($data);
+                        $previous = $this->store->latest();
+                        $latest = $this->store->updateTelemetry($data);
+                        $this->notifications->recordTelemetryUpdate($previous, $latest, $this->connectionHealth);
                         $this->info('Data stored successfully');
                     }
                 } catch (\Exception $e) {

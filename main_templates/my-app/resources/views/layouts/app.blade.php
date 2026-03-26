@@ -115,9 +115,29 @@
                             <button title="Users" class="inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground">
                                 <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                             </button>
-                            <button id="relay-command-toast-anchor" title="Messages" class="inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground">
-                                <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                            </button>
+                            <div id="app-notifications-root" class="relative" data-feed-url="{{ route('api.notifications.latest') }}" data-index-url="{{ route('notifications.index') }}">
+                                <button id="relay-command-toast-anchor" title="Notifications" aria-expanded="false" aria-controls="app-notifications-panel" class="inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground">
+                                    <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-4-5.65V4a2 2 0 1 0-4 0v1.35A6 6 0 0 0 6 11v3.2a2 2 0 0 1-.6 1.4L4 17h5"/><path d="M9.73 17a2.99 2.99 0 0 0 4.54 0"/></svg>
+                                    <span id="app-notifications-badge" class="absolute -right-1 -top-1 hidden min-w-[1.15rem] rounded-full bg-amber-400 px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-background">0</span>
+                                </button>
+                                <div id="app-notifications-panel" class="absolute right-0 top-[calc(100%+0.75rem)] z-[95] hidden w-[min(26rem,calc(100vw-1.5rem))] overflow-hidden rounded-3xl border border-border/50 bg-card shadow-2xl shadow-black/40 ring-1 ring-border/40">
+                                    <div class="border-b border-border/30 px-4 py-3">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <div>
+                                                <p class="text-sm font-semibold">Notifications</p>
+                                                <p class="text-[11px] text-muted-foreground">Latest 10 events, refreshed live.</p>
+                                            </div>
+                                            <span class="inline-flex rounded-full bg-background px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground ring-1 ring-border/40">Live</span>
+                                        </div>
+                                    </div>
+                                    <div id="app-notifications-list" class="max-h-[28rem] overflow-y-auto p-2"></div>
+                                    <div class="border-t border-border/30 bg-background/70 px-3 py-3">
+                                        <a href="{{ route('notifications.index') }}" class="inline-flex w-full items-center justify-center rounded-2xl bg-card px-4 py-2.5 text-sm font-medium text-foreground ring-1 ring-border/40 transition hover:bg-muted/40">
+                                            Open full notification history
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
                             <details class="relative ml-1">
                                 <summary class="flex cursor-pointer list-none">
                                     <span class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-card text-sm font-semibold">
@@ -234,6 +254,7 @@
                 { label: 'Go Dashboard', keywords: 'go dashboard home', run: function () { window.location.href = '{{ route('dashboard') }}'; } },
                 { label: 'Go Power Strip', keywords: 'go power strip sockets', run: function () { window.location.href = '{{ route('power-strip.index') }}'; } },
                 { label: 'Go Settings', keywords: 'go settings power strip settings', run: function () { window.location.href = '{{ route('power-strip.settings') }}'; } },
+                { label: 'Go Notifications', keywords: 'go notifications inbox alerts', run: function () { window.location.href = '{{ route('notifications.index') }}'; } },
                 { label: 'Turn all off', keywords: 'turn all off sockets relay', run: function () { toggleAllRelays(false); } },
                 { label: 'Turn all on', keywords: 'turn all on sockets relay', run: function () { toggleAllRelays(true); } },
                 { label: 'Open raw payload', keywords: 'open raw payload json details', run: openRawPayload },
@@ -444,6 +465,177 @@
                 setOpen(true);
                 renderResults(input.value);
             });
+        })();
+        </script>
+        <script>
+        (function () {
+            var root = document.getElementById('app-notifications-root');
+            if (!root) return;
+
+            var button = document.getElementById('relay-command-toast-anchor');
+            var panel = document.getElementById('app-notifications-panel');
+            var list = document.getElementById('app-notifications-list');
+            var badge = document.getElementById('app-notifications-badge');
+            var feedUrl = root.getAttribute('data-feed-url');
+            var lastSeenKey = 'pulsenode.notifications.last_seen_id';
+
+            if (!button || !panel || !list || !badge || !feedUrl) return;
+
+            var items = [];
+            var newestId = 0;
+            var isOpen = false;
+
+            function escapeHtml(value) {
+                return String(value || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            function lastSeenId() {
+                var raw = Number(window.localStorage.getItem(lastSeenKey) || '0');
+                return Number.isFinite(raw) ? raw : 0;
+            }
+
+            function setLastSeenId(value) {
+                window.localStorage.setItem(lastSeenKey, String(value));
+            }
+
+            function relativeTime(value) {
+                if (!value) return 'Just now';
+                var timestamp = Date.parse(value);
+                if (!Number.isFinite(timestamp)) return 'Just now';
+
+                var diffSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+                if (diffSeconds < 10) return 'Just now';
+                if (diffSeconds < 60) return diffSeconds + 's ago';
+                if (diffSeconds < 3600) return Math.floor(diffSeconds / 60) + ' min ago';
+                if (diffSeconds < 86400) return Math.floor(diffSeconds / 3600) + ' h ago';
+                return Math.floor(diffSeconds / 86400) + ' d ago';
+            }
+
+            function toneClasses(level) {
+                if (level === 'error') return 'bg-red-500/15 text-red-300 ring-red-500/20';
+                if (level === 'warning') return 'bg-amber-500/15 text-amber-300 ring-amber-500/20';
+                if (level === 'success') return 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/20';
+                return 'bg-sky-500/15 text-sky-300 ring-sky-500/20';
+            }
+
+            function renderEmpty() {
+                list.innerHTML = '<div class="px-2 py-6 text-center text-sm text-muted-foreground">No notifications yet. Important system events will appear here.</div>';
+            }
+
+            function renderList() {
+                if (!items.length) {
+                    renderEmpty();
+                    return;
+                }
+
+                list.innerHTML = items.map(function (item) {
+                    var message = item.message
+                        ? '<p class="mt-1.5 text-xs leading-5 text-muted-foreground">' + escapeHtml(item.message) + '</p>'
+                        : '';
+                    var link = item.action_url
+                        ? '<a href="' + escapeHtml(item.action_url) + '" class="mt-3 inline-flex text-xs font-medium text-primary transition hover:opacity-80">Open</a>'
+                        : '';
+
+                    return '<article class="rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30">'
+                        + '<div class="flex items-start justify-between gap-3">'
+                        + '<div class="min-w-0 flex-1">'
+                        + '<div class="flex flex-wrap items-center gap-2">'
+                        + '<span class="inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ring-1 ' + toneClasses(item.level) + '">' + escapeHtml(item.level || 'info') + '</span>'
+                        + '<span class="text-[11px] text-muted-foreground">' + escapeHtml(relativeTime(item.created_at)) + '</span>'
+                        + '</div>'
+                        + '<p class="mt-2 text-sm font-semibold text-foreground">' + escapeHtml(item.title) + '</p>'
+                        + message
+                        + link
+                        + '</div>'
+                        + '</div>'
+                        + '</article>';
+                }).join('');
+            }
+
+            function renderBadge() {
+                var unseen = items.filter(function (item) {
+                    return Number(item.id || 0) > lastSeenId();
+                }).length;
+
+                if (unseen > 0) {
+                    badge.textContent = unseen > 9 ? '9+' : String(unseen);
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+            }
+
+            function markAllSeen() {
+                if (newestId > 0) {
+                    setLastSeenId(newestId);
+                    renderBadge();
+                }
+            }
+
+            function setOpen(nextOpen) {
+                isOpen = nextOpen;
+                panel.classList.toggle('hidden', !nextOpen);
+                button.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+
+                if (nextOpen) {
+                    markAllSeen();
+                }
+            }
+
+            function applyPayload(payload) {
+                items = Array.isArray(payload && payload.notifications) ? payload.notifications : [];
+                newestId = items.length ? Number(items[0].id || 0) : 0;
+                renderList();
+                renderBadge();
+            }
+
+            function fetchLatest() {
+                fetch(feedUrl + '?limit=10', {
+                    credentials: 'same-origin',
+                    headers: { 'Accept': 'application/json' }
+                })
+                    .then(function (response) {
+                        if (!response.ok) throw new Error('notifications fetch failed');
+                        return response.json();
+                    })
+                    .then(function (payload) {
+                        applyPayload(payload);
+                        if (isOpen) {
+                            markAllSeen();
+                        }
+                    })
+                    .catch(function () {
+                        if (!items.length) {
+                            renderEmpty();
+                        }
+                    });
+            }
+
+            button.addEventListener('click', function (event) {
+                event.preventDefault();
+                setOpen(!isOpen);
+            });
+
+            document.addEventListener('click', function (event) {
+                if (!root.contains(event.target)) {
+                    setOpen(false);
+                }
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') {
+                    setOpen(false);
+                }
+            });
+
+            renderEmpty();
+            fetchLatest();
+            window.setInterval(fetchLatest, 5000);
         })();
         </script>
         <script>

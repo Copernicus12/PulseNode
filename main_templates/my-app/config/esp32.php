@@ -20,6 +20,7 @@ return [
         'uri' => env('MONGODB_URI'),
         'database' => env('MONGODB_DATABASE', 'espData'),
         'collection' => env('MONGODB_COLLECTION', 'readings'),
+        'notifications_collection' => env('MONGODB_NOTIFICATIONS_COLLECTION', 'notifications'),
     ],
 
     'connection' => [

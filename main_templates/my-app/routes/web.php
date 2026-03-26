@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Esp32ApiController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PowerStripController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -38,11 +39,14 @@ Route::get('history', [PowerStripController::class, 'history'])
     ->middleware(['auth'])->name('history.index');
 Route::get('battery', [PowerStripController::class, 'battery'])
     ->middleware(['auth'])->name('battery.index');
+Route::get('notifications', [NotificationController::class, 'index'])
+    ->middleware(['auth'])->name('notifications.index');
 Route::get('power-strip/settings', [PowerStripController::class, 'settings'])
     ->middleware(['auth'])->name('power-strip.settings');
 
 Route::prefix('api')->middleware(['auth'])->group(function (): void {
     Route::get('latest', [Esp32ApiController::class, 'latest'])->name('api.latest');
+    Route::get('notifications/latest', [NotificationController::class, 'latest'])->name('api.notifications.latest');
     Route::get('relay/{relayId}/{state}', [Esp32ApiController::class, 'relay'])->name('api.relay');
     Route::get('energy-history', [Esp32ApiController::class, 'energyHistory'])->name('api.energy-history');
     Route::get('energy-day/{date}', [Esp32ApiController::class, 'energyDay'])->name('api.energy-day');
