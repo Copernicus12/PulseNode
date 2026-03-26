@@ -107,21 +107,7 @@ class EnergyReading extends Model
             ],
         ];
 
-        $hourly = collect(range(0, 23))->map(function (int $hour) use ($samples): array {
-            /** @var Collection<int, EnergySample> $items */
-            $items = $samples->where('hour', $hour)->values();
-
-            return [
-                'hour' => sprintf('%02d:00', $hour),
-                'energy_kwh' => round((float) $items->sum('delta_energy'), 6),
-                'avg_power_w' => round((float) ($items->avg('power') ?? 0), 1),
-                'peak_power_w' => round((float) ($items->max('power') ?? 0), 1),
-                'warnings' => [
-                    'high' => $items->where('warning_level', 'high')->count(),
-                    'overload' => $items->where('warning_level', 'overload')->count(),
-                ],
-            ];
-        })->toArray();
+        $hourly = self::buildHourlyBreakdown($samples);
 
         return [
             'date' => $dayKey,
@@ -315,6 +301,87 @@ class EnergyReading extends Model
             'socket_2' => $s2,
             'socket_3' => $s3,
             'total' => $s1 + $s2 + $s3,
+        ];
+    }
+
+    /**
+     * @param Collection<int, object> $samples
+     */
+    private static function buildHourlyBreakdown(Collection $samples): array
+    {
+        $hourBuckets = [];
+        $minuteBuckets = [];
+        $secondBuckets = [];
+
+        foreach ($samples as $sample) {
+            $sampledAt = $sample->sampled_at instanceof Carbon
+                ? $sample->sampled_at
+                : Carbon::parse($sample->sampled_at);
+
+            $hour = (int) $sampledAt->format('H');
+            $minute = (int) $sampledAt->format('i');
+            $second = (int) $sampledAt->format('s');
+
+            $hourBuckets[$hour][] = $sample;
+            $minuteBuckets[$hour][$minute][] = $sample;
+            $secondBuckets[$hour][$minute][$second][] = $sample;
+        }
+
+        return collect(range(0, 23))
+            ->map(function (int $hour) use ($hourBuckets, $minuteBuckets, $secondBuckets): array {
+                $hourItems = collect($hourBuckets[$hour] ?? []);
+                $hourSummary = self::summarizeSamples($hourItems);
+
+                return [
+                    'hour' => sprintf('%02d:00', $hour),
+                    ...$hourSummary,
+                    'minutes' => collect(range(0, 59))
+                        ->map(function (int $minute) use ($hour, $minuteBuckets, $secondBuckets): array {
+                            $minuteItems = collect($minuteBuckets[$hour][$minute] ?? []);
+                            $minuteSummary = self::summarizeSamples($minuteItems);
+
+                            return [
+                                'minute' => sprintf('%02d:%02d', $hour, $minute),
+                                ...$minuteSummary,
+                                'seconds' => collect($secondBuckets[$hour][$minute] ?? [])
+                                    ->sortKeys()
+                                    ->map(function (array $secondItems, int $second) use ($hour, $minute): array {
+                                        return [
+                                            'second' => sprintf('%02d:%02d:%02d', $hour, $minute, $second),
+                                            ...self::summarizeSamples(collect($secondItems)),
+                                        ];
+                                    })
+                                    ->values()
+                                    ->all(),
+                            ];
+                        })
+                        ->all(),
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * @param Collection<int, object> $samples
+     */
+    private static function summarizeSamples(Collection $samples): array
+    {
+        return [
+            'energy_kwh' => round((float) $samples->sum('delta_energy'), 6),
+            'avg_power_w' => round((float) ($samples->avg('power') ?? 0), 1),
+            'peak_power_w' => round((float) ($samples->max('power') ?? 0), 1),
+            'warnings' => self::warningCounters($samples),
+        ];
+    }
+
+    /**
+     * @param Collection<int, object> $samples
+     */
+    private static function warningCounters(Collection $samples): array
+    {
+        return [
+            'high' => $samples->where('warning_level', 'high')->count(),
+            'overload' => $samples->where('warning_level', 'overload')->count(),
         ];
     }
 

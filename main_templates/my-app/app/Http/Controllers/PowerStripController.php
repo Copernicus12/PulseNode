@@ -14,6 +14,7 @@ use App\Support\Esp32ConnectionHealth;
 use App\Support\Esp32StateStore;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -164,7 +165,7 @@ class PowerStripController extends Controller
         ));
     }
 
-    public function history(Request $request, Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth): View
+    public function history(Request $request, Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth): View|JsonResponse
     {
         [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus] = $this->buildStripViewModel($store->latest(), $connectionHealth);
 
@@ -237,13 +238,8 @@ class PowerStripController extends Controller
             'window_end' => $windowEnd->toDateString(),
         ];
 
-        return view('history.index', compact(
+        $historyPayload = compact(
             'latest',
-            'sockets',
-            'activeSockets',
-            'totalPower',
-            'totalEnergy',
-            'systemStatus',
             'lastSeen',
             'isOnline',
             'dayWindow',
@@ -257,7 +253,17 @@ class PowerStripController extends Controller
             'topHour',
             'totalWarnings',
             'topSocket',
-        ));
+        );
+
+        $historyPayload['historyBaseUrl'] = route('history.index');
+
+        if ($request->expectsJson()) {
+            return response()->json($historyPayload);
+        }
+
+        return view('history.index', [
+            'historyProps' => $historyPayload,
+        ]);
     }
 
     /**

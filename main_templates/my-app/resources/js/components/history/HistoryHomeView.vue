@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { buttonVariants } from '@/components/ui/button'
+import { ChevronLeft } from 'lucide-vue-next'
 import { Badge } from '@/components/ui/badge'
+import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -9,6 +10,15 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   Pagination,
   PaginationContent,
@@ -59,12 +69,30 @@ type IntervalStat = {
   avg_power_w: number
 }
 
+type SecondStat = {
+  second: string
+  energy_kwh: number
+  avg_power_w: number
+  peak_power_w: number
+  warnings?: WarningCounters
+}
+
+type MinuteStat = {
+  minute: string
+  energy_kwh: number
+  avg_power_w: number
+  peak_power_w: number
+  warnings?: WarningCounters
+  seconds?: SecondStat[]
+}
+
 type HourlyStat = {
   hour: string
   energy_kwh: number
   avg_power_w: number
   peak_power_w: number
   warnings?: WarningCounters
+  minutes?: MinuteStat[]
 }
 
 type SelectedDay = {
@@ -98,19 +126,32 @@ type HistoryPageProps = {
 }
 
 const props = defineProps<HistoryPageProps>()
+const historyState = ref<HistoryPageProps>({
+  ...props,
+  dayWindow: [...(props.dayWindow ?? [])],
+  daySelector: { ...props.daySelector },
+  selectedDay: { ...(props.selectedDay ?? {}) },
+})
 
 const PER_PAGE = 4
+const DETAIL_PER_PAGE = 10
 const hourlyPage = ref(1)
-const pickerDate = ref<string | undefined>(props.daySelector?.anchor_date ?? props.daySelector?.window_end ?? undefined)
+const detailOpen = ref(false)
+const minutePage = ref(1)
+const secondPage = ref(1)
+const isLoading = ref(false)
+const selectedHourKey = ref<string | null>(null)
+const selectedMinuteKey = ref<string | null>(null)
+const pickerDate = ref<string | undefined>(historyState.value.daySelector?.anchor_date ?? historyState.value.daySelector?.window_end ?? undefined)
 
-const liveLastSeen = ref(props.lastSeen)
-const liveOnline = ref(props.isOnline)
+const liveLastSeen = ref(historyState.value.lastSeen)
+const liveOnline = ref(historyState.value.isOnline)
 
-const dayWindowItems = computed(() => props.dayWindow ?? [])
-const selectedWarnings = computed<WarningCounters>(() => props.selectedDay?.warnings ?? { high: 0, overload: 0 })
-const socketStats = computed<SocketStat[]>(() => props.selectedDay?.socket_stats ?? [])
-const intervals = computed<IntervalStat[]>(() => props.selectedDay?.intervals ?? [])
-const hourlyLoad = computed<HourlyStat[]>(() => props.selectedDay?.hourly ?? [])
+const dayWindowItems = computed(() => historyState.value.dayWindow ?? [])
+const selectedWarnings = computed<WarningCounters>(() => historyState.value.selectedDay?.warnings ?? { high: 0, overload: 0 })
+const socketStats = computed<SocketStat[]>(() => historyState.value.selectedDay?.socket_stats ?? [])
+const intervals = computed<IntervalStat[]>(() => historyState.value.selectedDay?.intervals ?? [])
+const hourlyLoad = computed<HourlyStat[]>(() => historyState.value.selectedDay?.hourly ?? [])
 const topIntervals = computed(() => intervals.value.slice(0, 4))
 const maxSocketEnergy = computed(() => Math.max(0.001, ...socketStats.value.map((item) => number(item.energy_kwh))))
 
@@ -121,6 +162,34 @@ const pagedHourly = computed(() => {
 })
 const pagedStartIndex = computed(() => (hourlyLoad.value.length ? (hourlyPage.value - 1) * PER_PAGE + 1 : 0))
 const pagedEndIndex = computed(() => Math.min(hourlyPage.value * PER_PAGE, hourlyLoad.value.length))
+const selectedHour = computed<HourlyStat | null>(() => hourlyLoad.value.find((item) => item.hour === selectedHourKey.value) ?? null)
+const selectedHourMinutes = computed<MinuteStat[]>(() => selectedHour.value?.minutes ?? [])
+const minuteTotalPages = computed(() => Math.max(1, Math.ceil(selectedHourMinutes.value.length / DETAIL_PER_PAGE)))
+const pagedMinutes = computed(() => {
+  const start = (minutePage.value - 1) * DETAIL_PER_PAGE
+  return selectedHourMinutes.value.slice(start, start + DETAIL_PER_PAGE)
+})
+const minutePagedStartIndex = computed(() => (
+  selectedHourMinutes.value.length
+    ? (minutePage.value - 1) * DETAIL_PER_PAGE + 1
+    : 0
+))
+const minutePagedEndIndex = computed(() => Math.min(minutePage.value * DETAIL_PER_PAGE, selectedHourMinutes.value.length))
+const selectedMinute = computed<MinuteStat | null>(() => (
+  selectedHourMinutes.value.find((item) => item.minute === selectedMinuteKey.value) ?? null
+))
+const selectedMinuteSeconds = computed<SecondStat[]>(() => selectedMinute.value?.seconds ?? [])
+const secondTotalPages = computed(() => Math.max(1, Math.ceil(selectedMinuteSeconds.value.length / DETAIL_PER_PAGE)))
+const pagedSeconds = computed(() => {
+  const start = (secondPage.value - 1) * DETAIL_PER_PAGE
+  return selectedMinuteSeconds.value.slice(start, start + DETAIL_PER_PAGE)
+})
+const secondPagedStartIndex = computed(() => (
+  selectedMinuteSeconds.value.length
+    ? (secondPage.value - 1) * DETAIL_PER_PAGE + 1
+    : 0
+))
+const secondPagedEndIndex = computed(() => Math.min(secondPage.value * DETAIL_PER_PAGE, selectedMinuteSeconds.value.length))
 
 watch(hourlyLoad, () => {
   hourlyPage.value = 1
@@ -129,6 +198,36 @@ watch(hourlyLoad, () => {
 watch(hourlyTotalPages, (maxPages) => {
   if (hourlyPage.value > maxPages) {
     hourlyPage.value = maxPages
+  }
+})
+
+watch(selectedHour, () => {
+  selectedMinuteKey.value = null
+  minutePage.value = 1
+  secondPage.value = 1
+})
+
+watch(minuteTotalPages, (maxPages) => {
+  if (minutePage.value > maxPages) {
+    minutePage.value = maxPages
+  }
+})
+
+watch(selectedMinute, () => {
+  secondPage.value = 1
+})
+
+watch(secondTotalPages, (maxPages) => {
+  if (secondPage.value > maxPages) {
+    secondPage.value = maxPages
+  }
+})
+
+watch(detailOpen, (isOpen) => {
+  if (!isOpen) {
+    selectedMinuteKey.value = null
+    minutePage.value = 1
+    secondPage.value = 1
   }
 })
 
@@ -150,15 +249,8 @@ function fmtEnergy(value: unknown): string {
   return `${(kwh * 1000).toFixed(2)} Wh`
 }
 
-function dayHref(date: string): string {
-  const url = new URL(props.historyBaseUrl, window.location.origin)
-  url.searchParams.set('date', date)
-  url.searchParams.set('anchor_date', props.daySelector.anchor_date)
-  return `${url.pathname}?${url.searchParams.toString()}`
-}
-
 function dayButtonClass(day: DayWindowItem): string {
-  const isActive = day.date === props.selectedDate
+  const isActive = day.date === historyState.value.selectedDate
 
   return cn(
     buttonVariants({ variant: isActive ? 'default' : 'outline', size: 'default' }),
@@ -167,14 +259,61 @@ function dayButtonClass(day: DayWindowItem): string {
   )
 }
 
+function detailUrl(date: string, anchorDate: string): string {
+  const url = new URL(historyState.value.historyBaseUrl, window.location.origin)
+  url.searchParams.set('date', date)
+  url.searchParams.set('anchor_date', anchorDate)
+
+  return `${url.pathname}?${url.searchParams.toString()}`
+}
+
+async function updateHistory(date: string, anchorDate: string, mode: 'push' | 'replace' = 'push'): Promise<void> {
+  if (isLoading.value) return
+
+  const url = detailUrl(date, anchorDate)
+
+  isLoading.value = true
+
+  try {
+    const response = await fetch(url, {
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to load history state: ${response.status}`)
+    }
+
+    const payload = await response.json() as HistoryPageProps
+    historyState.value = payload
+    pickerDate.value = payload.daySelector?.anchor_date ?? payload.daySelector?.window_end ?? pickerDate.value
+    liveLastSeen.value = payload.lastSeen
+    liveOnline.value = payload.isOnline
+
+    if (mode === 'replace') {
+      window.history.replaceState(null, '', url)
+    } else {
+      window.history.pushState(null, '', url)
+    }
+  } catch (error) {
+    console.error('Unable to update history view', error)
+  } finally {
+    isLoading.value = false
+  }
+}
+
 function applyAnchorDate(selectedDate?: string): void {
   const date = selectedDate ?? pickerDate.value
   if (!date) return
 
-  const url = new URL(props.historyBaseUrl, window.location.origin)
-  url.searchParams.set('anchor_date', date)
-  url.searchParams.set('date', date)
-  window.location.href = `${url.pathname}?${url.searchParams.toString()}`
+  void updateHistory(date, date)
+}
+
+function selectDay(date: string): void {
+  void updateHistory(date, historyState.value.daySelector.anchor_date)
 }
 
 function socketBarWidth(energyKwh: number): number {
@@ -201,10 +340,23 @@ function isDeviceOnline(updatedAt: string | null): boolean {
   return (Date.now() - timestamp) <= 5 * 60 * 1000
 }
 
-function hourlyState(hour: HourlyStat): 'overload' | 'high' | 'normal' {
-  if ((hour.warnings?.overload ?? 0) > 0) return 'overload'
-  if ((hour.warnings?.high ?? 0) > 0) return 'high'
+function loadState(item: { warnings?: WarningCounters }): 'overload' | 'high' | 'normal' {
+  if ((item.warnings?.overload ?? 0) > 0) return 'overload'
+  if ((item.warnings?.high ?? 0) > 0) return 'high'
   return 'normal'
+}
+
+function openHourDetails(hour: HourlyStat): void {
+  selectedHourKey.value = hour.hour
+  detailOpen.value = true
+}
+
+function openMinuteDetails(minute: MinuteStat): void {
+  selectedMinuteKey.value = minute.minute
+}
+
+function goBackToMinutes(): void {
+  selectedMinuteKey.value = null
 }
 
 const liveHandler = (event: Event) => {
@@ -215,12 +367,22 @@ const liveHandler = (event: Event) => {
   liveLastSeen.value = lastSeenLabel(updatedAt)
 }
 
+const popStateHandler = () => {
+  const url = new URL(window.location.href)
+  const anchorDate = url.searchParams.get('anchor_date') ?? historyState.value.daySelector.anchor_date
+  const date = url.searchParams.get('date') ?? anchorDate
+
+  void updateHistory(date, anchorDate, 'replace')
+}
+
 onMounted(() => {
   window.addEventListener('pulsenode:latest', liveHandler)
+  window.addEventListener('popstate', popStateHandler)
 })
 
 onUnmounted(() => {
   window.removeEventListener('pulsenode:latest', liveHandler)
+  window.removeEventListener('popstate', popStateHandler)
 })
 </script>
 
@@ -255,7 +417,7 @@ onUnmounted(() => {
           Home Energy Overview
         </CardTitle>
         <CardDescription class="mt-0.5 text-xs">
-          {{ props.selectedDay.date }}
+          {{ historyState.selectedDay.date }}
         </CardDescription>
       </CardHeader>
 
@@ -266,7 +428,7 @@ onUnmounted(() => {
               Day total
             </p>
             <p class="mt-1 text-2xl font-semibold leading-none tabular-nums">
-              {{ fmt(props.selectedDay.total_kwh, 4) }}
+              {{ fmt(historyState.selectedDay.total_kwh, 4) }}
               <span class="text-sm font-medium text-muted-foreground">kWh</span>
             </p>
           </div>
@@ -275,7 +437,7 @@ onUnmounted(() => {
               Week total
             </p>
             <p class="mt-1 text-2xl font-semibold leading-none tabular-nums">
-              {{ fmt(props.weeklyTotal, 4) }}
+              {{ fmt(historyState.weeklyTotal, 4) }}
               <span class="text-sm font-medium text-muted-foreground">kWh</span>
             </p>
           </div>
@@ -284,7 +446,7 @@ onUnmounted(() => {
               Avg day
             </p>
             <p class="mt-1 text-2xl font-semibold leading-none tabular-nums">
-              {{ fmt(props.averageDay, 4) }}
+              {{ fmt(historyState.averageDay, 4) }}
             </p>
           </div>
           <div class="rounded-2xl border border-border/40 bg-background p-4">
@@ -292,7 +454,7 @@ onUnmounted(() => {
               Peak day
             </p>
             <p class="mt-1 text-2xl font-semibold leading-none tabular-nums">
-              {{ fmt(props.peakDay?.total ?? 0, 4) }}
+              {{ fmt(historyState.peakDay?.total ?? 0, 4) }}
             </p>
           </div>
           <div class="rounded-2xl border border-border/40 bg-background p-4">
@@ -300,7 +462,7 @@ onUnmounted(() => {
               Most active hour
             </p>
             <p class="mt-1 text-2xl font-semibold leading-none tabular-nums">
-              {{ props.topHour?.hour ?? '--:--' }}
+              {{ historyState.topHour?.hour ?? '--:--' }}
             </p>
           </div>
           <div class="rounded-2xl border border-border/40 bg-background p-4">
@@ -308,7 +470,7 @@ onUnmounted(() => {
               Warnings
             </p>
             <p class="mt-1 text-2xl font-semibold leading-none tabular-nums">
-              {{ props.totalWarnings }}
+              {{ historyState.totalWarnings }}
             </p>
           </div>
         </div>
@@ -322,16 +484,16 @@ onUnmounted(() => {
             Day selector
           </CardTitle>
           <p class="text-xs text-muted-foreground">
-            Range: {{ props.daySelector.window_start }} -> {{ props.daySelector.window_end }}
+            Range: {{ historyState.daySelector.window_start }} -> {{ historyState.daySelector.window_end }}
           </p>
         </div>
       </CardHeader>
-      <CardContent class="p-5 pt-4 sm:p-6 sm:pt-4">
+      <CardContent class="p-5 pt-4 sm:p-6 sm:pt-4" :class="isLoading && 'pointer-events-none opacity-70'">
         <div class="mb-4 max-w-xs">
           <DatePicker
             v-model="pickerDate"
-            :min="props.daySelector.min_date"
-            :max="props.daySelector.max_date"
+            :min="historyState.daySelector.min_date"
+            :max="historyState.daySelector.max_date"
             placeholder="Selecteaza anchor day"
             class="h-10"
             @change="applyAnchorDate"
@@ -339,11 +501,13 @@ onUnmounted(() => {
         </div>
 
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
-          <a
+          <button
             v-for="day in dayWindowItems"
             :key="day.date"
-            :href="dayHref(day.date)"
+            type="button"
             :class="dayButtonClass(day)"
+            :disabled="isLoading"
+            @click="selectDay(day.date)"
           >
             <span class="text-[11px] uppercase tracking-[0.14em] opacity-85">
               {{ day.day_short }}
@@ -354,7 +518,7 @@ onUnmounted(() => {
             <span class="text-[11px] opacity-70">
               {{ day.is_today ? 'Today' : day.date }}
             </span>
-          </a>
+          </button>
         </div>
       </CardContent>
     </Card>
@@ -367,17 +531,24 @@ onUnmounted(() => {
               <CardTitle class="text-base">
                 Hourly load map
               </CardTitle>
-              <p class="text-xs text-muted-foreground">
-                {{ pagedStartIndex }}-{{ pagedEndIndex }} / {{ hourlyLoad.length }}
-              </p>
+              <div class="text-right">
+                <p class="text-xs text-muted-foreground">
+                  {{ pagedStartIndex }}-{{ pagedEndIndex }} / {{ hourlyLoad.length }}
+                </p>
+                <p class="text-[11px] text-muted-foreground/80">
+                  Click an hour for minute and second detail
+                </p>
+              </div>
             </div>
           </CardHeader>
           <CardContent class="space-y-4 p-5 pt-4 sm:p-6 sm:pt-4">
             <div class="grid gap-3 sm:grid-cols-2">
-              <div
+              <button
                 v-for="hour in pagedHourly"
                 :key="hour.hour"
-                class="rounded-2xl border border-border/40 bg-background p-4"
+                type="button"
+                class="rounded-2xl border border-border/40 bg-background p-4 text-left transition-colors hover:border-primary/40 hover:bg-muted/30 focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:outline-none"
+                @click="openHourDetails(hour)"
               >
                 <div class="flex items-center justify-between gap-2">
                   <p class="font-semibold tabular-nums">
@@ -385,13 +556,13 @@ onUnmounted(() => {
                   </p>
                   <Badge
                     variant="outline"
-                    :class="hourlyState(hour) === 'overload'
+                    :class="loadState(hour) === 'overload'
                       ? 'border-red-500/40 text-red-300'
-                      : hourlyState(hour) === 'high'
+                      : loadState(hour) === 'high'
                         ? 'border-amber-500/40 text-amber-300'
                         : 'border-border text-muted-foreground'"
                   >
-                    {{ hourlyState(hour) }}
+                    {{ loadState(hour) }}
                   </Badge>
                 </div>
                 <p class="mt-1.5 text-xl font-semibold leading-none tabular-nums">
@@ -400,7 +571,10 @@ onUnmounted(() => {
                 <p class="mt-1 text-xs text-muted-foreground">
                   Avg {{ fmt(hour.avg_power_w, 1) }} W · Peak {{ fmt(hour.peak_power_w, 1) }} W
                 </p>
-              </div>
+                <p class="mt-3 text-xs font-medium text-primary">
+                  Open details
+                </p>
+              </button>
             </div>
 
             <Pagination
@@ -488,7 +662,7 @@ onUnmounted(() => {
                 Average voltage
               </p>
               <p class="mt-1 text-lg font-semibold leading-none tabular-nums">
-                {{ fmt(props.selectedDay.avg_voltage, 1) }} V
+                {{ fmt(historyState.selectedDay.avg_voltage, 1) }} V
               </p>
             </div>
             <div class="rounded-2xl border border-border/40 bg-background p-4">
@@ -496,7 +670,7 @@ onUnmounted(() => {
                 Active hours
               </p>
               <p class="mt-1 text-lg font-semibold leading-none tabular-nums">
-                {{ props.activeHours }}
+                {{ historyState.activeHours }}
               </p>
             </div>
             <div class="rounded-2xl border border-border/40 bg-background p-4">
@@ -522,10 +696,10 @@ onUnmounted(() => {
               Dominant socket
             </p>
             <p class="mt-1 text-sm font-semibold">
-              {{ props.topSocket?.name ?? 'Unavailable' }}
+              {{ historyState.topSocket?.name ?? 'Unavailable' }}
             </p>
             <p class="mt-1 text-xs text-muted-foreground">
-              {{ fmt(props.topSocket?.energy_kwh ?? 0, 4) }} kWh · {{ props.topSocket?.percentage ?? 0 }}%
+              {{ fmt(historyState.topSocket?.energy_kwh ?? 0, 4) }} kWh · {{ historyState.topSocket?.percentage ?? 0 }}%
             </p>
           </div>
 
@@ -558,5 +732,243 @@ onUnmounted(() => {
       </Card>
     </div>
 
+    <Dialog v-model:open="detailOpen">
+      <DialogContent class="max-h-[82vh] overflow-y-auto p-5 sm:max-w-[720px] sm:p-5">
+        <DialogHeader class="pr-8">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <DialogTitle>
+                {{
+                  selectedMinute
+                    ? `Second-by-second view for ${selectedMinute.minute}`
+                    : `Minute-by-minute view for ${selectedHour?.hour ?? '--:--'}`
+                }}
+              </DialogTitle>
+              <DialogDescription>
+                {{
+                  selectedMinute
+                    ? 'Recorded second-level samples inside the selected minute.'
+                    : 'Choose a minute slot to drill down to seconds.'
+                }}
+              </DialogDescription>
+            </div>
+            <Button
+              v-if="selectedMinute"
+              variant="outline"
+              size="sm"
+              class="gap-1.5"
+              @click="goBackToMinutes"
+            >
+              <ChevronLeft class="size-4" />
+              Back
+            </Button>
+          </div>
+        </DialogHeader>
+
+        <div
+          v-if="selectedHour"
+          class="space-y-4"
+        >
+          <div class="grid gap-2 sm:grid-cols-3">
+            <div class="rounded-2xl border border-border/40 bg-background p-3">
+              <p class="text-xs text-muted-foreground">
+                {{ selectedMinute ? 'Selected minute' : 'Selected hour' }}
+              </p>
+              <p class="mt-1 text-base font-semibold tabular-nums">
+                {{ selectedMinute?.minute ?? selectedHour.hour }}
+              </p>
+            </div>
+            <div class="rounded-2xl border border-border/40 bg-background p-3">
+              <p class="text-xs text-muted-foreground">
+                Energy
+              </p>
+              <p class="mt-1 text-base font-semibold tabular-nums">
+                {{ fmtEnergy(selectedMinute?.energy_kwh ?? selectedHour.energy_kwh) }}
+              </p>
+            </div>
+            <div class="rounded-2xl border border-border/40 bg-background p-3">
+              <p class="text-xs text-muted-foreground">
+                Avg / Peak
+              </p>
+              <p class="mt-1 text-base font-semibold tabular-nums">
+                {{ fmt(selectedMinute?.avg_power_w ?? selectedHour.avg_power_w, 1) }} / {{ fmt(selectedMinute?.peak_power_w ?? selectedHour.peak_power_w, 1) }} W
+              </p>
+            </div>
+          </div>
+
+          <template v-if="!selectedMinute">
+            <div class="flex items-center justify-between gap-2">
+              <p class="text-sm font-medium">
+                Minute breakdown
+              </p>
+              <p class="text-xs text-muted-foreground">
+                {{ minutePagedStartIndex }}-{{ minutePagedEndIndex }} / {{ selectedHourMinutes.length }}
+              </p>
+            </div>
+
+            <div class="grid gap-2 sm:grid-cols-2">
+              <button
+                v-for="minute in pagedMinutes"
+                :key="minute.minute"
+                type="button"
+                class="rounded-2xl border border-border/40 bg-background p-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/30 focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:outline-none"
+                @click="openMinuteDetails(minute)"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <p class="font-semibold tabular-nums">
+                    {{ minute.minute }}
+                  </p>
+                  <Badge
+                    variant="outline"
+                    :class="loadState(minute) === 'overload'
+                      ? 'border-red-500/40 text-red-300'
+                      : loadState(minute) === 'high'
+                        ? 'border-amber-500/40 text-amber-300'
+                        : 'border-border text-muted-foreground'"
+                  >
+                    {{ loadState(minute) }}
+                  </Badge>
+                </div>
+                <p class="mt-1 text-base font-semibold leading-none tabular-nums">
+                  {{ fmtEnergy(minute.energy_kwh) }}
+                </p>
+                <p class="mt-1 text-[11px] text-muted-foreground">
+                  Avg {{ fmt(minute.avg_power_w, 1) }} W · Peak {{ fmt(minute.peak_power_w, 1) }} W
+                </p>
+                <p class="mt-2 text-xs font-medium text-primary">
+                  {{ minute.seconds?.length ?? 0 }} second samples
+                </p>
+              </button>
+            </div>
+
+            <Pagination
+              v-if="selectedHourMinutes.length > DETAIL_PER_PAGE"
+              v-model:page="minutePage"
+              :items-per-page="DETAIL_PER_PAGE"
+              :total="selectedHourMinutes.length"
+              :sibling-count="1"
+              show-edges
+            >
+              <PaginationContent v-slot="{ items }" class="justify-center">
+                <PaginationFirst />
+                <PaginationPrevious />
+
+                <template
+                  v-for="(item, index) in items"
+                  :key="`minute-page-${index}`"
+                >
+                  <PaginationItem
+                    v-if="item.type === 'page'"
+                    :value="item.value"
+                    :is-active="item.value === minutePage"
+                  >
+                    {{ item.value }}
+                  </PaginationItem>
+                  <PaginationEllipsis
+                    v-else
+                    :index="index"
+                  />
+                </template>
+
+                <PaginationNext />
+                <PaginationLast />
+              </PaginationContent>
+            </Pagination>
+          </template>
+
+          <template v-else>
+            <div class="flex items-center justify-between gap-2">
+              <p class="text-sm font-medium">
+                Second breakdown
+              </p>
+              <p class="text-xs text-muted-foreground">
+                {{ secondPagedStartIndex }}-{{ secondPagedEndIndex }} / {{ selectedMinuteSeconds.length }}
+              </p>
+            </div>
+
+            <div
+              v-if="selectedMinuteSeconds.length"
+              class="grid gap-2 sm:grid-cols-2"
+            >
+              <div
+                v-for="second in pagedSeconds"
+                :key="second.second"
+                class="rounded-2xl border border-border/40 bg-background p-3"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <p class="font-semibold tabular-nums">
+                    {{ second.second }}
+                  </p>
+                  <Badge
+                    variant="outline"
+                    :class="loadState(second) === 'overload'
+                      ? 'border-red-500/40 text-red-300'
+                      : loadState(second) === 'high'
+                        ? 'border-amber-500/40 text-amber-300'
+                        : 'border-border text-muted-foreground'"
+                  >
+                    {{ loadState(second) }}
+                  </Badge>
+                </div>
+                <p class="mt-1 text-base font-semibold leading-none tabular-nums">
+                  {{ fmtEnergy(second.energy_kwh) }}
+                </p>
+                <p class="mt-1 text-[11px] text-muted-foreground">
+                  Avg {{ fmt(second.avg_power_w, 1) }} W · Peak {{ fmt(second.peak_power_w, 1) }} W
+                </p>
+              </div>
+            </div>
+            <p
+              v-else
+              class="rounded-2xl border border-dashed border-border/50 bg-background p-4 text-sm text-muted-foreground"
+            >
+              No second-level samples were recorded for this minute.
+            </p>
+
+            <Pagination
+              v-if="selectedMinuteSeconds.length > DETAIL_PER_PAGE"
+              v-model:page="secondPage"
+              :items-per-page="DETAIL_PER_PAGE"
+              :total="selectedMinuteSeconds.length"
+              :sibling-count="1"
+              show-edges
+            >
+              <PaginationContent v-slot="{ items }" class="justify-center">
+                <PaginationFirst />
+                <PaginationPrevious />
+
+                <template
+                  v-for="(item, index) in items"
+                  :key="`second-page-${index}`"
+                >
+                  <PaginationItem
+                    v-if="item.type === 'page'"
+                    :value="item.value"
+                    :is-active="item.value === secondPage"
+                  >
+                    {{ item.value }}
+                  </PaginationItem>
+                  <PaginationEllipsis
+                    v-else
+                    :index="index"
+                  />
+                </template>
+
+                <PaginationNext />
+                <PaginationLast />
+              </PaginationContent>
+            </Pagination>
+          </template>
+        </div>
+
+        <DialogFooter>
+          <DialogClose as-child>
+            <Button variant="outline">
+              Close
+            </Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>
