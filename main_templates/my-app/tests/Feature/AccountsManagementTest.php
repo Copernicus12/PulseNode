@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class AccountsManagementTest extends TestCase
@@ -76,5 +77,56 @@ class AccountsManagementTest extends TestCase
             'id' => $guest->id,
             'is_blocked' => true,
         ]);
+    }
+
+    public function test_admin_can_update_their_profile_from_accounts(): void
+    {
+        $admin = User::factory()->admin()->create([
+            'email_verified_at' => now(),
+        ]);
+
+        $this->actingAs($admin);
+
+        $response = $this->patch(route('accounts.profile.update'), [
+            'name' => 'Updated Admin',
+            'email' => 'updated-admin@example.com',
+        ]);
+
+        $response->assertRedirect(route('accounts.index'));
+
+        $admin->refresh();
+
+        $this->assertSame('Updated Admin', $admin->name);
+        $this->assertSame('updated-admin@example.com', $admin->email);
+        $this->assertNull($admin->email_verified_at);
+    }
+
+    public function test_admin_can_update_their_password_from_accounts(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin);
+
+        $response = $this->put(route('accounts.password.update'), [
+            'current_password' => 'password',
+            'password' => 'VeryStrongPass123!',
+            'password_confirmation' => 'VeryStrongPass123!',
+        ]);
+
+        $response->assertRedirect(route('accounts.index'));
+
+        $this->assertTrue(Hash::check('VeryStrongPass123!', $admin->fresh()->password));
+    }
+
+    public function test_admin_keeps_settings_landing_but_is_redirected_from_legacy_account_settings_pages(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin);
+
+        $this->get('/settings')->assertRedirect(route('electricity-billing.edit'));
+        $this->get(route('profile.edit'))->assertRedirect(route('accounts.index'));
+        $this->get(route('user-password.edit'))->assertRedirect(route('accounts.index'));
+        $this->get(route('two-factor.show'))->assertRedirect(route('accounts.index'));
     }
 }

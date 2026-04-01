@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Settings\PasswordUpdateRequest;
+use App\Http\Requests\Settings\ProfileUpdateRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -171,6 +173,33 @@ class AccountsController extends Controller
         return redirect()
             ->route('accounts.index')
             ->with('accounts_success', 'Account deleted successfully.');
+    }
+
+    public function updateCurrentProfile(ProfileUpdateRequest $request): RedirectResponse
+    {
+        $user = $request->user();
+        $user->fill($request->validated());
+
+        if ($user->isDirty('email')) {
+            $user->email_verified_at = null;
+        }
+
+        $user->save();
+
+        return redirect()
+            ->route('accounts.index')
+            ->with('accounts_success', 'Your profile was updated successfully.');
+    }
+
+    public function updateCurrentPassword(PasswordUpdateRequest $request): RedirectResponse
+    {
+        $request->user()->update([
+            'password' => $request->password,
+        ]);
+
+        return redirect()
+            ->route('accounts.index')
+            ->with('accounts_success', 'Your password was updated successfully.');
     }
 
     private function guestExpiryFromInput(string $role, ?int $durationHours): \DateTimeInterface|null|RedirectResponse

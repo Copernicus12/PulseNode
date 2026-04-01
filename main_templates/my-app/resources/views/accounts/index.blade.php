@@ -19,9 +19,25 @@
             'error' => session('accounts_error'),
             'validation' => $errors->first(),
         ],
+        'validationErrors' => $errors->getMessages(),
         'routes' => [
             'store' => route('accounts.store'),
+            'profile_update' => route('accounts.profile.update'),
+            'password_update' => route('accounts.password.update'),
         ],
+        'currentUser' => $authUser ? [
+            'name' => $authUser->name,
+            'email' => $authUser->email,
+            'email_verified_at' => $authUser->email_verified_at?->toIso8601String(),
+            'must_verify_email' => $authUser instanceof \Illuminate\Contracts\Auth\MustVerifyEmail,
+            'two_factor_enabled' => method_exists($authUser, 'hasEnabledTwoFactorAuthentication')
+                ? $authUser->hasEnabledTwoFactorAuthentication()
+                : false,
+            'requires_two_factor_confirmation' => \Laravel\Fortify\Features::optionEnabled(
+                \Laravel\Fortify\Features::twoFactorAuthentication(),
+                'confirmPassword',
+            ),
+        ] : null,
         'users' => collect($users ?? [])->map(fn ($user) => [
             'id' => (string) $user->getKey(),
             'name' => $user->name,

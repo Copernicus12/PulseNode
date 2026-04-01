@@ -24,6 +24,10 @@ Route::get('dashboard', DashboardController::class)
 Route::prefix('accounts')->middleware(['auth', 'admin'])->name('accounts.')->group(function (): void {
     Route::get('/', [AccountsController::class, 'index'])->name('index');
     Route::post('/', [AccountsController::class, 'store'])->name('store');
+    Route::patch('profile', [AccountsController::class, 'updateCurrentProfile'])->name('profile.update');
+    Route::put('password', [AccountsController::class, 'updateCurrentPassword'])
+        ->middleware('throttle:6,1')
+        ->name('password.update');
     Route::patch('{user}', [AccountsController::class, 'update'])->name('update');
     Route::post('{user}/toggle-block', [AccountsController::class, 'toggleBlock'])->name('toggle-block');
     Route::delete('{user}', [AccountsController::class, 'destroy'])->name('destroy');

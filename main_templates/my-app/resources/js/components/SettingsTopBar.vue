@@ -123,30 +123,42 @@ const baseSearchResults = computed<SearchResult[]>(() => {
             kind: 'href',
             href: toUrl(notificationsIndex()),
         },
-        {
-            label: 'Go Settings',
-            keywords: 'go settings profile password appearance two factor',
-            kind: 'href',
-            href: toUrl(editProfile()),
-        },
-        {
-            label: 'Settings: Profile',
-            keywords: 'settings profile account',
-            kind: 'href',
-            href: toUrl(editProfile()),
-        },
-        {
-            label: 'Settings: Password',
-            keywords: 'settings password security',
-            kind: 'href',
-            href: toUrl(editPassword()),
-        },
-        {
-            label: 'Settings: Two-Factor Auth',
-            keywords: 'settings two factor auth 2fa security',
-            kind: 'href',
-            href: toUrl(twoFactorShow()),
-        },
+        ...(user.value?.role === 'admin'
+            ? [
+                  {
+                      label: 'Go Settings',
+                      keywords: 'go settings appearance electricity billing',
+                      kind: 'href' as const,
+                      href: '/settings',
+                  },
+              ]
+            : [
+                  {
+                      label: 'Go Settings',
+                      keywords:
+                          'go settings profile password appearance two factor',
+                      kind: 'href' as const,
+                      href: '/settings',
+                  },
+                  {
+                      label: 'Settings: Profile',
+                      keywords: 'settings profile account',
+                      kind: 'href' as const,
+                      href: toUrl(editProfile()),
+                  },
+                  {
+                      label: 'Settings: Password',
+                      keywords: 'settings password security',
+                      kind: 'href' as const,
+                      href: toUrl(editPassword()),
+                  },
+                  {
+                      label: 'Settings: Two-Factor Auth',
+                      keywords: 'settings two factor auth 2fa security',
+                      kind: 'href' as const,
+                      href: toUrl(twoFactorShow()),
+                  },
+              ]),
         {
             label: 'Settings: Appearance',
             keywords: 'settings appearance theme',

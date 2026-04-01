@@ -11,7 +11,7 @@ trait ProfileValidationRules
      *
      * @return array<string, array<int, \Illuminate\Contracts\Validation\Rule|array<mixed>|string>>
      */
-    protected function profileRules(?int $userId = null): array
+    protected function profileRules(mixed $userId = null): array
     {
         return [
             'name' => $this->nameRules(),
@@ -34,7 +34,7 @@ trait ProfileValidationRules
      *
      * @return array<int, \Illuminate\Contracts\Validation\Rule|array<mixed>|string>
      */
-    protected function emailRules(?int $userId = null): array
+    protected function emailRules(mixed $userId = null): array
     {
         $authModel = config('auth.providers.users.model', \App\Models\User::class);
 

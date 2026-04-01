@@ -18,6 +18,18 @@
         @stack('head')
     </head>
     <body class="font-sans antialiased">
+        @php
+            $settingsNavOpen = request()->routeIs(
+                'settings.index',
+                'appearance.*',
+                'electricity-billing.*',
+                'profile.*',
+                'user-password.*',
+                'two-factor.*',
+            );
+            $billingSettingsActive = request()->routeIs('settings.index', 'electricity-billing.*');
+            $appearanceSettingsActive = request()->routeIs('appearance.*');
+        @endphp
         <div class="min-h-screen bg-background text-foreground">
 
             {{-- Mobile sheet --}}
@@ -38,10 +50,27 @@
                         @include('layouts._sidebar-links')
                     </nav>
                     <div class="mt-4 space-y-1.5 border-t border-border/20 pt-4">
-                        <a href="{{ route('profile.edit') }}" class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-muted-foreground transition hover:bg-muted/50 hover:text-foreground">
-                            <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                            Settings
-                        </a>
+                        <details @if($settingsNavOpen) open @endif class="group rounded-2xl {{ $settingsNavOpen ? 'bg-primary/8 ring-1 ring-primary/20' : '' }}">
+                            <summary class="flex cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-3 text-sm transition [&::-webkit-details-marker]:hidden {{ $settingsNavOpen ? 'font-semibold text-primary' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
+                                <svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                                <span class="flex-1">Settings</span>
+                                <svg class="h-4 w-4 transition group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                            </summary>
+                            <div class="space-y-1 px-2 pb-2">
+                                <a href="{{ route('electricity-billing.edit') }}"
+                                   data-search-link="1"
+                                   data-search-label="settings billing electricity bill"
+                                   class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $billingSettingsActive ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
+                                    Billing settings
+                                </a>
+                                <a href="{{ route('appearance.edit') }}"
+                                   data-search-link="1"
+                                   data-search-label="settings appearance theme dark light"
+                                   class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $appearanceSettingsActive ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
+                                    Appearance
+                                </a>
+                            </div>
+                        </details>
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf
                             <button type="submit" class="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm text-muted-foreground transition hover:bg-muted/50 hover:text-foreground">
@@ -65,10 +94,27 @@
                             @include('layouts._sidebar-links')
                         </nav>
                         <div class="mt-4 space-y-1.5 border-t border-border/20 pt-4">
-                            <a href="{{ route('profile.edit') }}" class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-muted-foreground transition hover:bg-muted/50 hover:text-foreground">
-                                <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                                Settings
-                            </a>
+                            <details @if($settingsNavOpen) open @endif class="group rounded-2xl {{ $settingsNavOpen ? 'bg-primary/8 ring-1 ring-primary/20' : '' }}">
+                                <summary class="flex cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-3 text-sm transition [&::-webkit-details-marker]:hidden {{ $settingsNavOpen ? 'font-semibold text-primary' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
+                                    <svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                                    <span class="flex-1">Settings</span>
+                                    <svg class="h-4 w-4 transition group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                                </summary>
+                                <div class="space-y-1 px-2 pb-2">
+                                    <a href="{{ route('electricity-billing.edit') }}"
+                                       data-search-link="1"
+                                       data-search-label="settings billing electricity bill"
+                                       class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $billingSettingsActive ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
+                                        Billing settings
+                                    </a>
+                                    <a href="{{ route('appearance.edit') }}"
+                                       data-search-link="1"
+                                       data-search-label="settings appearance theme dark light"
+                                       class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $appearanceSettingsActive ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
+                                        Appearance
+                                    </a>
+                                </div>
+                            </details>
                             <form method="POST" action="{{ route('logout') }}">
                                 @csrf
                                 <button type="submit" class="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm text-muted-foreground transition hover:bg-muted/50 hover:text-foreground">

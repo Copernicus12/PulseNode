@@ -2,7 +2,6 @@
 
 namespace App\Http\Middleware;
 
-use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -39,7 +38,7 @@ class HandleInertiaRequests extends Middleware
         $user = $request->user();
         $accountsSummary = null;
 
-        if ($user instanceof User && $user->isAdmin()) {
+        if ($user !== null && method_exists($user, 'isAdmin') && $user->isAdmin()) {
             $authModel = get_class($user);
             $accountsSummary = [
                 'total' => $authModel::query()->count(),

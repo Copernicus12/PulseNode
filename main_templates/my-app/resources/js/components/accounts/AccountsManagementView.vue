@@ -1,7 +1,16 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    reactive,
+    ref,
+    watch,
+} from 'vue';
 import { Ban, Clock3, Mail, ShieldCheck, UserPlus } from 'lucide-vue-next';
 import { toast } from 'vue-sonner';
+import CurrentAccountSettingsPanel from '@/components/accounts/CurrentAccountSettingsPanel.vue';
 import { useInitials } from '@/composables/useInitials';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -61,14 +70,27 @@ type ManagedUser = {
     destroy_url: string;
 };
 
+type CurrentUser = {
+    name: string;
+    email: string;
+    email_verified_at?: string | null;
+    must_verify_email: boolean;
+    two_factor_enabled: boolean;
+    requires_two_factor_confirmation: boolean;
+};
+
 type AccountsPageProps = {
     summary: Summary;
     roles: string[];
     csrfToken: string;
     flash: Flash;
+    validationErrors: Record<string, string[]>;
+    currentUser: CurrentUser | null;
     users: ManagedUser[];
     routes: {
         store: string;
+        profile_update: string;
+        password_update: string;
     };
 };
 
@@ -80,6 +102,8 @@ const state = reactive<AccountsPageProps>({
     roles: [...props.roles],
     csrfToken: props.csrfToken,
     flash: { ...props.flash },
+    validationErrors: { ...props.validationErrors },
+    currentUser: props.currentUser ? { ...props.currentUser } : null,
     users: props.users.map((user) => ({ ...user })),
     routes: { ...props.routes },
 });
@@ -87,6 +111,15 @@ const state = reactive<AccountsPageProps>({
 const createDialogOpen = ref(false);
 const selectedUserId = ref<string | null>(state.users[0]?.id ?? null);
 const isSubmitting = ref(false);
+const accountsNavViewport = ref<HTMLElement | null>(null);
+const accountsScrollbarActive = ref(false);
+const accountsScrollbar = reactive({
+    visible: false,
+    thumbHeight: '0px',
+    thumbOffset: '0px',
+});
+let accountsScrollbarHideTimeout: ReturnType<typeof window.setTimeout> | null =
+    null;
 
 const newAccount = reactive({
     role: state.roles.includes('moderator')
@@ -295,6 +328,8 @@ function syncState(next: AccountsPageProps): void {
     state.roles = [...next.roles];
     state.csrfToken = next.csrfToken;
     state.flash = { ...next.flash };
+    state.validationErrors = { ...next.validationErrors };
+    state.currentUser = next.currentUser ? { ...next.currentUser } : null;
     state.users = next.users.map((user) => ({ ...user }));
     state.routes = { ...next.routes };
 
@@ -318,14 +353,91 @@ function syncState(next: AccountsPageProps): void {
             },
         }),
     );
+
+    queueAccountsScrollbarSync();
+}
+
+function syncAccountsScrollbar(): void {
+    const viewport = accountsNavViewport.value;
+
+    if (!viewport) {
+        accountsScrollbar.visible = false;
+        accountsScrollbarActive.value = false;
+        return;
+    }
+
+    const { clientHeight, scrollHeight, scrollTop } = viewport;
+    const hasOverflow = scrollHeight - clientHeight > 1;
+
+    accountsScrollbar.visible = hasOverflow;
+
+    if (!hasOverflow) {
+        accountsScrollbar.thumbHeight = '0px';
+        accountsScrollbar.thumbOffset = '0px';
+        accountsScrollbarActive.value = false;
+        return;
+    }
+
+    const thumbHeight = Math.max(40, (clientHeight / scrollHeight) * clientHeight);
+    const maxScrollTop = Math.max(scrollHeight - clientHeight, 1);
+    const maxThumbOffset = Math.max(clientHeight - thumbHeight, 0);
+    const thumbOffset = (scrollTop / maxScrollTop) * maxThumbOffset;
+
+    accountsScrollbar.thumbHeight = `${thumbHeight}px`;
+    accountsScrollbar.thumbOffset = `${thumbOffset}px`;
+}
+
+function clearAccountsScrollbarHideTimeout(): void {
+    if (accountsScrollbarHideTimeout === null) return;
+
+    window.clearTimeout(accountsScrollbarHideTimeout);
+    accountsScrollbarHideTimeout = null;
+}
+
+function scheduleAccountsScrollbarHide(delay = 520): void {
+    if (typeof window === 'undefined') return;
+
+    clearAccountsScrollbarHideTimeout();
+    accountsScrollbarHideTimeout = window.setTimeout(() => {
+        accountsScrollbarActive.value = false;
+    }, delay);
+}
+
+function showAccountsScrollbar(): void {
+    if (!accountsScrollbar.visible) return;
+
+    accountsScrollbarActive.value = true;
+    clearAccountsScrollbarHideTimeout();
+}
+
+function queueAccountsScrollbarSync(): void {
+    if (typeof window === 'undefined') return;
+
+    window.requestAnimationFrame(() => {
+        syncAccountsScrollbar();
+    });
+}
+
+function handleAccountsNavScroll(): void {
+    syncAccountsScrollbar();
+    showAccountsScrollbar();
+    scheduleAccountsScrollbarHide(650);
+}
+
+function handleAccountsNavPointerEnter(): void {
+    showAccountsScrollbar();
+}
+
+function handleAccountsNavPointerLeave(): void {
+    scheduleAccountsScrollbarHide(180);
 }
 
 async function submitRequest(
     url: string,
     formData: FormData,
     options: { closeCreateDialog?: boolean } = {},
-): Promise<void> {
-    if (isSubmitting.value) return;
+): Promise<boolean> {
+    if (isSubmitting.value) return false;
 
     isSubmitting.value = true;
 
@@ -345,17 +457,26 @@ async function submitRequest(
 
         syncState(payload);
 
-        if (options.closeCreateDialog && payload.flash.success) {
+        const succeeded =
+            !payload.flash.error &&
+            !payload.flash.validation &&
+            !Object.values(payload.validationErrors ?? {}).some(
+                (messages) => messages.length > 0,
+            );
+
+        if (options.closeCreateDialog && succeeded) {
             createDialogOpen.value = false;
         }
 
         showFlashToast();
+        return succeeded;
     } catch (error) {
         console.error('Accounts request failed', error);
         toast.error('Unable to update accounts right now.', {
             id: 'accounts-feedback',
             description: 'Please try again in a moment.',
         });
+        return false;
     } finally {
         isSubmitting.value = false;
     }
@@ -402,6 +523,24 @@ async function submitDestroy(user: ManagedUser): Promise<void> {
 }
 
 showFlashToast();
+
+onMounted(() => {
+    queueAccountsScrollbarSync();
+    window.addEventListener('resize', queueAccountsScrollbarSync);
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('resize', queueAccountsScrollbarSync);
+    clearAccountsScrollbarHideTimeout();
+});
+
+watch(
+    () => state.users.length,
+    async () => {
+        await nextTick();
+        syncAccountsScrollbar();
+    },
+);
 </script>
 
 <template>
@@ -595,7 +734,7 @@ showFlashToast();
         </Card>
 
         <div class="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-            <Card class="border-border/40 shadow-none">
+            <Card class="border-border/40 shadow-none xl:sticky xl:top-4 xl:self-start">
                 <CardHeader class="gap-2 p-4">
                     <CardTitle class="text-sm font-semibold">
                         Account navigation
@@ -606,79 +745,105 @@ showFlashToast();
                 </CardHeader>
 
                 <CardContent class="p-4 pt-0">
-                    <nav
-                        class="max-h-[32rem] space-y-2 overflow-y-auto pr-1 xl:max-h-[calc(100vh-16rem)]"
-                        aria-label="Accounts"
+                    <div
+                        class="group relative"
+                        @mouseenter="handleAccountsNavPointerEnter"
+                        @mouseleave="handleAccountsNavPointerLeave"
                     >
-                        <button
-                            v-for="user in state.users"
-                            :key="user.id"
-                            type="button"
-                            class="w-full rounded-2xl border p-3 text-left transition"
-                            :class="
-                                selectedUser?.id === user.id
-                                    ? 'border-primary/30 bg-primary/10'
-                                    : 'border-border/30 bg-background/50 hover:bg-muted/40'
-                            "
-                            @click="selectedUserId = user.id"
+                        <nav
+                            ref="accountsNavViewport"
+                            class="pulsenode-scrollbar h-[17rem] space-y-2 overflow-y-auto overscroll-contain pr-4 sm:h-[18.5rem] xl:h-[26rem]"
+                            aria-label="Accounts"
+                            @scroll="handleAccountsNavScroll"
                         >
-                            <div class="flex items-start gap-3">
-                                <Avatar
-                                    class="size-10 border border-border/30 bg-background"
-                                >
-                                    <AvatarFallback
-                                        class="bg-primary/10 text-xs font-semibold text-primary"
+                            <button
+                                v-for="user in state.users"
+                                :key="user.id"
+                                type="button"
+                                class="w-full rounded-2xl border p-3 text-left transition"
+                                :class="
+                                    selectedUser?.id === user.id
+                                        ? 'border-primary/30 bg-primary/10'
+                                        : 'border-border/30 bg-background/50 hover:bg-muted/40'
+                                "
+                                @click="selectedUserId = user.id"
+                            >
+                                <div class="flex items-start gap-3">
+                                    <Avatar
+                                        class="size-10 border border-border/30 bg-background"
                                     >
-                                        {{ getInitials(user.name) }}
-                                    </AvatarFallback>
-                                </Avatar>
+                                        <AvatarFallback
+                                            class="bg-primary/10 text-xs font-semibold text-primary"
+                                        >
+                                            {{ getInitials(user.name) }}
+                                        </AvatarFallback>
+                                    </Avatar>
 
-                                <div class="min-w-0 flex-1">
-                                    <div
-                                        class="flex items-center justify-between gap-2"
-                                    >
+                                    <div class="min-w-0 flex-1">
+                                        <div
+                                            class="flex items-center justify-between gap-2"
+                                        >
+                                            <p
+                                                class="truncate text-sm font-semibold"
+                                            >
+                                                {{ user.name }}
+                                            </p>
+                                            <Badge
+                                                variant="outline"
+                                                class="rounded-full px-2 py-0.5 text-[10px]"
+                                                :class="statusTone(user)"
+                                            >
+                                                {{ accountStatusLabel(user) }}
+                                            </Badge>
+                                        </div>
+
                                         <p
-                                            class="truncate text-sm font-semibold"
+                                            class="mt-1 truncate text-xs text-muted-foreground"
                                         >
-                                            {{ user.name }}
+                                            {{ user.email }}
                                         </p>
-                                        <Badge
-                                            variant="outline"
-                                            class="rounded-full px-2 py-0.5 text-[10px]"
-                                            :class="statusTone(user)"
-                                        >
-                                            {{ accountStatusLabel(user) }}
-                                        </Badge>
-                                    </div>
 
-                                    <p
-                                        class="mt-1 truncate text-xs text-muted-foreground"
-                                    >
-                                        {{ user.email }}
-                                    </p>
-
-                                    <div
-                                        class="mt-2 flex flex-wrap items-center gap-2"
-                                    >
-                                        <Badge
-                                            variant="outline"
-                                            class="rounded-full px-2 py-0.5 text-[10px]"
-                                            :class="roleTone(user.role)"
+                                        <div
+                                            class="mt-2 flex flex-wrap items-center gap-2"
                                         >
-                                            {{ roleLabel(user.role) }}
-                                        </Badge>
-                                        <Badge
-                                            v-if="user.is_self"
-                                            variant="secondary"
-                                            class="rounded-full px-2 py-0.5 text-[10px]"
-                                        >
-                                            You
-                                        </Badge>
+                                            <Badge
+                                                variant="outline"
+                                                class="rounded-full px-2 py-0.5 text-[10px]"
+                                                :class="roleTone(user.role)"
+                                            >
+                                                {{ roleLabel(user.role) }}
+                                            </Badge>
+                                            <Badge
+                                                v-if="user.is_self"
+                                                variant="secondary"
+                                                class="rounded-full px-2 py-0.5 text-[10px]"
+                                            >
+                                                You
+                                            </Badge>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        </button>
-                    </nav>
+                            </button>
+                        </nav>
+
+                        <div
+                            v-if="accountsScrollbar.visible"
+                            class="pointer-events-none absolute inset-y-0 right-1 w-1 rounded-full bg-transparent transition-opacity duration-200"
+                            :class="
+                                accountsScrollbarActive
+                                    ? 'opacity-100'
+                                    : 'opacity-0'
+                            "
+                        >
+                            <div
+                                class="w-full rounded-full bg-muted-foreground/45 transition-transform duration-150"
+                                :style="{
+                                    height: accountsScrollbar.thumbHeight,
+                                    transform: `translateY(${accountsScrollbar.thumbOffset})`,
+                                }"
+                            />
+                        </div>
+                    </div>
                 </CardContent>
             </Card>
 
@@ -978,5 +1143,16 @@ showFlashToast();
                 </template>
             </Card>
         </div>
+
+        <CurrentAccountSettingsPanel
+            v-if="state.currentUser"
+            :current-user="state.currentUser"
+            :validation-errors="state.validationErrors"
+            :csrf-token="state.csrfToken"
+            :is-submitting="isSubmitting"
+            :profile-action="state.routes.profile_update"
+            :password-action="state.routes.password_update"
+            :submit-request="submitRequest"
+        />
     </div>
 </template>

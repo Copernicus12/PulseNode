@@ -1,29 +1,19 @@
 <script setup lang="ts">
 import { Link, router, usePage } from '@inertiajs/vue3';
-import {
-    KeyRound,
-    Palette,
-    ReceiptText,
-    ShieldCheck,
-    UserRound,
-} from 'lucide-vue-next';
 import { computed } from 'vue';
 import { Sidebar, SidebarContent } from '@/components/ui/sidebar';
 import type { SidebarProps } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/composables/useCurrentUrl';
 import { toUrl } from '@/lib/utils';
+import { edit as editAppearance } from '@/routes/appearance';
 import { dashboard } from '@/routes';
 import { index as accountsIndex } from '@/routes/accounts';
-import { edit as editAppearance } from '@/routes/appearance';
 import { index as batteryIndex } from '@/routes/battery';
 import devices from '@/routes/devices';
 import { edit as editElectricityBilling } from '@/routes/electricity-billing';
 import { index as historyIndex } from '@/routes/history';
 import { logout } from '@/routes/index';
 import powerStrip from '@/routes/power-strip';
-import { edit as editProfile } from '@/routes/profile';
-import { show } from '@/routes/two-factor';
-import { edit as editPassword } from '@/routes/user-password';
 import { type NavItem } from '@/types';
 
 withDefaults(
@@ -43,7 +33,8 @@ const user = computed(
         },
 );
 
-const { isCurrentUrl } = useCurrentUrl();
+const { isCurrentUrl, currentUrl } = useCurrentUrl();
+const settingsLandingHref = '/settings';
 
 const devicesNavItems: NavItem[] = [
     {
@@ -68,36 +59,10 @@ const devicesGroupActive = computed(() =>
     devicesNavItems.some((item) => isCurrentUrl(item.href)),
 );
 
-const settingsNavItems: NavItem[] = [
-    {
-        title: 'Profile',
-        href: editProfile(),
-        icon: UserRound,
-    },
-    {
-        title: 'Password',
-        href: editPassword(),
-        icon: KeyRound,
-    },
-    {
-        title: 'Two-Factor Auth',
-        href: show(),
-        icon: ShieldCheck,
-    },
-    {
-        title: 'Appearance',
-        href: editAppearance(),
-        icon: Palette,
-    },
-    {
-        title: 'Electricity Bill',
-        href: editElectricityBilling(),
-        icon: ReceiptText,
-    },
-];
-
-const settingsGroupActive = computed(() =>
-    settingsNavItems.some((item) => isCurrentUrl(item.href)),
+const settingsGroupActive = computed(
+    () =>
+        isCurrentUrl(settingsLandingHref) ||
+        currentUrl.value.startsWith('/settings/'),
 );
 
 const handleLogout = () => {
@@ -314,8 +279,8 @@ const handleLogout = () => {
                 :open="settingsGroupActive"
                 :class="
                     settingsGroupActive
-                        ? 'group relative rounded-2xl bg-primary/8 ring-1 ring-primary/20'
-                        : 'group relative rounded-2xl'
+                        ? 'group rounded-2xl bg-primary/8 ring-1 ring-primary/20'
+                        : 'group rounded-2xl'
                 "
             >
                 <summary
@@ -327,7 +292,7 @@ const handleLogout = () => {
                     class="flex cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-3 text-sm transition [&::-webkit-details-marker]:hidden"
                 >
                     <svg
-                        class="h-[18px] w-[18px]"
+                        class="h-[18px] w-[18px] shrink-0"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
@@ -356,18 +321,26 @@ const handleLogout = () => {
 
                 <div class="space-y-1 px-2 pb-2">
                     <Link
-                        v-for="item in settingsNavItems"
-                        :key="item.title"
-                        :href="item.href"
+                        :href="editElectricityBilling()"
                         :class="
-                            isCurrentUrl(item.href)
+                            isCurrentUrl(editElectricityBilling())
                                 ? 'bg-primary font-medium text-primary-foreground'
                                 : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                         "
-                        class="flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] transition lg:px-3.5 lg:py-2.5"
+                        class="flex items-center rounded-xl px-3 py-2 text-sm transition"
                     >
-                        <component :is="item.icon" class="h-4 w-4 shrink-0" />
-                        <span>{{ item.title }}</span>
+                        Billing settings
+                    </Link>
+                    <Link
+                        :href="editAppearance()"
+                        :class="
+                            isCurrentUrl(editAppearance())
+                                ? 'bg-primary font-medium text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                        "
+                        class="flex items-center rounded-xl px-3 py-2 text-sm transition"
+                    >
+                        Appearance
                     </Link>
                 </div>
             </details>

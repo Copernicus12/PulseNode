@@ -32,6 +32,9 @@ type Props = {
 const { resolvedAppearance } = useAppearance();
 
 const props = defineProps<Props>();
+const emit = defineEmits<{
+    (e: 'confirmed'): void;
+}>();
 const isOpen = defineModel<boolean>('isOpen');
 
 const { copy, copied } = useClipboard();
@@ -240,7 +243,10 @@ watch(
                         v-bind="confirm.form()"
                         reset-on-error
                         @finish="code = ''"
-                        @success="isOpen = false"
+                        @success="
+                            emit('confirmed');
+                            isOpen = false;
+                        "
                         v-slot="{ errors, processing }"
                     >
                         <input type="hidden" name="code" :value="code" />
