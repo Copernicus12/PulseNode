@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AccountsController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Esp32ApiController;
 use App\Http\Controllers\NotificationController;
@@ -20,6 +21,13 @@ Route::get('/', function () {
 
 Route::get('dashboard', DashboardController::class)
     ->middleware(['auth'])->name('dashboard');
+Route::prefix('accounts')->middleware(['auth', 'admin'])->name('accounts.')->group(function (): void {
+    Route::get('/', [AccountsController::class, 'index'])->name('index');
+    Route::post('/', [AccountsController::class, 'store'])->name('store');
+    Route::patch('{user}', [AccountsController::class, 'update'])->name('update');
+    Route::post('{user}/toggle-block', [AccountsController::class, 'toggleBlock'])->name('toggle-block');
+    Route::delete('{user}', [AccountsController::class, 'destroy'])->name('destroy');
+});
 
 Route::get('power-strip', [PowerStripController::class, 'index'])
     ->middleware(['auth'])->name('power-strip.index');

@@ -81,7 +81,25 @@
                 </aside>
 
                 {{-- Main content area --}}
-                @php $isDashboardRoute = request()->routeIs('dashboard'); @endphp
+                @php
+                    $isDashboardRoute = request()->routeIs('dashboard');
+                    $authUser = Auth::user();
+                    $accountAdminSummary = null;
+
+                    if ($authUser?->isAdmin()) {
+                        $accountModel = get_class($authUser);
+                        $accountAdminSummary = [
+                            'total' => $accountModel::query()->count(),
+                            'blocked' => $accountModel::query()->where('is_blocked', true)->count(),
+                            'active_guests' => $accountModel::query()
+                                ->where('role', $accountModel::ROLE_GUEST)
+                                ->where('is_blocked', false)
+                                ->whereNotNull('guest_expires_at')
+                                ->where('guest_expires_at', '>', now())
+                                ->count(),
+                        ];
+                    }
+                @endphp
                 <div class="flex min-h-0 flex-1 flex-col">
                     <header id="app-shell-header" class="grid h-16 shrink-0 grid-cols-[auto_1fr_auto] items-center gap-3 px-2 pb-2 lg:px-4">
                         <div class="flex items-center">
@@ -112,9 +130,48 @@
                                     <span id="live-telemetry-current" class="tabular-nums">0.000A</span>
                                 </div>
                             @endunless
-                            <button title="Users" class="inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground">
-                                <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                            </button>
+                            @if($accountAdminSummary)
+                                <div id="app-accounts-root" class="relative">
+                                    <button id="app-accounts-trigger" title="Accounts" aria-expanded="false" aria-controls="app-accounts-panel" class="inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground">
+                                        <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                        <span id="app-accounts-badge" class="absolute -right-1 -top-1 min-w-[1.15rem] rounded-full bg-red-400 px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-background {{ $accountAdminSummary['blocked'] > 0 ? '' : 'hidden' }}">
+                                            <span id="app-accounts-badge-value">
+                                                {{ $accountAdminSummary['blocked'] }}
+                                            </span>
+                                        </span>
+                                    </button>
+                                    <div id="app-accounts-panel" class="absolute right-0 top-[calc(100%+0.75rem)] z-[95] hidden w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-3xl border border-border/50 bg-card shadow-2xl shadow-black/40 ring-1 ring-border/40">
+                                        <div class="border-b border-border/30 px-4 py-3">
+                                            <div class="flex items-center justify-between gap-3">
+                                                <div>
+                                                    <p class="text-sm font-semibold">Accounts</p>
+                                                    <p class="text-[11px] text-muted-foreground">Manage roles, guest expiry, and blocked users.</p>
+                                                </div>
+                                                <span class="inline-flex rounded-full bg-background px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground ring-1 ring-border/40">Admin</span>
+                                            </div>
+                                        </div>
+                                        <div class="grid gap-2 p-3 sm:grid-cols-3">
+                                            <div class="rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30">
+                                                <p class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Accounts</p>
+                                                <p id="app-accounts-total" class="mt-1 text-lg font-semibold tabular-nums">{{ $accountAdminSummary['total'] }}</p>
+                                            </div>
+                                            <div class="rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30">
+                                                <p class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Guests</p>
+                                                <p id="app-accounts-guests" class="mt-1 text-lg font-semibold tabular-nums">{{ $accountAdminSummary['active_guests'] }}</p>
+                                            </div>
+                                            <div class="rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30">
+                                                <p class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Blocked</p>
+                                                <p id="app-accounts-blocked" class="mt-1 text-lg font-semibold tabular-nums">{{ $accountAdminSummary['blocked'] }}</p>
+                                            </div>
+                                        </div>
+                                        <div class="border-t border-border/30 bg-background/70 px-3 py-3">
+                                            <a href="{{ route('accounts.index') }}" class="inline-flex w-full items-center justify-center rounded-2xl bg-card px-4 py-2.5 text-sm font-medium text-foreground ring-1 ring-border/40 transition hover:bg-muted/40">
+                                                Open account center
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endif
                             <div id="app-notifications-root" class="relative" data-feed-url="{{ route('api.notifications.latest') }}" data-index-url="{{ route('notifications.index') }}">
                                 <button id="relay-command-toast-anchor" title="Notifications" aria-expanded="false" aria-controls="app-notifications-panel" class="inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground">
                                     <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-4-5.65V4a2 2 0 1 0-4 0v1.35A6 6 0 0 0 6 11v3.2a2 2 0 0 1-.6 1.4L4 17h5"/><path d="M9.73 17a2.99 2.99 0 0 0 4.54 0"/></svg>
@@ -255,6 +312,9 @@
                 { label: 'Go Power Strip', keywords: 'go power strip sockets', run: function () { window.location.href = '{{ route('power-strip.index') }}'; } },
                 { label: 'Go Settings', keywords: 'go settings power strip settings', run: function () { window.location.href = '{{ route('power-strip.settings') }}'; } },
                 { label: 'Go Notifications', keywords: 'go notifications inbox alerts', run: function () { window.location.href = '{{ route('notifications.index') }}'; } },
+                @if($accountAdminSummary)
+                { label: 'Go Accounts', keywords: 'go accounts users permissions admin', run: function () { window.location.href = '{{ route('accounts.index') }}'; } },
+                @endif
                 { label: 'Turn all off', keywords: 'turn all off sockets relay', run: function () { toggleAllRelays(false); } },
                 { label: 'Turn all on', keywords: 'turn all on sockets relay', run: function () { toggleAllRelays(true); } },
                 { label: 'Open raw payload', keywords: 'open raw payload json details', run: openRawPayload },
@@ -467,6 +527,74 @@
             });
         })();
         </script>
+        @if($accountAdminSummary)
+        <script>
+        (function () {
+            var root = document.getElementById('app-accounts-root');
+            if (!root) return;
+
+            var button = document.getElementById('app-accounts-trigger');
+            var panel = document.getElementById('app-accounts-panel');
+            var badge = document.getElementById('app-accounts-badge');
+            var badgeValue = document.getElementById('app-accounts-badge-value');
+            var total = document.getElementById('app-accounts-total');
+            var guests = document.getElementById('app-accounts-guests');
+            var blocked = document.getElementById('app-accounts-blocked');
+            if (!button || !panel) return;
+
+            var isOpen = false;
+
+            function setOpen(nextOpen) {
+                isOpen = nextOpen;
+                panel.classList.toggle('hidden', !nextOpen);
+                button.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+            }
+
+            function updateSummary(detail) {
+                if (!detail) return;
+
+                if (total) {
+                    total.textContent = String(detail.total ?? 0);
+                }
+
+                if (guests) {
+                    guests.textContent = String(detail.active_guests ?? 0);
+                }
+
+                if (blocked) {
+                    blocked.textContent = String(detail.blocked ?? 0);
+                }
+
+                if (badge && badgeValue) {
+                    var blockedCount = Number(detail.blocked ?? 0);
+                    badgeValue.textContent = String(blockedCount);
+                    badge.classList.toggle('hidden', blockedCount <= 0);
+                }
+            }
+
+            button.addEventListener('click', function (event) {
+                event.preventDefault();
+                setOpen(!isOpen);
+            });
+
+            document.addEventListener('click', function (event) {
+                if (!root.contains(event.target)) {
+                    setOpen(false);
+                }
+            });
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') {
+                    setOpen(false);
+                }
+            });
+
+            window.addEventListener('pulsenode:accounts-summary', function (event) {
+                updateSummary(event.detail);
+            });
+        })();
+        </script>
+        @endif
         <script>
         (function () {
             var root = document.getElementById('app-notifications-root');

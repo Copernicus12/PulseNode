@@ -5,9 +5,10 @@ import type { AppShellVariant } from '@/types';
 
 type Props = {
     variant?: AppShellVariant;
+    sidebarDefaultOpen?: boolean;
 };
 
-defineProps<Props>();
+const props = defineProps<Props>();
 
 const isOpen = usePage().props.sidebarOpen;
 </script>
@@ -16,7 +17,7 @@ const isOpen = usePage().props.sidebarOpen;
     <div v-if="variant === 'header'" class="flex min-h-screen w-full flex-col">
         <slot />
     </div>
-    <SidebarProvider v-else :default-open="isOpen">
+    <SidebarProvider v-else :default-open="props.sidebarDefaultOpen ?? isOpen">
         <slot />
     </SidebarProvider>
 </template>

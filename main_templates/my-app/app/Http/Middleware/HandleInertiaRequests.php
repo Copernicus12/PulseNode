@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -35,12 +36,30 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $user = $request->user();
+        $accountsSummary = null;
+
+        if ($user instanceof User && $user->isAdmin()) {
+            $authModel = get_class($user);
+            $accountsSummary = [
+                'total' => $authModel::query()->count(),
+                'blocked' => $authModel::query()->where('is_blocked', true)->count(),
+                'active_guests' => $authModel::query()
+                    ->where('role', $authModel::ROLE_GUEST)
+                    ->where('is_blocked', false)
+                    ->whereNotNull('guest_expires_at')
+                    ->where('guest_expires_at', '>', now())
+                    ->count(),
+            ];
+        }
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user,
             ],
+            'accountsSummary' => $accountsSummary,
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }
