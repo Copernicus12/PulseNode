@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { Link, router, usePage } from '@inertiajs/vue3';
-import { KeyRound, Palette, ShieldCheck, UserRound } from 'lucide-vue-next';
+import {
+    KeyRound,
+    Palette,
+    ReceiptText,
+    ShieldCheck,
+    UserRound,
+} from 'lucide-vue-next';
 import { computed } from 'vue';
 import { Sidebar, SidebarContent } from '@/components/ui/sidebar';
 import type { SidebarProps } from '@/components/ui/sidebar';
@@ -11,6 +17,7 @@ import { index as accountsIndex } from '@/routes/accounts';
 import { edit as editAppearance } from '@/routes/appearance';
 import { index as batteryIndex } from '@/routes/battery';
 import devices from '@/routes/devices';
+import { edit as editElectricityBilling } from '@/routes/electricity-billing';
 import { index as historyIndex } from '@/routes/history';
 import { logout } from '@/routes/index';
 import powerStrip from '@/routes/power-strip';
@@ -81,6 +88,11 @@ const settingsNavItems: NavItem[] = [
         title: 'Appearance',
         href: editAppearance(),
         icon: Palette,
+    },
+    {
+        title: 'Electricity Bill',
+        href: editElectricityBilling(),
+        icon: ReceiptText,
     },
 ];
 

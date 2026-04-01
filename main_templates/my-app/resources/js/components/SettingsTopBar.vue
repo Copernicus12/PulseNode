@@ -23,6 +23,7 @@ import { latest as notificationsLatest } from '@/routes/api/notifications';
 import { edit as editAppearance } from '@/routes/appearance';
 import { index as batteryIndex } from '@/routes/battery';
 import devices from '@/routes/devices';
+import { edit as editElectricityBilling } from '@/routes/electricity-billing';
 import { index as historyIndex } from '@/routes/history';
 import { dashboard } from '@/routes/index';
 import { index as notificationsIndex } from '@/routes/notifications';
@@ -151,6 +152,13 @@ const baseSearchResults = computed<SearchResult[]>(() => {
             keywords: 'settings appearance theme',
             kind: 'href',
             href: toUrl(editAppearance()),
+        },
+        {
+            label: 'Settings: Electricity Bill',
+            keywords:
+                'settings electricity bill billing invoice current energy price per wh cost',
+            kind: 'href',
+            href: toUrl(editElectricityBilling()),
         },
         {
             label: 'Go My Devices Overview',

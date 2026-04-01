@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Settings\PasswordController;
 use App\Http\Controllers\Settings\ProfileController;
+use App\Http\Controllers\Settings\ElectricityBillingController;
 use App\Http\Controllers\Settings\TwoFactorAuthenticationController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -28,4 +29,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('settings/two-factor', [TwoFactorAuthenticationController::class, 'show'])
         ->name('two-factor.show');
+
+    Route::get('settings/electricity-billing', [ElectricityBillingController::class, 'edit'])
+        ->name('electricity-billing.edit');
+    Route::patch('settings/electricity-billing', [ElectricityBillingController::class, 'update'])
+        ->name('electricity-billing.update');
+    Route::post('settings/electricity-billing/profiles', [ElectricityBillingController::class, 'storeProfile'])
+        ->name('electricity-billing.profiles.store');
+    Route::delete('settings/electricity-billing/profiles/{profileId}', [ElectricityBillingController::class, 'destroyProfile'])
+        ->name('electricity-billing.profiles.destroy');
 });

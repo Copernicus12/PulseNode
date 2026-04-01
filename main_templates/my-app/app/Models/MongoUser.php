@@ -33,6 +33,10 @@ class MongoUser extends Authenticatable
         'guest_expires_at',
         'is_blocked',
         'blocked_at',
+        'electricity_price_per_wh',
+        'billing_currency',
+        'billing_tax_percent',
+        'billing_monthly_base_fee',
     ];
 
     /**
@@ -61,6 +65,9 @@ class MongoUser extends Authenticatable
             'guest_expires_at' => 'datetime',
             'blocked_at' => 'datetime',
             'is_blocked' => 'boolean',
+            'electricity_price_per_wh' => 'decimal:6',
+            'billing_tax_percent' => 'decimal:2',
+            'billing_monthly_base_fee' => 'decimal:2',
         ];
     }
 
