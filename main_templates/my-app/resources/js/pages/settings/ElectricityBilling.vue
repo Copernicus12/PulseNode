@@ -11,7 +11,6 @@ import {
     Wallet,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
-import Heading from '@/components/Heading.vue';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -239,11 +238,18 @@ function deleteProfile(id: string) {
     <h1 class="sr-only">Electricity Bill Settings</h1>
 
     <SettingsLayout>
-        <div class="space-y-6">
-            <Heading
-                title="Electricity bill settings"
-                description="Configure the tariff used for cost estimates, current bill previews, and future energy spending insights."
-            />
+        <div class="space-y-6 pl-1 lg:pl-3">
+            <header class="relative overflow-hidden rounded-[28px] border border-border/40 bg-gradient-to-r from-primary/12 via-primary/6 to-transparent px-6 py-5 shadow-none">
+                <div class="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-primary/10 to-transparent blur-2xl" />
+                <div class="relative space-y-2">
+                    <h2 class="bg-gradient-to-r from-foreground via-foreground to-primary bg-clip-text text-xl font-semibold tracking-tight text-transparent">
+                        Electricity bill settings
+                    </h2>
+                    <p class="max-w-3xl text-sm text-muted-foreground">
+                        Configure the tariff used for cost estimates, current bill previews, and future energy spending insights.
+                    </p>
+                </div>
+            </header>
 
             <div class="grid gap-4 md:grid-cols-3">
                 <Card class="border-border/40 shadow-none">

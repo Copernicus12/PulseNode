@@ -60,7 +60,7 @@ class NotificationCenter
             'level' => 'info',
             'title' => 'MQTT listener restart requested',
             'message' => 'The background listener restart command was sent.',
-            'action_url' => $this->routePath('power-strip.settings'),
+            'action_url' => $this->routePath('power-strip-diagnostics.edit'),
         ], 30);
     }
 
@@ -71,7 +71,7 @@ class NotificationCenter
             'level' => 'error',
             'title' => 'MQTT listener restart failed',
             'message' => $message,
-            'action_url' => $this->routePath('power-strip.settings'),
+            'action_url' => $this->routePath('power-strip-diagnostics.edit'),
         ], 30);
     }
 

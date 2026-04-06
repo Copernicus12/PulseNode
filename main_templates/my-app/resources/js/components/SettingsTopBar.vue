@@ -166,6 +166,13 @@ const baseSearchResults = computed<SearchResult[]>(() => {
             href: toUrl(editElectricityBilling()),
         },
         {
+            label: 'Settings: Hardware & Diagnostics',
+            keywords:
+                'settings hardware diagnostics power strip payload mqtt esp32 relay pinout raw json',
+            kind: 'href',
+            href: '/settings/power-strip',
+        },
+        {
             label: 'Go Invoice Archive',
             keywords:
                 'go invoice archive invoices bills receipts folders files upload previous months',

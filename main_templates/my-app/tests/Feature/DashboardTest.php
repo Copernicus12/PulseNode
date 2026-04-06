@@ -29,6 +29,8 @@ class DashboardTest extends TestCase
         $response
             ->assertOk()
             ->assertSeeText('Today Cost')
-            ->assertSeeText('Active tariff');
+            ->assertSeeText('Active tariff')
+            ->assertDontSeeText('Hardware specifications')
+            ->assertDontSeeText('JSON Payload');
     }
 }

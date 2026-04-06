@@ -53,8 +53,9 @@ Route::get('battery', [PowerStripController::class, 'battery'])
     ->middleware(['auth'])->name('battery.index');
 Route::get('notifications', [NotificationController::class, 'index'])
     ->middleware(['auth'])->name('notifications.index');
-Route::get('power-strip/settings', [PowerStripController::class, 'settings'])
-    ->middleware(['auth'])->name('power-strip.settings');
+Route::get('power-strip/settings', function () {
+    return redirect()->route('power-strip-diagnostics.edit');
+})->middleware(['auth'])->name('power-strip.settings');
 
 Route::prefix('api')->middleware(['auth'])->group(function (): void {
     Route::get('latest', [Esp32ApiController::class, 'latest'])->name('api.latest');

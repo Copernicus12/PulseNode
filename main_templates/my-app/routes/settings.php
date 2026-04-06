@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Settings\PasswordController;
+use App\Http\Controllers\Settings\PowerStripDiagnosticsController;
 use App\Http\Controllers\Settings\ProfileController;
 use App\Http\Controllers\Settings\ElectricityBillingController;
 use App\Http\Controllers\Settings\TwoFactorAuthenticationController;
@@ -52,6 +53,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('settings/electricity-billing', [ElectricityBillingController::class, 'edit'])
         ->name('electricity-billing.edit');
+    Route::get('settings/power-strip', [PowerStripDiagnosticsController::class, 'edit'])
+        ->name('power-strip-diagnostics.edit');
     Route::get('settings/electricity-billing/archive', [ElectricityBillingController::class, 'archive'])
         ->name('electricity-billing.archive');
     Route::patch('settings/electricity-billing', [ElectricityBillingController::class, 'update'])

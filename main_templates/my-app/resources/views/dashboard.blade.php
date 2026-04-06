@@ -300,35 +300,7 @@
         </div>
     </div>
 
-    {{-- ── Row 3: Device (collapsible) ── --}}
-    <details class="group rounded-3xl bg-card">
-        <summary class="flex cursor-pointer select-none items-center justify-between px-7 py-5 text-sm text-muted-foreground transition hover:text-foreground [&::-webkit-details-marker]:hidden">
-            <span class="font-medium">Device &middot; Hardware specifications</span>
-            <svg class="h-4 w-4 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-        </summary>
-        <div class="border-t border-border/20 px-7 py-6">
-            <div class="space-y-0">
-                @php
-                    $specs = [
-                        ['MCU',      'ESP32-WROOM-32'],
-                        ['Voltage',  'ZMPT101B'],
-                        ['Current',  'ACS712 &times; 3'],
-                        ['Relays',   '3 &times; 230V / 16A'],
-                        ['Protocol', 'MQTT'],
-                        ['Broker',   config('mqtt.host', 'broker.hivemq.com')],
-                    ];
-                @endphp
-                @foreach($specs as [$k, $v])
-                    <div class="flex items-center justify-between border-b border-border/20 py-3 text-sm last:border-0">
-                        <span class="text-muted-foreground">{{ $k }}</span>
-                        <span class="font-medium">{!! $v !!}</span>
-                    </div>
-                @endforeach
-            </div>
-        </div>
-    </details>
-
-    {{-- ── Row 4: Safety alert (only when needed) ── --}}
+    {{-- ── Row 3: Safety alert (only when needed) ── --}}
     @if($safetyLevel !== 'normal')
         <div class="rounded-3xl {{ $safetyLevel === 'overload' ? 'bg-red-500/15 text-red-400' : 'bg-amber-500/15 text-amber-400' }} p-6">
             <div class="flex items-center gap-3">
@@ -340,23 +312,6 @@
             </div>
         </div>
     @endif
-
-    {{-- ── JSON payload (collapsible) ── --}}
-    <details class="group rounded-3xl bg-card">
-        <summary class="flex cursor-pointer select-none items-center justify-between px-7 py-5 text-sm text-muted-foreground transition hover:text-foreground [&::-webkit-details-marker]:hidden">
-            <span class="font-medium">JSON Payload &middot; Raw data</span>
-            <svg class="h-4 w-4 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
-        </summary>
-        <div class="border-t border-border/20 px-7 py-6 space-y-5">
-            <pre class="overflow-x-auto rounded-2xl bg-background p-5 text-[11px] font-mono leading-relaxed text-foreground/70"><code id="dash-raw-json">{{ json_encode($latest, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) }}</code></pre>
-            <div class="grid gap-x-8 gap-y-1.5 text-xs sm:grid-cols-2">
-                <div class="flex justify-between py-1 text-muted-foreground"><span>Data topic</span><span class="font-mono text-[11px]">{{ config('mqtt.topics.data', 'razvy_esp32_2026/data') }}</span></div>
-                <div class="flex justify-between py-1 text-muted-foreground"><span>Command topic</span><span class="font-mono text-[11px]">{{ config('mqtt.topics.cmd', 'razvy_esp32_2026/cmd') }}</span></div>
-                <div class="flex justify-between py-1 text-muted-foreground"><span>Publish interval</span><span>10s</span></div>
-                <div class="flex justify-between py-1 text-muted-foreground"><span>Dashboard poll</span><span>5s</span></div>
-            </div>
-        </div>
-    </details>
 
 </div>
 
@@ -672,8 +627,6 @@ function applyLatestDashboard(d) {
     if (el('dash-power')) el('dash-power').innerHTML = parseFloat(d.power || 0).toFixed(1) + u('W');
     if (el('dash-energy')) el('dash-energy').innerHTML = parseFloat(d.energy || 0).toFixed(4) + u('kWh');
     if (el('dash-energy-total')) el('dash-energy-total').innerHTML = parseFloat(d.energy || 0).toFixed(4) + u('kWh');
-    if (el('dash-raw-json')) el('dash-raw-json').textContent = JSON.stringify(d, null, 2);
-
     [1, 2, 3].forEach(function(idx) {
         var relayOn = Boolean(d['relay_' + idx]);
         dashboardRelayState[idx] = relayOn;

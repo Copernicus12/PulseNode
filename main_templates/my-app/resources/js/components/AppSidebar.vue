@@ -5,9 +5,9 @@ import { Sidebar, SidebarContent } from '@/components/ui/sidebar';
 import type { SidebarProps } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/composables/useCurrentUrl';
 import { toUrl } from '@/lib/utils';
-import { edit as editAppearance } from '@/routes/appearance';
 import { dashboard } from '@/routes';
 import { index as accountsIndex } from '@/routes/accounts';
+import { edit as editAppearance } from '@/routes/appearance';
 import devices from '@/routes/devices';
 import {
     archive as archiveElectricityBilling,
@@ -37,6 +37,7 @@ const user = computed(
 
 const { isCurrentUrl, currentUrl } = useCurrentUrl();
 const settingsLandingHref = '/settings';
+const powerStripDiagnosticsHref = '/settings/power-strip';
 
 const devicesNavItems: NavItem[] = [
     {
@@ -334,6 +335,17 @@ const handleLogout = () => {
                         class="flex items-center rounded-xl px-3 py-2 text-sm transition"
                     >
                         Billing settings
+                    </Link>
+                    <Link
+                        :href="powerStripDiagnosticsHref"
+                        :class="
+                            isCurrentUrl(powerStripDiagnosticsHref)
+                                ? 'bg-primary font-medium text-primary-foreground'
+                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                        "
+                        class="flex items-center rounded-xl px-3 py-2 text-sm transition"
+                    >
+                        Hardware & diagnostics
                     </Link>
                     <Link
                         :href="editAppearance()"

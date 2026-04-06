@@ -280,16 +280,6 @@ class PowerStripController extends Controller
         ]);
     }
 
-    /**
-     * Settings / Advanced technical view.
-     */
-    public function settings(Esp32StateStore $store): View
-    {
-        $latest = $store->latest();
-
-        return view('power-strip.settings', compact('latest'));
-    }
-
     private function buildStripViewModel(array $latest, Esp32ConnectionHealth $connectionHealth): array
     {
         $sockets = [

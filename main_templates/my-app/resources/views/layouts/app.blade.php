@@ -23,12 +23,14 @@
                 'settings.index',
                 'appearance.*',
                 'electricity-billing.*',
+                'power-strip-diagnostics.*',
                 'profile.*',
                 'user-password.*',
                 'two-factor.*',
             );
             $billingSettingsActive = request()->routeIs('settings.index', 'electricity-billing.edit');
             $appearanceSettingsActive = request()->routeIs('appearance.*');
+            $powerStripDiagnosticsActive = request()->routeIs('power-strip-diagnostics.*');
         @endphp
         <div class="min-h-screen bg-background text-foreground">
 
@@ -62,6 +64,12 @@
                                    data-search-label="settings billing electricity bill"
                                    class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $billingSettingsActive ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
                                     Billing settings
+                                </a>
+                                <a href="{{ route('power-strip-diagnostics.edit') }}"
+                                   data-search-link="1"
+                                   data-search-label="settings hardware diagnostics power strip payload mqtt esp32"
+                                   class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $powerStripDiagnosticsActive ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
+                                    Hardware & diagnostics
                                 </a>
                                 <a href="{{ route('appearance.edit') }}"
                                    data-search-link="1"
@@ -106,6 +114,12 @@
                                        data-search-label="settings billing electricity bill"
                                        class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $billingSettingsActive ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
                                         Billing settings
+                                    </a>
+                                    <a href="{{ route('power-strip-diagnostics.edit') }}"
+                                       data-search-link="1"
+                                       data-search-label="settings hardware diagnostics power strip payload mqtt esp32"
+                                       class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $powerStripDiagnosticsActive ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
+                                        Hardware & diagnostics
                                     </a>
                                     <a href="{{ route('appearance.edit') }}"
                                        data-search-link="1"
@@ -321,7 +335,7 @@
                 });
 
                 if (!details) {
-                    notify('Raw payload panel not found on this page.', 'error');
+                    window.location.href = '{{ route('power-strip-diagnostics.edit') }}';
                     return;
                 }
 
@@ -356,7 +370,8 @@
             var quickActions = [
                 { label: 'Go Dashboard', keywords: 'go dashboard home', run: function () { window.location.href = '{{ route('dashboard') }}'; } },
                 { label: 'Go Power Strip', keywords: 'go power strip sockets', run: function () { window.location.href = '{{ route('power-strip.index') }}'; } },
-                { label: 'Go Settings', keywords: 'go settings power strip settings', run: function () { window.location.href = '{{ route('power-strip.settings') }}'; } },
+                { label: 'Go Settings', keywords: 'go settings billing appearance hardware diagnostics', run: function () { window.location.href = '{{ route('settings.index') }}'; } },
+                { label: 'Settings: Hardware & Diagnostics', keywords: 'settings hardware diagnostics power strip payload mqtt esp32', run: function () { window.location.href = '{{ route('power-strip-diagnostics.edit') }}'; } },
                 { label: 'Go Notifications', keywords: 'go notifications inbox alerts', run: function () { window.location.href = '{{ route('notifications.index') }}'; } },
                 @if($accountAdminSummary)
                 { label: 'Go Accounts', keywords: 'go accounts users permissions admin', run: function () { window.location.href = '{{ route('accounts.index') }}'; } },
