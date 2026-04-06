@@ -52,10 +52,24 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::get('settings/electricity-billing', [ElectricityBillingController::class, 'edit'])
         ->name('electricity-billing.edit');
+    Route::get('settings/electricity-billing/archive', [ElectricityBillingController::class, 'archive'])
+        ->name('electricity-billing.archive');
     Route::patch('settings/electricity-billing', [ElectricityBillingController::class, 'update'])
         ->name('electricity-billing.update');
     Route::post('settings/electricity-billing/profiles', [ElectricityBillingController::class, 'storeProfile'])
         ->name('electricity-billing.profiles.store');
     Route::delete('settings/electricity-billing/profiles/{profileId}', [ElectricityBillingController::class, 'destroyProfile'])
         ->name('electricity-billing.profiles.destroy');
+    Route::post('settings/electricity-billing/invoices', [ElectricityBillingController::class, 'storeInvoice'])
+        ->name('electricity-billing.invoices.store');
+    Route::post('settings/electricity-billing/archive/folders', [ElectricityBillingController::class, 'storeInvoiceFolder'])
+        ->name('electricity-billing.archive.folders.store');
+    Route::get('settings/electricity-billing/invoices/{invoiceId}/download', [ElectricityBillingController::class, 'downloadInvoice'])
+        ->name('electricity-billing.invoices.download');
+    Route::delete('settings/electricity-billing/invoices/{invoiceId}', [ElectricityBillingController::class, 'destroyInvoice'])
+        ->name('electricity-billing.invoices.destroy');
+    Route::patch('settings/electricity-billing/archive/folders', [ElectricityBillingController::class, 'updateInvoiceFolder'])
+        ->name('electricity-billing.archive.folders.update');
+    Route::delete('settings/electricity-billing/archive/folders', [ElectricityBillingController::class, 'destroyInvoiceFolder'])
+        ->name('electricity-billing.archive.folders.destroy');
 });

@@ -113,6 +113,22 @@
     History
 </a>
 
+<a href="{{ route('electricity-billing.archive') }}"
+    data-search-link="1"
+    data-search-label="invoice archive invoices bills receipts folders files upload"
+   @class([
+       'flex items-center gap-3 rounded-2xl px-4 py-3 text-[14px] transition',
+       'bg-primary text-primary-foreground font-semibold' => request()->routeIs('electricity-billing.archive', 'electricity-billing.invoices.*'),
+       'text-muted-foreground hover:bg-muted/50 hover:text-foreground' => !request()->routeIs('electricity-billing.archive', 'electricity-billing.invoices.*'),
+   ])>
+    <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2h7A2.5 2.5 0 0 1 21 9.5v9A2.5 2.5 0 0 1 18.5 21h-13A2.5 2.5 0 0 1 3 18.5z"/>
+        <path d="M8 12h8"/>
+        <path d="M8 16h5"/>
+    </svg>
+    Invoice Archive
+</a>
+
 @if(Auth::user()?->isAdmin())
     <a href="{{ route('accounts.index') }}"
         data-search-link="1"
@@ -131,17 +147,3 @@
         Accounts
     </a>
 @endif
-
-<a href="{{ route('battery.index') }}"
-    data-search-link="1"
-    data-search-label="battery level"
-   @class([
-       'flex items-center gap-3 rounded-2xl px-4 py-3 text-[14px] transition',
-       'bg-primary text-primary-foreground font-semibold' => $currentRoute === 'battery.index',
-       'text-muted-foreground hover:bg-muted/50 hover:text-foreground' => $currentRoute !== 'battery.index',
-   ])>
-    <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-        <path fill-rule="evenodd" clip-rule="evenodd" d="M3.75 6.75a3 3 0 0 0-3 3v6a3 3 0 0 0 3 3h15a3 3 0 0 0 3-3v-.037c.856-.174 1.5-.93 1.5-1.838v-2.25c0-.907-.644-1.664-1.5-1.837V9.75a3 3 0 0 0-3-3zm15 1.5a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5h-15a1.5 1.5 0 0 1-1.5-1.5v-6a1.5 1.5 0 0 1 1.5-1.5zM4.5 9.75a.75.75 0 0 0-.75.75V15c0 .414.336.75.75.75H18a.75.75 0 0 0 .75-.75v-4.5a.75.75 0 0 0-.75-.75z"/>
-    </svg>
-    Battery Level
-</a>

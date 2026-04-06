@@ -964,6 +964,7 @@ function deleteProfile(id: string) {
                             </div>
                         </CardContent>
                     </Card>
+
                 </div>
             </div>
         </div>

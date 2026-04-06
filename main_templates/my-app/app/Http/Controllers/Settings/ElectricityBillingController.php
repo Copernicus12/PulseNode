@@ -3,12 +3,20 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Settings\BillingInvoiceFolderDestroyRequest;
+use App\Http\Requests\Settings\BillingInvoiceFolderStoreRequest;
+use App\Http\Requests\Settings\BillingInvoiceFolderUpdateRequest;
+use App\Http\Requests\Settings\BillingInvoiceUploadRequest;
 use App\Http\Requests\Settings\ElectricityBillingProfileStoreRequest;
 use App\Http\Requests\Settings\ElectricityBillingUpdateRequest;
+use App\Models\BillingInvoiceFile;
+use App\Models\BillingInvoiceFolder;
 use App\Models\BillingTariffProfile;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -41,6 +49,18 @@ class ElectricityBillingController extends Controller
                 ])
                 ->values()
                 ->all(),
+        ]);
+    }
+
+    public function archive(Request $request): Response
+    {
+        return Inertia::render('settings/BillingInvoices', [
+            'invoiceArchive' => [
+                'items' => $this->invoiceItems($request->user()),
+                'folders' => $this->invoiceFolders($request->user()),
+                'current_period' => now()->format('Y-m'),
+                'accepted_types' => ['PDF', 'JPG', 'PNG', 'WEBP'],
+            ],
         ]);
     }
 
@@ -83,8 +103,334 @@ class ElectricityBillingController extends Controller
         return to_route('electricity-billing.edit');
     }
 
+    public function storeInvoice(BillingInvoiceUploadRequest $request): RedirectResponse
+    {
+        $user = $request->user();
+        $validated = $request->validated();
+        $billingPeriod = $validated['billing_period'];
+        $billingYear = (int) substr($billingPeriod, 0, 4);
+        $billingMonth = (int) substr($billingPeriod, 5, 2);
+        $ownerKey = $this->ownerKey($user);
+
+        foreach ($request->file('files', []) as $uploadedFile) {
+            $originalName = (string) $uploadedFile->getClientOriginalName();
+            $baseName = pathinfo($originalName, PATHINFO_FILENAME);
+            $extension = strtolower($uploadedFile->getClientOriginalExtension() ?: $uploadedFile->extension() ?: '');
+            $safeBaseName = Str::slug($baseName);
+            $storedName = (string) Str::ulid();
+
+            if ($safeBaseName !== '') {
+                $storedName .= '-'.$safeBaseName;
+            }
+
+            if ($extension !== '') {
+                $storedName .= '.'.$extension;
+            }
+
+            $storagePath = $uploadedFile->storeAs(
+                'billing-invoices/'.$ownerKey.'/'.$billingPeriod,
+                $storedName,
+                'local',
+            );
+
+            BillingInvoiceFile::query()->create([
+                'id' => (string) Str::ulid(),
+                'owner_key' => $ownerKey,
+                'owner_email' => (string) ($user?->email ?? ''),
+                'billing_period' => $billingPeriod,
+                'billing_year' => $billingYear,
+                'billing_month' => $billingMonth,
+                'original_name' => $originalName,
+                'storage_path' => $storagePath,
+                'mime_type' => (string) ($uploadedFile->getClientMimeType() ?? 'application/octet-stream'),
+                'file_extension' => $extension,
+                'size_bytes' => (int) $uploadedFile->getSize(),
+            ]);
+        }
+
+        return to_route('electricity-billing.archive');
+    }
+
+    public function storeInvoiceFolder(BillingInvoiceFolderStoreRequest $request): RedirectResponse
+    {
+        $validated = $request->validated();
+        $folderKey = (string) $validated['folder_key'];
+
+        BillingInvoiceFolder::query()->create([
+            'id' => (string) Str::ulid(),
+            'owner_key' => $this->ownerKey($request->user()),
+            'owner_email' => (string) ($request->user()?->email ?? ''),
+            'folder_type' => $validated['folder_type'],
+            'folder_key' => $folderKey,
+            'folder_year' => (int) substr($folderKey, 0, 4),
+            'folder_month' => $validated['folder_type'] === 'period'
+                ? (int) substr($folderKey, 5, 2)
+                : null,
+        ]);
+
+        return to_route('electricity-billing.archive');
+    }
+
+    public function downloadInvoice(Request $request, string $invoiceId): BinaryFileResponse
+    {
+        $invoice = $this->invoiceQuery($request->user())
+            ->where('id', $invoiceId)
+            ->firstOrFail();
+
+        abort_unless(Storage::disk('local')->exists($invoice->storage_path), 404);
+
+        return Storage::disk('local')->download(
+            $invoice->storage_path,
+            $invoice->original_name,
+        );
+    }
+
+    public function destroyInvoice(Request $request, string $invoiceId): RedirectResponse
+    {
+        $invoice = $this->invoiceQuery($request->user())
+            ->where('id', $invoiceId)
+            ->firstOrFail();
+
+        Storage::disk('local')->delete($invoice->storage_path);
+        $invoice->delete();
+
+        return to_route('electricity-billing.archive');
+    }
+
+    public function updateInvoiceFolder(BillingInvoiceFolderUpdateRequest $request): RedirectResponse
+    {
+        $user = $request->user();
+        $validated = $request->validated();
+        $ownerKey = $this->ownerKey($user);
+        $folderType = $validated['folder_type'];
+        $folderKey = $validated['folder_key'];
+
+        if ($folderType === 'year') {
+            $targetYear = (string) ($validated['target_year'] ?? '');
+
+            if ($targetYear === $folderKey) {
+                return to_route('electricity-billing.archive');
+            }
+
+            $this->invoiceQuery($user)
+                ->where('billing_year', (int) $folderKey)
+                ->get()
+                ->each(function (BillingInvoiceFile $invoice) use ($targetYear, $ownerKey): void {
+                    $this->moveInvoiceToPeriod(
+                        $invoice,
+                        sprintf('%s-%02d', $targetYear, $invoice->billing_month),
+                        $ownerKey,
+                    );
+                });
+
+            $this->moveYearFolderRecords($user, $folderKey, $targetYear);
+
+            return to_route('electricity-billing.archive');
+        }
+
+        $targetPeriod = (string) ($validated['target_period'] ?? '');
+
+        if ($targetPeriod === $folderKey) {
+            return to_route('electricity-billing.archive');
+        }
+
+        $this->invoiceQuery($user)
+            ->where('billing_period', $folderKey)
+            ->get()
+            ->each(function (BillingInvoiceFile $invoice) use ($targetPeriod, $ownerKey): void {
+                $this->moveInvoiceToPeriod($invoice, $targetPeriod, $ownerKey);
+            });
+
+        $this->movePeriodFolderRecord($user, $folderKey, $targetPeriod);
+
+        return to_route('electricity-billing.archive');
+    }
+
+    public function destroyInvoiceFolder(BillingInvoiceFolderDestroyRequest $request): RedirectResponse
+    {
+        $user = $request->user();
+        $validated = $request->validated();
+        $folderType = $validated['folder_type'];
+        $folderKey = $validated['folder_key'];
+        $query = $this->invoiceQuery($user);
+
+        if ($folderType === 'year') {
+            $query->where('billing_year', (int) $folderKey);
+            $this->deleteYearFolderRecords($user, $folderKey);
+        } else {
+            $query->where('billing_period', $folderKey);
+            $this->deletePeriodFolderRecord($user, $folderKey);
+        }
+
+        $query->get()->each(function (BillingInvoiceFile $invoice): void {
+            Storage::disk('local')->delete($invoice->storage_path);
+            $invoice->delete();
+        });
+
+        return to_route('electricity-billing.archive');
+    }
+
     private function ownerKey(?Authenticatable $user): string
     {
         return (string) ($user?->getAuthIdentifier() ?? '');
+    }
+
+    private function invoiceItems(?Authenticatable $user): array
+    {
+        return $this->invoiceQuery($user)
+            ->orderByDesc('billing_period')
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (BillingInvoiceFile $invoice) => [
+                'id' => (string) $invoice->id,
+                'name' => (string) $invoice->original_name,
+                'period' => (string) $invoice->billing_period,
+                'year' => (int) $invoice->billing_year,
+                'month' => (int) $invoice->billing_month,
+                'size_bytes' => (int) $invoice->size_bytes,
+                'mime_type' => (string) $invoice->mime_type,
+                'extension' => (string) ($invoice->file_extension ?? ''),
+                'uploaded_at' => optional($invoice->created_at)?->toISOString(),
+                'download_url' => route('electricity-billing.invoices.download', $invoice->id),
+                'delete_url' => route('electricity-billing.invoices.destroy', $invoice->id),
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function invoiceFolders(?Authenticatable $user): array
+    {
+        return BillingInvoiceFolder::query()
+            ->where('owner_key', $this->ownerKey($user))
+            ->orderBy('folder_year')
+            ->orderBy('folder_month')
+            ->get()
+            ->map(fn (BillingInvoiceFolder $folder) => [
+                'id' => (string) $folder->id,
+                'type' => (string) $folder->folder_type,
+                'key' => (string) $folder->folder_key,
+                'year' => (int) $folder->folder_year,
+                'month' => $folder->folder_month === null ? null : (int) $folder->folder_month,
+            ])
+            ->values()
+            ->all();
+    }
+
+    private function invoiceQuery(?Authenticatable $user)
+    {
+        return BillingInvoiceFile::query()
+            ->where('owner_key', $this->ownerKey($user));
+    }
+
+    private function moveInvoiceToPeriod(BillingInvoiceFile $invoice, string $targetPeriod, string $ownerKey): void
+    {
+        $targetPath = $this->targetStoragePath($invoice, $ownerKey, $targetPeriod);
+
+        if (
+            $invoice->storage_path !== $targetPath &&
+            Storage::disk('local')->exists($invoice->storage_path)
+        ) {
+            Storage::disk('local')->makeDirectory(dirname($targetPath));
+            Storage::disk('local')->move($invoice->storage_path, $targetPath);
+        }
+
+        $invoice->forceFill([
+            'billing_period' => $targetPeriod,
+            'billing_year' => (int) substr($targetPeriod, 0, 4),
+            'billing_month' => (int) substr($targetPeriod, 5, 2),
+            'storage_path' => $targetPath,
+        ])->save();
+    }
+
+    private function targetStoragePath(BillingInvoiceFile $invoice, string $ownerKey, string $targetPeriod): string
+    {
+        return 'billing-invoices/'.$ownerKey.'/'.$targetPeriod.'/'.basename($invoice->storage_path);
+    }
+
+    private function folderQuery(?Authenticatable $user)
+    {
+        return BillingInvoiceFolder::query()
+            ->where('owner_key', $this->ownerKey($user));
+    }
+
+    private function moveYearFolderRecords(?Authenticatable $user, string $sourceYear, string $targetYear): void
+    {
+        $this->folderQuery($user)
+            ->where('folder_type', 'year')
+            ->where('folder_key', $sourceYear)
+            ->get()
+            ->each(function (BillingInvoiceFolder $folder) use ($targetYear): void {
+                $this->moveFolderRecordToKey($folder, 'year', $targetYear);
+            });
+
+        $this->folderQuery($user)
+            ->where('folder_type', 'period')
+            ->where('folder_key', 'like', $sourceYear.'-%')
+            ->get()
+            ->each(function (BillingInvoiceFolder $folder) use ($targetYear): void {
+                $targetPeriod = sprintf('%s-%02d', $targetYear, (int) $folder->folder_month);
+                $this->moveFolderRecordToKey($folder, 'period', $targetPeriod);
+            });
+    }
+
+    private function movePeriodFolderRecord(?Authenticatable $user, string $sourcePeriod, string $targetPeriod): void
+    {
+        $this->folderQuery($user)
+            ->where('folder_type', 'period')
+            ->where('folder_key', $sourcePeriod)
+            ->get()
+            ->each(function (BillingInvoiceFolder $folder) use ($targetPeriod): void {
+                $this->moveFolderRecordToKey($folder, 'period', $targetPeriod);
+            });
+    }
+
+    private function moveFolderRecordToKey(BillingInvoiceFolder $folder, string $targetType, string $targetKey): void
+    {
+        $duplicate = BillingInvoiceFolder::query()
+            ->where('owner_key', $folder->owner_key)
+            ->where('folder_type', $targetType)
+            ->where('folder_key', $targetKey)
+            ->where('id', '!=', $folder->id)
+            ->first();
+
+        if ($duplicate) {
+            $folder->delete();
+
+            return;
+        }
+
+        $folder->forceFill([
+            'folder_type' => $targetType,
+            'folder_key' => $targetKey,
+            'folder_year' => (int) substr($targetKey, 0, 4),
+            'folder_month' => $targetType === 'period'
+                ? (int) substr($targetKey, 5, 2)
+                : null,
+        ])->save();
+    }
+
+    private function deleteYearFolderRecords(?Authenticatable $user, string $year): void
+    {
+        $this->folderQuery($user)
+            ->where(function ($query) use ($year): void {
+                $query->where(function ($yearQuery) use ($year): void {
+                    $yearQuery
+                        ->where('folder_type', 'year')
+                        ->where('folder_key', $year);
+                })->orWhere(function ($periodQuery) use ($year): void {
+                    $periodQuery
+                        ->where('folder_type', 'period')
+                        ->where('folder_key', 'like', $year.'-%');
+                });
+            })
+            ->delete();
+    }
+
+    private function deletePeriodFolderRecord(?Authenticatable $user, string $period): void
+    {
+        $this->folderQuery($user)
+            ->where('folder_type', 'period')
+            ->where('folder_key', $period)
+            ->delete();
     }
 }

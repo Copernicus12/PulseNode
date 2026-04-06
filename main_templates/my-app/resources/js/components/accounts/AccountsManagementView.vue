@@ -554,8 +554,10 @@ watch(
             container-aria-label="Accounts notifications"
         />
 
-        <Card class="border-border/40 shadow-none">
-            <CardHeader class="gap-3 p-4 sm:p-5">
+        <Card class="relative overflow-hidden border-border/40 shadow-none">
+            <div class="pointer-events-none absolute inset-0 bg-linear-to-r from-primary/8 via-transparent to-transparent" />
+
+            <CardHeader class="relative gap-3 p-4 sm:p-5">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>
                         <CardTitle class="text-xl tracking-tight">

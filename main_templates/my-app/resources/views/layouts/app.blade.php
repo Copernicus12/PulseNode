@@ -27,7 +27,7 @@
                 'user-password.*',
                 'two-factor.*',
             );
-            $billingSettingsActive = request()->routeIs('settings.index', 'electricity-billing.*');
+            $billingSettingsActive = request()->routeIs('settings.index', 'electricity-billing.edit');
             $appearanceSettingsActive = request()->routeIs('appearance.*');
         @endphp
         <div class="min-h-screen bg-background text-foreground">

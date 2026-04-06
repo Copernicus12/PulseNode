@@ -21,7 +21,6 @@ import { index as accountsIndex } from '@/routes/accounts';
 import { latest as apiLatest } from '@/routes/api';
 import { latest as notificationsLatest } from '@/routes/api/notifications';
 import { edit as editAppearance } from '@/routes/appearance';
-import { index as batteryIndex } from '@/routes/battery';
 import devices from '@/routes/devices';
 import { edit as editElectricityBilling } from '@/routes/electricity-billing';
 import { index as historyIndex } from '@/routes/history';
@@ -112,12 +111,6 @@ const baseSearchResults = computed<SearchResult[]>(() => {
             href: toUrl(historyIndex()),
         },
         {
-            label: 'Go Battery Level',
-            keywords: 'go battery level battery',
-            kind: 'href',
-            href: toUrl(batteryIndex()),
-        },
-        {
             label: 'Go Notifications',
             keywords: 'go notifications inbox alerts',
             kind: 'href',
@@ -171,6 +164,13 @@ const baseSearchResults = computed<SearchResult[]>(() => {
                 'settings electricity bill billing invoice current energy price per wh cost',
             kind: 'href',
             href: toUrl(editElectricityBilling()),
+        },
+        {
+            label: 'Go Invoice Archive',
+            keywords:
+                'go invoice archive invoices bills receipts folders files upload previous months',
+            kind: 'href',
+            href: '/settings/electricity-billing/archive',
         },
         {
             label: 'Go My Devices Overview',
