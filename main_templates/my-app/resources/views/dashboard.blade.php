@@ -7,6 +7,17 @@
 @endpush
 
 @section('content')
+@php
+    $dashboardCurrency = (string) ($dashboardBilling['currency'] ?? 'RON');
+    $dashboardPriceWithTax = (float) ($dashboardBilling['price_per_kwh_with_tax'] ?? 0);
+    $dashboardProfileLabel = (string) ($dashboardBilling['profile_label'] ?? 'Current settings');
+    $dashboardProfileSource = (string) ($dashboardBilling['profile_source'] ?? 'current_settings');
+    $formatMoney = function (float $value) use ($dashboardCurrency): string {
+        $decimals = abs($value) >= 1 ? 2 : 4;
+
+        return number_format($value, $decimals, ',', '.') . ' ' . $dashboardCurrency;
+    };
+@endphp
 <div class="space-y-5">
     @include('layouts._relay-command-alert', ['relayCommandGuard' => $relayCommandGuard])
 
@@ -36,7 +47,7 @@
             @endif
         </div>
 
-        <div class="mt-7 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div class="mt-7 grid grid-cols-2 gap-4 xl:grid-cols-5">
             <div class="rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">Voltage</p>
                 <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-voltage">{{ $voltage }} <span class="text-sm font-normal text-muted-foreground">V</span></p>
@@ -52,6 +63,18 @@
             <div class="rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">Energy</p>
                 <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-energy">{{ $energy }} <span class="text-sm font-normal text-muted-foreground">kWh</span></p>
+            </div>
+            <div class="rounded-2xl bg-background p-5">
+                <div class="flex items-start justify-between gap-3">
+                    <p class="text-xs text-muted-foreground">Today Cost</p>
+                    <span class="rounded-full border border-border/40 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                        {{ $dashboardProfileSource === 'saved_profile' ? 'saved' : 'current' }}
+                    </span>
+                </div>
+                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-today-cost">{{ $formatMoney((float) ($dashboardBilling['day']['total_cost'] ?? 0)) }}</p>
+                <p class="mt-1 text-[11px] text-muted-foreground" id="dash-today-cost-context">
+                    {{ $dashboardProfileLabel }} · {{ $formatMoney($dashboardPriceWithTax) }}/kWh
+                </p>
             </div>
         </div>
     </div>
@@ -175,9 +198,20 @@
                     $maxDayTotal = max(array_column($weekEnergy, 'total')) ?: 0.001;
                 @endphp
 
-                <div class="mt-4 rounded-2xl border border-border/30 bg-background/20 p-3 text-xs">
-                    <span class="text-muted-foreground">Today (00:00 → now)</span>
-                    <span id="dash-energy-today-progress" class="ml-2 font-semibold tabular-nums text-primary">{{ number_format($todayProgress, 4) }} kWh</span>
+                <div class="mt-4 grid gap-3 md:grid-cols-3">
+                    <div class="rounded-2xl border border-border/30 bg-background/20 p-3 text-xs">
+                        <span class="text-muted-foreground">Today (00:00 → now)</span>
+                        <span id="dash-energy-today-progress" class="mt-1 block font-semibold tabular-nums text-primary">{{ number_format($todayProgress, 4) }} kWh</span>
+                    </div>
+                    <div class="rounded-2xl border border-border/30 bg-background/20 p-3 text-xs">
+                        <span class="text-muted-foreground">Cost today</span>
+                        <span id="dash-energy-day-cost" class="mt-1 block font-semibold tabular-nums text-primary">{{ $formatMoney((float) ($dashboardBilling['day']['total_cost'] ?? 0)) }}</span>
+                    </div>
+                    <div class="rounded-2xl border border-border/30 bg-background/20 p-3 text-xs">
+                        <span class="text-muted-foreground">Active tariff</span>
+                        <span class="mt-1 block font-semibold text-foreground">{{ $dashboardProfileLabel }}</span>
+                        <span id="dash-billing-rate" class="mt-1 block tabular-nums text-muted-foreground">{{ $formatMoney($dashboardPriceWithTax) }}/kWh</span>
+                    </div>
                 </div>
 
                 <div class="mt-6 flex items-end gap-3" style="height: 260px" id="energy-bars-container">
@@ -332,6 +366,22 @@ var dashboardRelayState = {
     2: {{ $on2 ? 'true' : 'false' }},
     3: {{ $on3 ? 'true' : 'false' }},
 };
+var dashboardBillingState = @json($dashboardBilling);
+
+function formatDashboardMoney(value, currency) {
+    try {
+        return new Intl.NumberFormat('ro-RO', {
+            style: 'currency',
+            currency: currency || 'RON',
+            minimumFractionDigits: Math.abs(value) >= 1 ? 2 : 4,
+            maximumFractionDigits: Math.abs(value) >= 1 ? 2 : 4,
+        }).format(value || 0);
+    } catch (error) {
+        var amount = Number(value || 0);
+        var decimals = Math.abs(amount) >= 1 ? 2 : 4;
+        return amount.toFixed(decimals) + ' ' + (currency || 'RON');
+    }
+}
 
 function setDashboardToggleState(idx, isOn, pending) {
     var button = document.getElementById('dashboard-socket-toggle-' + idx);
@@ -468,6 +518,14 @@ function renderEnergyBars(payload) {
 
     var todayEl = document.getElementById('dash-energy-today-progress');
     if (todayEl) todayEl.textContent = kwh(todayProgress);
+
+    var rate = parseFloat((dashboardBillingState && dashboardBillingState.price_per_kwh_with_tax) || 0);
+    var currency = (dashboardBillingState && dashboardBillingState.currency) || 'RON';
+    var todayCost = todayProgress * rate;
+    var todayCostEl = document.getElementById('dash-today-cost');
+    var dayCostEl = document.getElementById('dash-energy-day-cost');
+    if (todayCostEl) todayCostEl.textContent = formatDashboardMoney(todayCost, currency);
+    if (dayCostEl) dayCostEl.textContent = formatDashboardMoney(todayCost, currency);
 }
 
 function populateEnergyModal(data) {

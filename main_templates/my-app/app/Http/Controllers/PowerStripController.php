@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Devices\StoreDetectionPlanRequest;
 use App\Http\Requests\Devices\StoreDeviceProfileRequest;
+use App\Models\BillingTariffProfile;
 use App\Models\DetectionPlan;
 use App\Models\DeviceDetection;
 use App\Models\DeviceProfile;
 use App\Models\EnergyReading;
 use App\Support\BatteryInsights;
 use App\Support\DeviceProfiler;
+use App\Support\EnergyBillingCalculator;
 use App\Support\Esp32ConnectionHealth;
 use App\Support\Esp32StateStore;
 use Carbon\Carbon;
@@ -165,9 +167,16 @@ class PowerStripController extends Controller
         ));
     }
 
-    public function history(Request $request, Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth): View|JsonResponse
+    public function history(
+        Request $request,
+        Esp32StateStore $store,
+        Esp32ConnectionHealth $connectionHealth,
+        EnergyBillingCalculator $billingCalculator,
+    ): View|JsonResponse
     {
         [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus] = $this->buildStripViewModel($store->latest(), $connectionHealth);
+        /** @var \App\Models\User $user */
+        $user = $request->user();
 
         $updatedAt = $latest['updated_at'] ?? null;
         $lastSeen = $updatedAt ? Carbon::parse($updatedAt)->diffForHumans() : 'Never';
@@ -223,6 +232,10 @@ class PowerStripController extends Controller
         }
 
         $selectedDay = EnergyReading::dayDetails($selectedDate);
+        $billingProfiles = BillingTariffProfile::query()
+            ->where('owner_key', (string) $user->getAuthIdentifier())
+            ->get();
+        $billingSummary = $billingCalculator->forDay($user, $selectedDay, $billingProfiles);
         $weeklyTotal = round((float) $dayWindow->sum('total'), 4);
         $averageDay = round((float) $dayWindow->avg('total'), 4);
         $peakDay = $dayWindow->sortByDesc('total')->first();
@@ -246,6 +259,7 @@ class PowerStripController extends Controller
             'daySelector',
             'selectedDate',
             'selectedDay',
+            'billingSummary',
             'weeklyTotal',
             'averageDay',
             'peakDay',

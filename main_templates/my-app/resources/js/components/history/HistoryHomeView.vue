@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ChevronLeft } from 'lucide-vue-next'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { DatePicker } from '@/components/ui/date-picker'
 import {
   Dialog,
   DialogClose,
@@ -29,7 +30,6 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination'
-import { DatePicker } from '@/components/ui/date-picker'
 import { cn } from '@/lib/utils'
 
 type WarningCounters = {
@@ -107,12 +107,36 @@ type SelectedDay = {
   hourly?: HourlyStat[]
 }
 
+type BillingCostLine = {
+  energy_kwh: number
+  subtotal: number
+  tax_amount: number
+  total_cost: number
+}
+
+type BillingSocketCost = BillingCostLine & {
+  name: string
+}
+
+type BillingSummary = {
+  profile_name?: string | null
+  profile_label: string
+  profile_source: 'saved_profile' | 'current_settings'
+  currency: string
+  price_per_kwh: number
+  price_per_kwh_with_tax: number
+  tax_percent: number
+  day: BillingCostLine
+  sockets: BillingSocketCost[]
+}
+
 type HistoryPageProps = {
   latest: Record<string, unknown>
   dayWindow: DayWindowItem[]
   daySelector: DaySelectorMeta
   selectedDate: string
   selectedDay: SelectedDay
+  billingSummary: BillingSummary
   weeklyTotal: number
   averageDay: number
   activeHours: number
@@ -152,6 +176,24 @@ const selectedWarnings = computed<WarningCounters>(() => historyState.value.sele
 const socketStats = computed<SocketStat[]>(() => historyState.value.selectedDay?.socket_stats ?? [])
 const intervals = computed<IntervalStat[]>(() => historyState.value.selectedDay?.intervals ?? [])
 const hourlyLoad = computed<HourlyStat[]>(() => historyState.value.selectedDay?.hourly ?? [])
+const currentBillingSummary = computed<BillingSummary>(() => historyState.value.billingSummary ?? {
+  profile_label: 'Current settings',
+  profile_source: 'current_settings',
+  currency: 'RON',
+  price_per_kwh: 0,
+  price_per_kwh_with_tax: 0,
+  tax_percent: 0,
+  day: {
+    energy_kwh: 0,
+    subtotal: 0,
+    tax_amount: 0,
+    total_cost: 0,
+  },
+  sockets: [],
+})
+const socketBillingMap = computed<Record<string, BillingSocketCost>>(() => (
+  Object.fromEntries(currentBillingSummary.value.sockets.map((socket) => [socket.name, socket]))
+))
 const topIntervals = computed(() => intervals.value.slice(0, 4))
 const maxSocketEnergy = computed(() => Math.max(0.001, ...socketStats.value.map((item) => number(item.energy_kwh))))
 
@@ -247,6 +289,21 @@ function fmtEnergy(value: unknown): string {
   }
 
   return `${(kwh * 1000).toFixed(2)} Wh`
+}
+
+function fmtCurrency(value: unknown, currency = currentBillingSummary.value.currency): string {
+  const amount = number(value)
+
+  try {
+    return new Intl.NumberFormat('ro-RO', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: amount >= 1 ? 2 : 4,
+      maximumFractionDigits: amount >= 1 ? 2 : 4,
+    }).format(amount)
+  } catch {
+    return `${amount.toFixed(amount >= 1 ? 2 : 4)} ${currency}`
+  }
 }
 
 function dayButtonClass(day: DayWindowItem): string {
@@ -422,7 +479,7 @@ onUnmounted(() => {
       </CardHeader>
 
       <CardContent class="relative p-5 pt-5 sm:p-6 sm:pt-5">
-        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
           <div class="rounded-2xl border border-border/40 bg-background p-4">
             <p class="text-xs text-muted-foreground">
               Day total
@@ -430,6 +487,25 @@ onUnmounted(() => {
             <p class="mt-1 text-2xl font-semibold leading-none tabular-nums">
               {{ fmt(historyState.selectedDay.total_kwh, 4) }}
               <span class="text-sm font-medium text-muted-foreground">kWh</span>
+            </p>
+          </div>
+          <div class="rounded-2xl border border-border/40 bg-background p-4">
+            <p class="text-xs text-muted-foreground">
+              Day cost
+            </p>
+            <p class="mt-1 text-2xl font-semibold leading-none tabular-nums">
+              {{ fmtCurrency(currentBillingSummary.day.total_cost) }}
+            </p>
+          </div>
+          <div class="rounded-2xl border border-border/40 bg-background p-4">
+            <p class="text-xs text-muted-foreground">
+              Active tariff
+            </p>
+            <p class="mt-1 text-lg font-semibold leading-none">
+              {{ currentBillingSummary.profile_label }}
+            </p>
+            <p class="mt-1 text-xs text-muted-foreground">
+              {{ fmtCurrency(currentBillingSummary.price_per_kwh_with_tax) }}/kWh cu TVA
             </p>
           </div>
           <div class="rounded-2xl border border-border/40 bg-background p-4">
@@ -523,7 +599,7 @@ onUnmounted(() => {
       </CardContent>
     </Card>
 
-    <div class="grid items-start gap-5 xl:grid-cols-[minmax(0,1.62fr)_minmax(320px,0.9fr)]">
+    <div class="grid items-start gap-5 xl:items-stretch xl:grid-cols-[minmax(0,1.62fr)_minmax(320px,0.9fr)]">
       <div class="space-y-5">
         <Card class="gap-0 rounded-3xl border-border/30 py-0 shadow-none">
           <CardHeader class="p-5 pb-0 sm:p-6 sm:pb-0">
@@ -638,6 +714,12 @@ onUnmounted(() => {
                   {{ fmt(socket.energy_kwh, 4) }} kWh
                 </p>
               </div>
+              <p class="mt-3 text-sm font-semibold tabular-nums text-primary">
+                {{ fmtCurrency(socketBillingMap[socket.name]?.total_cost ?? 0) }}
+              </p>
+              <p class="mt-1 text-[11px] text-muted-foreground">
+                Pret cu TVA pentru consumul zilei
+              </p>
               <div class="mt-3 h-2 overflow-hidden rounded-full bg-muted">
                 <div
                   class="h-full rounded-full bg-primary"
@@ -649,13 +731,13 @@ onUnmounted(() => {
         </Card>
       </div>
 
-      <Card class="gap-0 rounded-3xl border-border/30 py-0 shadow-none">
+      <Card class="gap-0 rounded-3xl border-border/30 py-0 shadow-none xl:self-start xl:flex xl:h-[838px] xl:min-h-0 xl:flex-col">
         <CardHeader class="p-5 pb-0 sm:p-6 sm:pb-0">
           <CardTitle class="text-base">
             Selected day
           </CardTitle>
         </CardHeader>
-        <CardContent class="space-y-4 p-5 pt-4 sm:p-6 sm:pt-4">
+        <CardContent class="space-y-4 p-5 pt-4 sm:p-6 sm:pt-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto xl:pr-4">
           <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
             <div class="rounded-2xl border border-border/40 bg-background p-4">
               <p class="text-xs text-muted-foreground">
@@ -687,6 +769,55 @@ onUnmounted(() => {
               </p>
               <p class="mt-1 text-lg font-semibold leading-none tabular-nums">
                 {{ selectedWarnings.overload ?? 0 }}
+              </p>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-border/40 bg-background p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-xs text-muted-foreground">
+                  Billing profile
+                </p>
+                <p class="mt-1 text-sm font-semibold">
+                  {{ currentBillingSummary.profile_label }}
+                </p>
+              </div>
+              <Badge variant="outline">
+                {{ currentBillingSummary.profile_source === 'saved_profile' ? 'Saved profile' : 'Current settings' }}
+              </Badge>
+            </div>
+            <p class="mt-3 text-sm font-semibold tabular-nums">
+              {{ fmtCurrency(currentBillingSummary.price_per_kwh_with_tax) }}/kWh
+            </p>
+            <p class="mt-1 text-xs text-muted-foreground">
+              {{ fmtCurrency(currentBillingSummary.price_per_kwh) }} fara TVA · TVA {{ fmt(currentBillingSummary.tax_percent, 2) }}%
+            </p>
+          </div>
+
+          <div class="grid gap-3 sm:grid-cols-3 xl:grid-cols-1">
+            <div class="rounded-2xl border border-border/40 bg-background p-4">
+              <p class="text-xs text-muted-foreground">
+                Energy cost
+              </p>
+              <p class="mt-1 text-lg font-semibold leading-none tabular-nums">
+                {{ fmtCurrency(currentBillingSummary.day.subtotal) }}
+              </p>
+            </div>
+            <div class="rounded-2xl border border-border/40 bg-background p-4">
+              <p class="text-xs text-muted-foreground">
+                VAT
+              </p>
+              <p class="mt-1 text-lg font-semibold leading-none tabular-nums">
+                {{ fmtCurrency(currentBillingSummary.day.tax_amount) }}
+              </p>
+            </div>
+            <div class="rounded-2xl border border-border/40 bg-background p-4">
+              <p class="text-xs text-muted-foreground">
+                Total with VAT
+              </p>
+              <p class="mt-1 text-lg font-semibold leading-none tabular-nums">
+                {{ fmtCurrency(currentBillingSummary.day.total_cost) }}
               </p>
             </div>
           </div>

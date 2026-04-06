@@ -2,17 +2,27 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BillingTariffProfile;
 use App\Models\EnergyReading;
+use App\Support\EnergyBillingCalculator;
 use App\Support\Esp32ConnectionHealth;
 use App\Support\Esp32StateStore;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Throwable;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth): View
+    public function __invoke(
+        Request $request,
+        Esp32StateStore $store,
+        Esp32ConnectionHealth $connectionHealth,
+        EnergyBillingCalculator $billingCalculator,
+    ): View
     {
         $latest = $store->latest();
+        $user = $request->user();
 
         // ── Derive system status ──────────────────────────────────────
         $isOnline = $connectionHealth->isOnline($latest);
@@ -83,6 +93,16 @@ class DashboardController extends Controller
 
         // ── Weekly energy usage payload ────────────────────────────────
         $energyUsage = EnergyReading::historyPayload();
+        $todayDetails = EnergyReading::dayDetails(now()->toDateString());
+        try {
+            $billingProfiles = BillingTariffProfile::query()
+                ->where('owner_key', (string) $user?->getAuthIdentifier())
+                ->get();
+        } catch (Throwable) {
+            $billingProfiles = collect();
+        }
+
+        $dashboardBilling = $billingCalculator->forDay($user, $todayDetails, $billingProfiles);
 
         return view('dashboard', compact(
             'latest',
@@ -102,6 +122,7 @@ class DashboardController extends Controller
             'safetyLevel',
             'relayCommandGuard',
             'energyUsage',
+            'dashboardBilling',
         ));
     }
 }
