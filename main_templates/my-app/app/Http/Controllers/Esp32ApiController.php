@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BillingTariffProfile;
 use App\Models\DetectionPlan;
 use App\Models\DeviceProfile;
 use App\Models\EnergyReading;
+use App\Support\EnergyBillingCalculator;
 use App\Support\Esp32ConnectionHealth;
 use App\Support\DeviceProfiler;
 use App\Support\Esp32RelayPublisher;
@@ -15,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use RuntimeException;
 use Symfony\Component\Process\Process;
+use Throwable;
 
 class Esp32ApiController extends Controller
 {
@@ -118,9 +121,28 @@ class Esp32ApiController extends Controller
         ]);
     }
 
-    public function energyHistory(): JsonResponse
+    public function energyHistory(Request $request, EnergyBillingCalculator $billingCalculator): JsonResponse
     {
-        return response()->json(EnergyReading::historyPayload());
+        $payload = EnergyReading::historyPayload();
+        $user = $request->user();
+
+        if ($user !== null) {
+            try {
+                $billingProfiles = BillingTariffProfile::query()
+                    ->where('owner_key', (string) $user->getAuthIdentifier())
+                    ->get();
+            } catch (Throwable) {
+                $billingProfiles = collect();
+            }
+
+            $payload['billingSummary'] = $billingCalculator->forDay(
+                $user,
+                EnergyReading::dayDetails(now()->toDateString()),
+                $billingProfiles,
+            );
+        }
+
+        return response()->json($payload);
     }
 
     public function energyDay(string $date): JsonResponse

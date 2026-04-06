@@ -67,7 +67,7 @@
             <div class="rounded-2xl bg-background p-5">
                 <div class="flex items-start justify-between gap-3">
                     <p class="text-xs text-muted-foreground">Today Cost</p>
-                    <span class="rounded-full border border-border/40 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    <span id="dash-billing-source" class="rounded-full border border-border/40 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                         {{ $dashboardProfileSource === 'saved_profile' ? 'saved' : 'current' }}
                     </span>
                 </div>
@@ -209,7 +209,7 @@
                     </div>
                     <div class="rounded-2xl border border-border/30 bg-background/20 p-3 text-xs">
                         <span class="text-muted-foreground">Active tariff</span>
-                        <span class="mt-1 block font-semibold text-foreground">{{ $dashboardProfileLabel }}</span>
+                        <span id="dash-billing-profile-label" class="mt-1 block font-semibold text-foreground">{{ $dashboardProfileLabel }}</span>
                         <span id="dash-billing-rate" class="mt-1 block tabular-nums text-muted-foreground">{{ $formatMoney($dashboardPriceWithTax) }}/kWh</span>
                     </div>
                 </div>
@@ -322,6 +322,7 @@ var dashboardRelayState = {
     3: {{ $on3 ? 'true' : 'false' }},
 };
 var dashboardBillingState = @json($dashboardBilling);
+var energyHistoryRefreshTimer = null;
 
 function formatDashboardMoney(value, currency) {
     try {
@@ -354,6 +355,32 @@ function publishLatestSnapshot(data) {
     if (!data) return;
     window.__pulsenodeLatest = data;
     window.dispatchEvent(new CustomEvent('pulsenode:latest', { detail: data }));
+}
+
+function applyDashboardBilling(billingSummary) {
+    if (!billingSummary) return;
+
+    dashboardBillingState = billingSummary;
+
+    var currency = billingSummary.currency || 'RON';
+    var totalCost = parseFloat((billingSummary.day && billingSummary.day.total_cost) || 0);
+    var priceWithTax = parseFloat(billingSummary.price_per_kwh_with_tax || 0);
+    var profileLabel = billingSummary.profile_label || 'Current settings';
+    var profileSource = billingSummary.profile_source === 'saved_profile' ? 'saved' : 'current';
+
+    var todayCostEl = document.getElementById('dash-today-cost');
+    var dayCostEl = document.getElementById('dash-energy-day-cost');
+    var rateEl = document.getElementById('dash-billing-rate');
+    var profileLabelEl = document.getElementById('dash-billing-profile-label');
+    var profileSourceEl = document.getElementById('dash-billing-source');
+    var contextEl = document.getElementById('dash-today-cost-context');
+
+    if (todayCostEl) todayCostEl.textContent = formatDashboardMoney(totalCost, currency);
+    if (dayCostEl) dayCostEl.textContent = formatDashboardMoney(totalCost, currency);
+    if (rateEl) rateEl.textContent = formatDashboardMoney(priceWithTax, currency) + '/kWh';
+    if (profileLabelEl) profileLabelEl.textContent = profileLabel;
+    if (profileSourceEl) profileSourceEl.textContent = profileSource;
+    if (contextEl) contextEl.textContent = profileLabel + ' · ' + formatDashboardMoney(priceWithTax, currency) + '/kWh';
 }
 
 function sendRelayCommand(idx, turnOn) {
@@ -474,13 +501,9 @@ function renderEnergyBars(payload) {
     var todayEl = document.getElementById('dash-energy-today-progress');
     if (todayEl) todayEl.textContent = kwh(todayProgress);
 
-    var rate = parseFloat((dashboardBillingState && dashboardBillingState.price_per_kwh_with_tax) || 0);
-    var currency = (dashboardBillingState && dashboardBillingState.currency) || 'RON';
-    var todayCost = todayProgress * rate;
-    var todayCostEl = document.getElementById('dash-today-cost');
-    var dayCostEl = document.getElementById('dash-energy-day-cost');
-    if (todayCostEl) todayCostEl.textContent = formatDashboardMoney(todayCost, currency);
-    if (dayCostEl) dayCostEl.textContent = formatDashboardMoney(todayCost, currency);
+    if (payload && payload.billingSummary) {
+        applyDashboardBilling(payload.billingSummary);
+    }
 }
 
 function populateEnergyModal(data) {
@@ -616,6 +639,17 @@ function refreshEnergyHistory() {
         .catch(function() {});
 }
 
+function scheduleEnergyHistoryRefresh(delay) {
+    if (energyHistoryRefreshTimer) {
+        window.clearTimeout(energyHistoryRefreshTimer);
+    }
+
+    energyHistoryRefreshTimer = window.setTimeout(function() {
+        energyHistoryRefreshTimer = null;
+        refreshEnergyHistory();
+    }, typeof delay === 'number' ? delay : 1500);
+}
+
 renderEnergyBars(energyState);
 bindEnergyBars();
 
@@ -651,6 +685,7 @@ window.addEventListener('pulsenode:relay-guard', function() {
 
 window.addEventListener('pulsenode:latest', function(event) {
     applyLatestDashboard(event.detail || {});
+    scheduleEnergyHistoryRefresh(1500);
 });
 
 setDashboardToggleState(1, dashboardRelayState[1], false);

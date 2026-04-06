@@ -149,6 +149,12 @@ type HistoryPageProps = {
   historyBaseUrl: string
 }
 
+type UpdateHistoryOptions = {
+  mode?: 'push' | 'replace'
+  silent?: boolean
+  preservePicker?: boolean
+}
+
 const props = defineProps<HistoryPageProps>()
 const historyState = ref<HistoryPageProps>({
   ...props,
@@ -170,6 +176,9 @@ const pickerDate = ref<string | undefined>(historyState.value.daySelector?.ancho
 
 const liveLastSeen = ref(historyState.value.lastSeen)
 const liveOnline = ref(historyState.value.isOnline)
+const selectedDateIsToday = computed(() => (
+  historyState.value.selectedDate === new Date().toISOString().slice(0, 10)
+))
 
 const dayWindowItems = computed(() => historyState.value.dayWindow ?? [])
 const selectedWarnings = computed<WarningCounters>(() => historyState.value.selectedDay?.warnings ?? { high: 0, overload: 0 })
@@ -273,6 +282,9 @@ watch(detailOpen, (isOpen) => {
   }
 })
 
+let liveRefreshTimeout: number | null = null
+let liveRefreshInterval: number | null = null
+
 function number(value: unknown): number {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
@@ -311,8 +323,10 @@ function dayButtonClass(day: DayWindowItem): string {
 
   return cn(
     buttonVariants({ variant: isActive ? 'default' : 'outline', size: 'default' }),
-    'h-auto w-full flex-col items-start gap-1 rounded-xl px-3 py-2.5 text-left',
-    !isActive && 'text-foreground',
+    'h-auto w-full select-none flex-col items-start gap-1 rounded-xl px-3 py-2.5 text-left outline-none ring-0 focus:outline-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/25 focus-visible:ring-offset-0',
+    isActive
+      ? 'hover:bg-primary hover:text-primary-foreground'
+      : 'text-foreground hover:border-border/50 hover:bg-background hover:text-foreground',
   )
 }
 
@@ -324,12 +338,24 @@ function detailUrl(date: string, anchorDate: string): string {
   return `${url.pathname}?${url.searchParams.toString()}`
 }
 
-async function updateHistory(date: string, anchorDate: string, mode: 'push' | 'replace' = 'push'): Promise<void> {
-  if (isLoading.value) return
+async function updateHistory(
+  date: string,
+  anchorDate: string,
+  options: UpdateHistoryOptions = {},
+): Promise<void> {
+  const {
+    mode = 'push',
+    silent = false,
+    preservePicker = false,
+  } = options
+
+  if (isLoading.value && !silent) return
 
   const url = detailUrl(date, anchorDate)
 
-  isLoading.value = true
+  if (!silent) {
+    isLoading.value = true
+  }
 
   try {
     const response = await fetch(url, {
@@ -346,7 +372,11 @@ async function updateHistory(date: string, anchorDate: string, mode: 'push' | 'r
 
     const payload = await response.json() as HistoryPageProps
     historyState.value = payload
-    pickerDate.value = payload.daySelector?.anchor_date ?? payload.daySelector?.window_end ?? pickerDate.value
+
+    if (!preservePicker) {
+      pickerDate.value = payload.daySelector?.anchor_date ?? payload.daySelector?.window_end ?? pickerDate.value
+    }
+
     liveLastSeen.value = payload.lastSeen
     liveOnline.value = payload.isOnline
 
@@ -358,7 +388,9 @@ async function updateHistory(date: string, anchorDate: string, mode: 'push' | 'r
   } catch (error) {
     console.error('Unable to update history view', error)
   } finally {
-    isLoading.value = false
+    if (!silent) {
+      isLoading.value = false
+    }
   }
 }
 
@@ -416,12 +448,40 @@ function goBackToMinutes(): void {
   selectedMinuteKey.value = null
 }
 
+function refreshTodayHistory(): void {
+  if (!selectedDateIsToday.value || isLoading.value) return
+
+  void updateHistory(
+    historyState.value.selectedDate,
+    historyState.value.daySelector.anchor_date,
+    {
+      mode: 'replace',
+      silent: true,
+      preservePicker: true,
+    },
+  )
+}
+
+function scheduleTodayHistoryRefresh(delay = 1500): void {
+  if (!selectedDateIsToday.value) return
+
+  if (liveRefreshTimeout !== null) {
+    window.clearTimeout(liveRefreshTimeout)
+  }
+
+  liveRefreshTimeout = window.setTimeout(() => {
+    liveRefreshTimeout = null
+    refreshTodayHistory()
+  }, delay)
+}
+
 const liveHandler = (event: Event) => {
   const detail = (event as CustomEvent<Record<string, unknown>>).detail ?? {}
   const updatedAt = typeof detail.updated_at === 'string' ? detail.updated_at : null
 
   liveOnline.value = isDeviceOnline(updatedAt)
   liveLastSeen.value = lastSeenLabel(updatedAt)
+  scheduleTodayHistoryRefresh()
 }
 
 const popStateHandler = () => {
@@ -429,17 +489,26 @@ const popStateHandler = () => {
   const anchorDate = url.searchParams.get('anchor_date') ?? historyState.value.daySelector.anchor_date
   const date = url.searchParams.get('date') ?? anchorDate
 
-  void updateHistory(date, anchorDate, 'replace')
+  void updateHistory(date, anchorDate, { mode: 'replace' })
 }
 
 onMounted(() => {
   window.addEventListener('pulsenode:latest', liveHandler)
   window.addEventListener('popstate', popStateHandler)
+  liveRefreshInterval = window.setInterval(refreshTodayHistory, 20000)
 })
 
 onUnmounted(() => {
   window.removeEventListener('pulsenode:latest', liveHandler)
   window.removeEventListener('popstate', popStateHandler)
+
+  if (liveRefreshTimeout !== null) {
+    window.clearTimeout(liveRefreshTimeout)
+  }
+
+  if (liveRefreshInterval !== null) {
+    window.clearInterval(liveRefreshInterval)
+  }
 })
 </script>
 

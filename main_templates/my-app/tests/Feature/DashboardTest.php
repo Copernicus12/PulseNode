@@ -33,4 +33,38 @@ class DashboardTest extends TestCase
             ->assertDontSeeText('Hardware specifications')
             ->assertDontSeeText('JSON Payload');
     }
+
+    public function test_energy_history_api_returns_live_billing_summary_for_dashboard_refresh()
+    {
+        $user = User::factory()->create([
+            'electricity_price_per_wh' => 0.00142,
+            'billing_currency' => 'RON',
+            'billing_tax_percent' => 21,
+        ]);
+        $this->actingAs($user);
+
+        $response = $this->getJson(route('api.energy-history'));
+
+        $response
+            ->assertOk()
+            ->assertJsonStructure([
+                'week',
+                'today_progress_kwh',
+                'billingSummary' => [
+                    'profile_label',
+                    'profile_source',
+                    'currency',
+                    'price_per_kwh',
+                    'price_per_kwh_with_tax',
+                    'tax_percent',
+                    'day' => [
+                        'energy_kwh',
+                        'subtotal',
+                        'tax_amount',
+                        'total_cost',
+                    ],
+                    'sockets',
+                ],
+            ]);
+    }
 }
