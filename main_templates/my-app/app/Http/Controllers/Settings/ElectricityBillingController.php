@@ -12,10 +12,12 @@ use App\Http\Requests\Settings\ElectricityBillingUpdateRequest;
 use App\Models\BillingInvoiceFile;
 use App\Models\BillingInvoiceFolder;
 use App\Models\BillingTariffProfile;
+use App\Support\BillingInvoiceStorage;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\HeaderUtils;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -23,6 +25,10 @@ use Inertia\Response;
 
 class ElectricityBillingController extends Controller
 {
+    public function __construct(
+        private readonly BillingInvoiceStorage $invoiceStorage,
+    ) {}
+
     public function edit(Request $request): Response
     {
         $user = $request->user();
@@ -127,10 +133,15 @@ class ElectricityBillingController extends Controller
                 $storedName .= '.'.$extension;
             }
 
-            $storagePath = $uploadedFile->storeAs(
-                'billing-invoices/'.$ownerKey.'/'.$billingPeriod,
+            $storagePath = $this->invoiceStorage->storeUploadedFile(
+                $uploadedFile,
                 $storedName,
-                'local',
+                [
+                    'owner_key' => $ownerKey,
+                    'billing_period' => $billingPeriod,
+                    'original_name' => $originalName,
+                    'mime_type' => (string) ($uploadedFile->getClientMimeType() ?? 'application/octet-stream'),
+                ],
             );
 
             BillingInvoiceFile::query()->create([
@@ -171,18 +182,22 @@ class ElectricityBillingController extends Controller
         return to_route('electricity-billing.archive');
     }
 
-    public function downloadInvoice(Request $request, string $invoiceId): BinaryFileResponse
+    public function downloadInvoice(Request $request, string $invoiceId): StreamedResponse
     {
         $invoice = $this->invoiceQuery($request->user())
             ->where('id', $invoiceId)
             ->firstOrFail();
 
-        abort_unless(Storage::disk('local')->exists($invoice->storage_path), 404);
+        return $this->streamInvoiceResponse($invoice, HeaderUtils::DISPOSITION_ATTACHMENT);
+    }
 
-        return Storage::disk('local')->download(
-            $invoice->storage_path,
-            $invoice->original_name,
-        );
+    public function previewInvoice(Request $request, string $invoiceId): StreamedResponse
+    {
+        $invoice = $this->invoiceQuery($request->user())
+            ->where('id', $invoiceId)
+            ->firstOrFail();
+
+        return $this->streamInvoiceResponse($invoice, HeaderUtils::DISPOSITION_INLINE);
     }
 
     public function destroyInvoice(Request $request, string $invoiceId): RedirectResponse
@@ -191,7 +206,7 @@ class ElectricityBillingController extends Controller
             ->where('id', $invoiceId)
             ->firstOrFail();
 
-        Storage::disk('local')->delete($invoice->storage_path);
+        $this->deleteInvoiceBinary($invoice);
         $invoice->delete();
 
         return to_route('electricity-billing.archive');
@@ -263,7 +278,7 @@ class ElectricityBillingController extends Controller
         }
 
         $query->get()->each(function (BillingInvoiceFile $invoice): void {
-            Storage::disk('local')->delete($invoice->storage_path);
+            $this->deleteInvoiceBinary($invoice);
             $invoice->delete();
         });
 
@@ -291,6 +306,7 @@ class ElectricityBillingController extends Controller
                 'mime_type' => (string) $invoice->mime_type,
                 'extension' => (string) ($invoice->file_extension ?? ''),
                 'uploaded_at' => optional($invoice->created_at)?->toISOString(),
+                'preview_url' => route('electricity-billing.invoices.preview', $invoice->id),
                 'download_url' => route('electricity-billing.invoices.download', $invoice->id),
                 'delete_url' => route('electricity-billing.invoices.destroy', $invoice->id),
             ])
@@ -324,14 +340,18 @@ class ElectricityBillingController extends Controller
 
     private function moveInvoiceToPeriod(BillingInvoiceFile $invoice, string $targetPeriod, string $ownerKey): void
     {
-        $targetPath = $this->targetStoragePath($invoice, $ownerKey, $targetPeriod);
+        $targetPath = $invoice->storage_path;
 
-        if (
-            $invoice->storage_path !== $targetPath &&
-            Storage::disk('local')->exists($invoice->storage_path)
-        ) {
-            Storage::disk('local')->makeDirectory(dirname($targetPath));
-            Storage::disk('local')->move($invoice->storage_path, $targetPath);
+        if (! $this->invoiceStorage->isGridFsPath($invoice->storage_path)) {
+            $targetPath = $this->targetStoragePath($invoice, $ownerKey, $targetPeriod);
+
+            if (
+                $invoice->storage_path !== $targetPath &&
+                Storage::disk('local')->exists($invoice->storage_path)
+            ) {
+                Storage::disk('local')->makeDirectory(dirname($targetPath));
+                Storage::disk('local')->move($invoice->storage_path, $targetPath);
+            }
         }
 
         $invoice->forceFill([
@@ -345,6 +365,55 @@ class ElectricityBillingController extends Controller
     private function targetStoragePath(BillingInvoiceFile $invoice, string $ownerKey, string $targetPeriod): string
     {
         return 'billing-invoices/'.$ownerKey.'/'.$targetPeriod.'/'.basename($invoice->storage_path);
+    }
+
+    private function deleteInvoiceBinary(BillingInvoiceFile $invoice): void
+    {
+        if ($this->invoiceStorage->isGridFsPath($invoice->storage_path)) {
+            $this->invoiceStorage->delete($invoice->storage_path);
+
+            return;
+        }
+
+        Storage::disk('local')->delete($invoice->storage_path);
+    }
+
+    private function openInvoiceStream(BillingInvoiceFile $invoice)
+    {
+        if ($this->invoiceStorage->isGridFsPath($invoice->storage_path)) {
+            return $this->invoiceStorage->openDownloadStream($invoice->storage_path);
+        }
+
+        abort_unless(Storage::disk('local')->exists($invoice->storage_path), 404);
+
+        $stream = Storage::disk('local')->readStream($invoice->storage_path);
+
+        abort_if($stream === false, 404);
+
+        return $stream;
+    }
+
+    private function streamInvoiceResponse(BillingInvoiceFile $invoice, string $disposition): StreamedResponse
+    {
+        $stream = $this->openInvoiceStream($invoice);
+        $safeName = $invoice->original_name !== ''
+            ? $invoice->original_name
+            : 'invoice';
+        $asciiFallbackName = Str::ascii($safeName);
+        $asciiFallbackName = preg_replace('/[^A-Za-z0-9._-]/', '_', $asciiFallbackName ?? '') ?: 'invoice';
+
+        return response()->stream(function () use ($stream): void {
+            fpassthru($stream);
+
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        }, 200, [
+            'Content-Type' => (string) ($invoice->mime_type ?: 'application/octet-stream'),
+            'Content-Length' => (string) $invoice->size_bytes,
+            'Content-Disposition' => HeaderUtils::makeDisposition($disposition, $safeName, $asciiFallbackName),
+            'Cache-Control' => 'private, max-age=0, must-revalidate',
+        ]);
     }
 
     private function folderQuery(?Authenticatable $user)

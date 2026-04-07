@@ -8,6 +8,7 @@ import {
     CalendarRange,
     ChevronRight,
     Download,
+    Eye,
     FileText,
     Files,
     FolderCode,
@@ -16,7 +17,6 @@ import {
     HardDriveUpload,
     Info,
     LayoutGrid,
-    List,
     Pencil,
     ReceiptText,
     Trash2,
@@ -29,8 +29,6 @@ import {
     ContextMenuContent,
     ContextMenuItem,
     ContextMenuLabel,
-    ContextMenuRadioGroup,
-    ContextMenuRadioItem,
     ContextMenuSeparator,
     ContextMenuTrigger,
 } from '@/components/ui/context-menu';
@@ -64,6 +62,7 @@ type ArchiveItem = {
     mime_type: string;
     extension: string;
     uploaded_at?: string | null;
+    preview_url: string;
     download_url: string;
     delete_url: string;
 };
@@ -127,12 +126,14 @@ const uploadDialogOpen = ref(false);
 const folderActionDialogOpen = ref(false);
 const createFolderDialogOpen = ref(false);
 const folderInfoDialogOpen = ref(false);
+const previewDialogOpen = ref(false);
 const selectedYear = ref<string | null>(null);
 const selectedMonth = ref<string | null>(null);
 const uploadInput = ref<HTMLInputElement | null>(null);
 const activeFolderAction = ref<FolderAction>('rename');
 const activeFolderTarget = ref<FolderActionTarget | null>(null);
 const folderInfoTarget = ref<FolderActionTarget | null>(null);
+const previewItem = ref<ArchiveItem | null>(null);
 const folderViewMode = ref<FolderViewMode>('grid');
 const folderSortMode = ref<FolderSortMode>('newest');
 const explorerFlyout = ref<{
@@ -166,8 +167,6 @@ const contextMenuLabelClass =
     'px-3 pb-2 pt-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground';
 const contextMenuItemClass =
     'rounded-xl px-3 py-2.5 text-[15px] font-medium [&_svg]:size-[1.05rem]';
-const contextMenuRadioItemClass =
-    'rounded-xl py-2.5 pr-3 pl-9 text-[15px] font-medium';
 const contextMenuSeparatorClass = 'mx-1 my-2 bg-border/60';
 const explorerFlyoutWidth = 248;
 const folderSortOptions: Array<{ value: FolderSortMode; label: string }> = [
@@ -403,6 +402,15 @@ const folderInfoPath = computed(() => {
 
     return `Invoice archive / ${folderInfoTarget.value.parentYear ?? folderInfoTarget.value.key.slice(0, 4)} / ${folderInfoTarget.value.label}`;
 });
+const previewItemIsPdf = computed(
+    () => previewItem.value?.mime_type === 'application/pdf',
+);
+const previewItemIsImage = computed(
+    () => previewItem.value?.mime_type.startsWith('image/') ?? false,
+);
+const previewDialogTitle = computed(() =>
+    previewItem.value ? `Preview ${previewItem.value.name}` : 'Preview invoice',
+);
 const createFolderSubmitDisabled = computed(() => {
     if (createFolderForm.processing) return true;
 
@@ -461,6 +469,14 @@ watch(folderInfoDialogOpen, (isOpen) => {
     }
 
     folderInfoTarget.value = null;
+});
+
+watch(previewDialogOpen, (isOpen) => {
+    if (isOpen) {
+        return;
+    }
+
+    previewItem.value = null;
 });
 
 watch(createFolderDialogOpen, (isOpen) => {
@@ -704,6 +720,11 @@ function destroyInvoice(item: ArchiveItem): void {
     router.delete(item.delete_url, {
         preserveScroll: true,
     });
+}
+
+function openPreview(item: ArchiveItem): void {
+    previewItem.value = item;
+    previewDialogOpen.value = true;
 }
 
 function openFolderActionDialog(
@@ -1997,6 +2018,21 @@ function submitFolderAction(): void {
                                                                 class="flex items-center justify-end gap-2"
                                                             >
                                                                 <Button
+                                                                    type="button"
+                                                                    variant="outline"
+                                                                    class="rounded-xl"
+                                                                    @click="
+                                                                        openPreview(
+                                                                            item,
+                                                                        )
+                                                                    "
+                                                                >
+                                                                    <Eye
+                                                                        class="h-4 w-4"
+                                                                    />
+                                                                    Preview
+                                                                </Button>
+                                                                <Button
                                                                     as="a"
                                                                     :href="
                                                                         item.download_url
@@ -2283,6 +2319,94 @@ function submitFolderAction(): void {
                     </template>
                 </CardContent>
             </Card>
+
+            <Dialog v-model:open="previewDialogOpen">
+                <DialogContent class="max-h-[90vh] overflow-hidden sm:max-w-5xl">
+                    <DialogHeader>
+                        <DialogTitle>
+                            {{ previewDialogTitle }}
+                        </DialogTitle>
+                        <DialogDescription>
+                            Review the invoice directly from the archive before downloading it.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div
+                        v-if="previewItem"
+                        class="space-y-4"
+                    >
+                        <div
+                            class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
+                        >
+                            <span class="rounded-full bg-muted px-3 py-1">
+                                {{ previewItem.period }}
+                            </span>
+                            <span class="rounded-full bg-muted px-3 py-1">
+                                {{
+                                    previewItem.extension
+                                        ? previewItem.extension.toUpperCase()
+                                        : 'FILE'
+                                }}
+                            </span>
+                            <span class="rounded-full bg-muted px-3 py-1">
+                                {{ formatBytes(previewItem.size_bytes) }}
+                            </span>
+                        </div>
+
+                        <div
+                            class="overflow-hidden rounded-[24px] border border-border/40 bg-muted/20"
+                        >
+                            <iframe
+                                v-if="previewItemIsPdf"
+                                :src="previewItem.preview_url"
+                                :title="previewItem.name"
+                                class="h-[68vh] w-full bg-background"
+                            />
+
+                            <div
+                                v-else-if="previewItemIsImage"
+                                class="flex h-[68vh] items-center justify-center bg-background p-4"
+                            >
+                                <img
+                                    :src="previewItem.preview_url"
+                                    :alt="previewItem.name"
+                                    class="max-h-full max-w-full rounded-2xl object-contain shadow-[0_20px_60px_-40px_rgba(0,0,0,0.85)]"
+                                />
+                            </div>
+
+                            <div
+                                v-else
+                                class="flex h-[50vh] flex-col items-center justify-center gap-3 px-6 text-center"
+                            >
+                                <FileText class="h-8 w-8 text-muted-foreground" />
+                                <p class="max-w-md text-sm text-muted-foreground">
+                                    This file type does not support inline preview yet.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            class="rounded-xl"
+                            @click="previewDialogOpen = false"
+                        >
+                            Close
+                        </Button>
+                        <Button
+                            v-if="previewItem"
+                            as="a"
+                            :href="previewItem.download_url"
+                            class="rounded-xl"
+                        >
+                            <Download class="h-4 w-4" />
+                            Download
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <Dialog v-model:open="folderInfoDialogOpen">
                 <DialogContent class="sm:max-w-xl">

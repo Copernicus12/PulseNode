@@ -21,6 +21,7 @@ return [
         'database' => env('MONGODB_DATABASE', 'espData'),
         'collection' => env('MONGODB_COLLECTION', 'readings'),
         'notifications_collection' => env('MONGODB_NOTIFICATIONS_COLLECTION', 'notifications'),
+        'billing_invoices_bucket' => env('MONGODB_BILLING_INVOICES_BUCKET', 'billing_invoices'),
     ],
 
     'connection' => [

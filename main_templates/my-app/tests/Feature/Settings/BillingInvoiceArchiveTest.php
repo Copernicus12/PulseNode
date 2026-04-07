@@ -4,10 +4,12 @@ namespace Tests\Feature\Settings;
 
 use App\Models\BillingInvoiceFile;
 use App\Models\User;
+use App\Support\BillingInvoiceStorage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
+use Mockery\MockInterface;
 use Tests\TestCase;
 
 class BillingInvoiceArchiveTest extends TestCase
@@ -30,10 +32,15 @@ class BillingInvoiceArchiveTest extends TestCase
 
     public function test_user_can_upload_a_previous_invoice(): void
     {
-        Storage::fake('local');
-
         $user = User::factory()->create();
         $file = UploadedFile::fake()->create('invoice-mar-2026.pdf', 120, 'application/pdf');
+        $gridFsPath = 'gridfs://65f1a7b8c9d0e1f234567890';
+
+        $this->mock(BillingInvoiceStorage::class, function (MockInterface $mock) use ($gridFsPath): void {
+            $mock->shouldReceive('storeUploadedFile')
+                ->once()
+                ->andReturn($gridFsPath);
+        });
 
         $this->actingAs($user)
             ->post(route('electricity-billing.invoices.store'), [
@@ -47,7 +54,68 @@ class BillingInvoiceArchiveTest extends TestCase
         $this->assertSame('2026-03', $invoice->billing_period);
         $this->assertSame('invoice-mar-2026.pdf', $invoice->original_name);
         $this->assertSame((string) $user->getAuthIdentifier(), $invoice->owner_key);
-        Storage::disk('local')->assertExists($invoice->storage_path);
+        $this->assertSame($gridFsPath, $invoice->storage_path);
+    }
+
+    public function test_user_can_preview_a_local_invoice_inline(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $ownerKey = (string) $user->getAuthIdentifier();
+        $invoice = BillingInvoiceFile::query()->create([
+            'id' => 'inv-preview-local',
+            'owner_key' => $ownerKey,
+            'owner_email' => (string) $user->email,
+            'billing_period' => '2026-03',
+            'billing_year' => 2026,
+            'billing_month' => 3,
+            'original_name' => 'invoice-mar-2026.pdf',
+            'storage_path' => 'billing-invoices/'.$ownerKey.'/2026-03/invoice-mar-2026.pdf',
+            'mime_type' => 'application/pdf',
+            'file_extension' => 'pdf',
+            'size_bytes' => 3,
+        ]);
+
+        Storage::disk('local')->put($invoice->storage_path, 'pdf');
+
+        $response = $this->actingAs($user)
+            ->get(route('electricity-billing.invoices.preview', $invoice->id));
+
+        $response
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('Content-Disposition', 'inline; filename=invoice-mar-2026.pdf');
+    }
+
+    public function test_user_can_preview_a_local_invoice_with_non_ascii_name(): void
+    {
+        Storage::fake('local');
+
+        $user = User::factory()->create();
+        $ownerKey = (string) $user->getAuthIdentifier();
+        $invoice = BillingInvoiceFile::query()->create([
+            'id' => 'inv-preview-unicode',
+            'owner_key' => $ownerKey,
+            'owner_email' => (string) $user->email,
+            'billing_period' => '2026-04',
+            'billing_year' => 2026,
+            'billing_month' => 4,
+            'original_name' => 'factură-energie-aprilie-2026.pdf',
+            'storage_path' => 'billing-invoices/'.$ownerKey.'/2026-04/factura-aprilie-2026.pdf',
+            'mime_type' => 'application/pdf',
+            'file_extension' => 'pdf',
+            'size_bytes' => 3,
+        ]);
+
+        Storage::disk('local')->put($invoice->storage_path, 'pdf');
+
+        $response = $this->actingAs($user)
+            ->get(route('electricity-billing.invoices.preview', $invoice->id));
+
+        $response
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/pdf');
     }
 
     public function test_user_can_rename_a_year_folder(): void

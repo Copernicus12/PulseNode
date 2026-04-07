@@ -67,6 +67,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('electricity-billing.invoices.store');
     Route::post('settings/electricity-billing/archive/folders', [ElectricityBillingController::class, 'storeInvoiceFolder'])
         ->name('electricity-billing.archive.folders.store');
+    Route::get('settings/electricity-billing/invoices/{invoiceId}/preview', [ElectricityBillingController::class, 'previewInvoice'])
+        ->name('electricity-billing.invoices.preview');
     Route::get('settings/electricity-billing/invoices/{invoiceId}/download', [ElectricityBillingController::class, 'downloadInvoice'])
         ->name('electricity-billing.invoices.download');
     Route::delete('settings/electricity-billing/invoices/{invoiceId}', [ElectricityBillingController::class, 'destroyInvoice'])

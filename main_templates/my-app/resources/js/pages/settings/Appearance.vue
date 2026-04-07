@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
-import { Languages, Monitor, Moon, Sun } from 'lucide-vue-next';
+import { Check, Languages, Monitor, Moon, Sun } from 'lucide-vue-next';
 import { computed } from 'vue';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -146,38 +146,61 @@ const currentLanguageFromServer = computed(() =>
                             </CardDescription>
                         </div>
 
-                        <div class="grid grid-cols-1 justify-items-center gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                            <button
-                                v-for="option in themeOptions"
-                                :key="option.value"
-                                type="button"
-                                class="flex h-44 w-full max-w-[10.5rem] flex-col rounded-[24px] border p-4 text-left transition"
-                                :class="
-                                    appearance === option.value
-                                        ? 'border-primary/35 bg-primary/8'
-                                        : 'border-border/40 bg-background hover:border-primary/20 hover:bg-muted/20'
-                                "
-                                @click="updateAppearance(option.value)"
-                            >
-                                <div class="flex items-start justify-between gap-3">
-                                    <div class="rounded-2xl bg-primary/12 p-3 text-primary">
-                                        <component :is="option.icon" class="h-5 w-5" />
-                                    </div>
-                                    <Badge
-                                        v-if="appearance === option.value"
-                                        class="rounded-full px-3 py-1"
-                                    >
-                                        Active
-                                    </Badge>
-                                </div>
+                        <div class="rounded-[28px] border border-border/30 bg-background/40 p-3">
+                            <div class="grid gap-3 sm:grid-cols-3">
+                                <button
+                                    v-for="option in themeOptions"
+                                    :key="option.value"
+                                    type="button"
+                                    :aria-pressed="appearance === option.value"
+                                    class="group relative flex min-h-[12rem] flex-col rounded-[24px] border px-4 py-4 text-left transition-all duration-200"
+                                    :class="
+                                        appearance === option.value
+                                            ? 'border-primary/40 bg-primary/10 shadow-sm shadow-primary/5 ring-1 ring-primary/20'
+                                            : 'border-border/40 bg-background/80 hover:-translate-y-0.5 hover:border-primary/20 hover:bg-muted/30'
+                                    "
+                                    @click="updateAppearance(option.value)"
+                                >
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div
+                                            class="flex h-14 w-14 items-center justify-center rounded-2xl border transition-colors"
+                                            :class="
+                                                appearance === option.value
+                                                    ? 'border-primary/20 bg-primary/10 text-primary'
+                                                    : 'border-transparent bg-muted/55 text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary'
+                                            "
+                                        >
+                                            <component :is="option.icon" class="h-6 w-6" />
+                                        </div>
 
-                                <div class="mt-4 space-y-2">
-                                    <p class="text-base font-semibold">{{ option.label }}</p>
-                                    <p class="text-sm leading-6 text-muted-foreground line-clamp-3">
-                                        {{ option.description }}
-                                    </p>
-                                </div>
-                            </button>
+                                        <div
+                                            class="flex h-9 w-9 items-center justify-center rounded-full border transition-colors"
+                                            :class="
+                                                appearance === option.value
+                                                    ? 'border-primary/30 bg-primary text-primary-foreground'
+                                                    : 'border-border/50 bg-background text-transparent group-hover:border-primary/20'
+                                            "
+                                        >
+                                            <Check class="h-4 w-4" />
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-auto space-y-2">
+                                        <div class="flex items-center gap-2">
+                                            <p class="text-base font-semibold">{{ option.label }}</p>
+                                            <span
+                                                v-if="appearance === option.value"
+                                                class="rounded-full bg-primary/12 px-2 py-0.5 text-[11px] font-medium text-primary"
+                                            >
+                                                Active
+                                            </span>
+                                        </div>
+                                        <p class="text-sm leading-5 text-muted-foreground">
+                                            {{ option.description }}
+                                        </p>
+                                    </div>
+                                </button>
+                            </div>
                         </div>
                     </CardContent>
                 </Card>
