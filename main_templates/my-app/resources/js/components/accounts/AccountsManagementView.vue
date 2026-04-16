@@ -378,7 +378,10 @@ function syncAccountsScrollbar(): void {
         return;
     }
 
-    const thumbHeight = Math.max(40, (clientHeight / scrollHeight) * clientHeight);
+    const thumbHeight = Math.max(
+        40,
+        (clientHeight / scrollHeight) * clientHeight,
+    );
     const maxScrollTop = Math.max(scrollHeight - clientHeight, 1);
     const maxThumbOffset = Math.max(clientHeight - thumbHeight, 0);
     const thumbOffset = (scrollTop / maxScrollTop) * maxThumbOffset;
@@ -546,7 +549,6 @@ watch(
 <template>
     <div class="mx-auto max-w-[1280px] space-y-4">
         <Toaster
-            theme="dark"
             position="top-right"
             :expand="false"
             :visible-toasts="1"
@@ -555,7 +557,9 @@ watch(
         />
 
         <Card class="relative overflow-hidden border-border/40 shadow-none">
-            <div class="pointer-events-none absolute inset-0 bg-linear-to-r from-primary/8 via-transparent to-transparent" />
+            <div
+                class="pointer-events-none absolute inset-0 bg-linear-to-r from-primary/8 via-transparent to-transparent"
+            />
 
             <CardHeader class="relative gap-3 p-4 sm:p-5">
                 <div class="flex flex-wrap items-center justify-between gap-3">
@@ -736,7 +740,9 @@ watch(
         </Card>
 
         <div class="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-            <Card class="border-border/40 shadow-none xl:sticky xl:top-4 xl:self-start">
+            <Card
+                class="border-border/40 shadow-none xl:sticky xl:top-4 xl:self-start"
+            >
                 <CardHeader class="gap-2 p-4">
                     <CardTitle class="text-sm font-semibold">
                         Account navigation

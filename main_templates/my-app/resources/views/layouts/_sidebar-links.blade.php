@@ -60,6 +60,7 @@
     @if($isDevicesRoute) open @endif
     @class([
         'group relative rounded-2xl',
+        'light-outline-soft' => !$isDevicesRoute,
         'bg-primary/8 ring-1 ring-primary/20' => $isDevicesRoute,
     ])
 >
@@ -81,7 +82,7 @@
         <svg class="h-4 w-4 transition group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     </summary>
 
-    <div class="space-y-1 px-2 pb-2 transition lg:absolute lg:left-[calc(100%+0.65rem)] lg:top-0 lg:z-40 lg:w-56 lg:rounded-2xl lg:bg-card lg:p-2 lg:ring-1 lg:ring-border/40 lg:shadow-2xl lg:shadow-black/40 lg:opacity-0 lg:translate-x-2 lg:pointer-events-none lg:group-hover:opacity-100 lg:group-hover:translate-x-0 lg:group-hover:pointer-events-auto lg:group-focus-within:opacity-100 lg:group-focus-within:translate-x-0 lg:group-focus-within:pointer-events-auto">
+    <div class="space-y-1 px-2 pb-2 transition lg:absolute lg:left-[calc(100%+0.65rem)] lg:top-0 lg:z-40 lg:w-56 lg:rounded-2xl lg:bg-card lg:p-2 lg:ring-1 lg:ring-border/40 lg:shadow-2xl lg:shadow-black/40 lg:opacity-0 lg:translate-x-2 lg:pointer-events-none lg:group-hover:opacity-100 lg:group-hover:translate-x-0 lg:group-hover:pointer-events-auto lg:group-focus-within:opacity-100 lg:group-focus-within:translate-x-0 lg:group-focus-within:pointer-events-auto lg:light-outline-strong">
         <div class="mb-1 hidden px-2 py-1 text-[11px] uppercase tracking-[0.12em] text-muted-foreground lg:block">
             My Devices
         </div>
@@ -119,7 +120,7 @@
    @class([
        'flex items-center gap-3 rounded-2xl px-4 py-3 text-[14px] transition',
        'bg-primary text-primary-foreground font-semibold' => request()->routeIs('electricity-billing.archive', 'electricity-billing.invoices.*'),
-       'text-muted-foreground hover:bg-muted/50 hover:text-foreground' => !request()->routeIs('electricity-billing.archive', 'electricity-billing.invoices.*'),
+       'light-outline-soft text-muted-foreground hover:bg-muted/50 hover:text-foreground' => !request()->routeIs('electricity-billing.archive', 'electricity-billing.invoices.*'),
    ])>
     <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2h7A2.5 2.5 0 0 1 21 9.5v9A2.5 2.5 0 0 1 18.5 21h-13A2.5 2.5 0 0 1 3 18.5z"/>
@@ -136,7 +137,7 @@
        @class([
            'flex items-center gap-3 rounded-2xl px-4 py-3 text-[14px] transition',
            'bg-primary text-primary-foreground font-semibold' => $currentRoute === 'accounts.index',
-           'text-muted-foreground hover:bg-muted/50 hover:text-foreground' => $currentRoute !== 'accounts.index',
+           'light-outline-soft text-muted-foreground hover:bg-muted/50 hover:text-foreground' => $currentRoute !== 'accounts.index',
        ])>
         <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>

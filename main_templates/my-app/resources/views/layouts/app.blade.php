@@ -1,9 +1,44 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
+<html
+    lang="{{ str_replace('_', '-', app()->getLocale()) }}"
+    @class(['dark' => ($appearance ?? 'system') === 'dark'])
+>
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>html { background-color: hsl(0 0% 7%); }</style>
+        <script>
+            (function() {
+                let appearance = '{{ $appearance ?? "system" }}';
+                try {
+                    const storedAppearance = window.localStorage.getItem('appearance');
+                    if (storedAppearance === 'light' || storedAppearance === 'dark' || storedAppearance === 'system') {
+                        appearance = storedAppearance;
+                    }
+                } catch (error) {
+                    // Ignore storage access issues and keep the server fallback.
+                }
+
+                const resolvedAppearance = appearance === 'system'
+                    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                    : appearance;
+
+                document.documentElement.classList.toggle('dark', resolvedAppearance === 'dark');
+                document.documentElement.style.colorScheme = resolvedAppearance;
+                document.documentElement.dataset.appearance = appearance;
+                document.documentElement.dataset.resolvedAppearance = resolvedAppearance;
+            })();
+        </script>
+        <style>
+            html {
+                background-color: oklch(1 0 0);
+                color-scheme: light;
+            }
+
+            html.dark {
+                background-color: oklch(0.145 0 0);
+                color-scheme: dark;
+            }
+        </style>
 
         <title>{{ trim($__env->yieldContent('title', 'PulseNode')) }} — {{ config('app.name', 'PulseNode') }}</title>
 
@@ -41,7 +76,7 @@
 
             {{-- Mobile sidebar --}}
             <aside class="fixed inset-y-0 left-0 z-50 flex w-[270px] -translate-x-full flex-col p-3 transition-transform duration-300 peer-checked/mobile:translate-x-0 lg:hidden">
-                <div class="flex flex-1 flex-col rounded-3xl bg-card p-4">
+                <div class="light-outline-strong flex flex-1 flex-col rounded-3xl bg-card p-4">
                     <div class="flex items-center justify-between px-2 pb-6 pt-2">
                         <span class="text-lg font-bold tracking-tight">PulseNode</span>
                         <label for="mobile-sidebar" class="inline-flex h-8 w-8 items-center justify-center rounded-xl text-muted-foreground hover:text-foreground">
@@ -52,7 +87,7 @@
                         @include('layouts._sidebar-links')
                     </nav>
                     <div class="mt-4 space-y-1.5 border-t border-border/20 pt-4">
-                        <details @if($settingsNavOpen) open @endif class="group rounded-2xl {{ $settingsNavOpen ? 'bg-primary/8 ring-1 ring-primary/20' : '' }}">
+                        <details @if($settingsNavOpen) open @endif class="group rounded-2xl {{ $settingsNavOpen ? 'bg-primary/8 ring-1 ring-primary/20' : 'light-outline-soft' }}">
                             <summary class="flex cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-3 text-sm transition [&::-webkit-details-marker]:hidden {{ $settingsNavOpen ? 'font-semibold text-primary' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
                                 <svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                                 <span class="flex-1">Settings</span>
@@ -62,19 +97,19 @@
                                 <a href="{{ route('electricity-billing.edit') }}"
                                    data-search-link="1"
                                    data-search-label="settings billing electricity bill"
-                                   class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $billingSettingsActive ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
+                                   class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $billingSettingsActive ? 'bg-primary font-medium text-primary-foreground' : 'light-outline-soft text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
                                     Billing settings
                                 </a>
                                 <a href="{{ route('power-strip-diagnostics.edit') }}"
                                    data-search-link="1"
                                    data-search-label="settings hardware diagnostics power strip payload mqtt esp32"
-                                   class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $powerStripDiagnosticsActive ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
+                                   class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $powerStripDiagnosticsActive ? 'bg-primary font-medium text-primary-foreground' : 'light-outline-soft text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
                                     Hardware & diagnostics
                                 </a>
                                 <a href="{{ route('appearance.edit') }}"
                                    data-search-link="1"
                                    data-search-label="settings appearance theme dark light"
-                                   class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $appearanceSettingsActive ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
+                                   class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $appearanceSettingsActive ? 'bg-primary font-medium text-primary-foreground' : 'light-outline-soft text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
                                     Appearance
                                 </a>
                             </div>
@@ -94,7 +129,7 @@
 
                 {{-- Desktop sidebar — rounded card like Roomy --}}
                 <aside class="hidden w-[240px] shrink-0 lg:flex">
-                    <div class="flex w-full flex-col rounded-3xl bg-card p-4">
+                    <div class="light-outline-strong flex w-full flex-col rounded-3xl bg-card p-4">
                         <div class="px-3 pb-8 pt-3">
                             <span class="text-xl font-bold tracking-tight">PulseNode</span>
                         </div>
@@ -102,7 +137,7 @@
                             @include('layouts._sidebar-links')
                         </nav>
                         <div class="mt-4 space-y-1.5 border-t border-border/20 pt-4">
-                            <details @if($settingsNavOpen) open @endif class="group rounded-2xl {{ $settingsNavOpen ? 'bg-primary/8 ring-1 ring-primary/20' : '' }}">
+                            <details @if($settingsNavOpen) open @endif class="group rounded-2xl {{ $settingsNavOpen ? 'bg-primary/8 ring-1 ring-primary/20' : 'light-outline-soft' }}">
                                 <summary class="flex cursor-pointer list-none items-center gap-3 rounded-2xl px-4 py-3 text-sm transition [&::-webkit-details-marker]:hidden {{ $settingsNavOpen ? 'font-semibold text-primary' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
                                     <svg class="h-[18px] w-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                                     <span class="flex-1">Settings</span>
@@ -112,19 +147,19 @@
                                     <a href="{{ route('electricity-billing.edit') }}"
                                        data-search-link="1"
                                        data-search-label="settings billing electricity bill"
-                                       class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $billingSettingsActive ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
+                                       class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $billingSettingsActive ? 'bg-primary font-medium text-primary-foreground' : 'light-outline-soft text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
                                         Billing settings
                                     </a>
                                     <a href="{{ route('power-strip-diagnostics.edit') }}"
                                        data-search-link="1"
                                        data-search-label="settings hardware diagnostics power strip payload mqtt esp32"
-                                       class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $powerStripDiagnosticsActive ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
+                                       class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $powerStripDiagnosticsActive ? 'bg-primary font-medium text-primary-foreground' : 'light-outline-soft text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
                                         Hardware & diagnostics
                                     </a>
                                     <a href="{{ route('appearance.edit') }}"
                                        data-search-link="1"
                                        data-search-label="settings appearance theme dark light"
-                                       class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $appearanceSettingsActive ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
+                                       class="flex items-center rounded-xl px-3 py-2 text-sm transition {{ $appearanceSettingsActive ? 'bg-primary font-medium text-primary-foreground' : 'light-outline-soft text-muted-foreground hover:bg-muted/50 hover:text-foreground' }}">
                                         Appearance
                                     </a>
                                 </div>
@@ -172,7 +207,7 @@
                         <div class="hidden sm:flex justify-center">
                             <div class="relative w-full max-w-3xl">
                                 <svg class="absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                                <input id="global-search-input" type="text" placeholder="Search pages (Dashboard, Power Strip, Settings...)" autocomplete="off" class="h-11 w-full rounded-2xl bg-card pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/30" />
+                                <input id="global-search-input" type="text" placeholder="Search pages (Dashboard, Power Strip, Settings...)" autocomplete="off" class="light-outline h-11 w-full rounded-2xl bg-card pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary/30" />
                                 <span class="pointer-events-none absolute right-3.5 top-1/2 hidden -translate-y-1/2 rounded-lg bg-background px-2 py-1 text-[10px] font-semibold text-muted-foreground lg:inline-flex">Ctrl/⌘ K</span>
 
                                 <div id="global-search-panel" class="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 hidden overflow-hidden rounded-2xl border border-primary/35 bg-card ring-1 ring-primary/25 shadow-2xl shadow-black/60 outline outline-1 outline-border/50">
@@ -184,7 +219,7 @@
 
                         <div class="flex items-center gap-1.5">
                             @unless($isDashboardRoute)
-                                <div id="live-telemetry-pill" class="hidden items-center gap-2 rounded-2xl bg-card px-3 py-2 text-xs text-muted-foreground ring-1 ring-border/30 lg:inline-flex">
+                                <div id="live-telemetry-pill" class="light-outline-soft hidden items-center gap-2 rounded-2xl bg-card px-3 py-2 text-xs text-muted-foreground ring-1 ring-border/30 lg:inline-flex">
                                     <span id="live-telemetry-dot" class="h-2 w-2 rounded-full bg-red-400"></span>
                                     <span id="live-telemetry-power" class="font-semibold tabular-nums text-foreground">0.0W</span>
                                     <span id="live-telemetry-current" class="tabular-nums">0.000A</span>
@@ -192,7 +227,7 @@
                             @endunless
                             @if($accountAdminSummary)
                                 <div id="app-accounts-root" class="relative">
-                                    <button id="app-accounts-trigger" title="Accounts" aria-expanded="false" aria-controls="app-accounts-panel" class="inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground">
+                                    <button id="app-accounts-trigger" title="Accounts" aria-expanded="false" aria-controls="app-accounts-panel" class="light-outline-soft inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground">
                                         <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                                         <span id="app-accounts-badge" class="absolute -right-1 -top-1 min-w-[1.15rem] rounded-full bg-red-400 px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-background {{ $accountAdminSummary['blocked'] > 0 ? '' : 'hidden' }}">
                                             <span id="app-accounts-badge-value">
@@ -200,32 +235,32 @@
                                             </span>
                                         </span>
                                     </button>
-                                    <div id="app-accounts-panel" class="absolute right-0 top-[calc(100%+0.75rem)] z-[95] hidden w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-3xl border border-border/50 bg-card shadow-2xl shadow-black/40 ring-1 ring-border/40">
+                                    <div id="app-accounts-panel" class="light-outline-strong absolute right-0 top-[calc(100%+0.75rem)] z-[95] hidden w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-3xl border border-border/50 bg-card shadow-2xl shadow-black/40 ring-1 ring-border/40">
                                         <div class="border-b border-border/30 px-4 py-3">
                                             <div class="flex items-center justify-between gap-3">
                                                 <div>
                                                     <p class="text-sm font-semibold">Accounts</p>
                                                     <p class="text-[11px] text-muted-foreground">Manage roles, guest expiry, and blocked users.</p>
                                                 </div>
-                                                <span class="inline-flex rounded-full bg-background px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground ring-1 ring-border/40">Admin</span>
+                                                <span class="light-outline-soft inline-flex rounded-full bg-background px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground ring-1 ring-border/40">Admin</span>
                                             </div>
                                         </div>
                                         <div class="grid gap-2 p-3 sm:grid-cols-3">
-                                            <div class="rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30">
+                                            <div class="light-outline rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30">
                                                 <p class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Accounts</p>
                                                 <p id="app-accounts-total" class="mt-1 text-lg font-semibold tabular-nums">{{ $accountAdminSummary['total'] }}</p>
                                             </div>
-                                            <div class="rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30">
+                                            <div class="light-outline rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30">
                                                 <p class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Guests</p>
                                                 <p id="app-accounts-guests" class="mt-1 text-lg font-semibold tabular-nums">{{ $accountAdminSummary['active_guests'] }}</p>
                                             </div>
-                                            <div class="rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30">
+                                            <div class="light-outline rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30">
                                                 <p class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Blocked</p>
                                                 <p id="app-accounts-blocked" class="mt-1 text-lg font-semibold tabular-nums">{{ $accountAdminSummary['blocked'] }}</p>
                                             </div>
                                         </div>
                                         <div class="border-t border-border/30 bg-background/70 px-3 py-3">
-                                            <a href="{{ route('accounts.index') }}" class="inline-flex w-full items-center justify-center rounded-2xl bg-card px-4 py-2.5 text-sm font-medium text-foreground ring-1 ring-border/40 transition hover:bg-muted/40">
+                                            <a href="{{ route('accounts.index') }}" class="light-outline inline-flex w-full items-center justify-center rounded-2xl bg-card px-4 py-2.5 text-sm font-medium text-foreground ring-1 ring-border/40 transition hover:bg-muted/40">
                                                 Open account center
                                             </a>
                                         </div>
@@ -233,23 +268,23 @@
                                 </div>
                             @endif
                             <div id="app-notifications-root" class="relative" data-feed-url="{{ route('api.notifications.latest') }}" data-index-url="{{ route('notifications.index') }}">
-                                <button id="relay-command-toast-anchor" title="Notifications" aria-expanded="false" aria-controls="app-notifications-panel" class="inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground">
+                                <button id="relay-command-toast-anchor" title="Notifications" aria-expanded="false" aria-controls="app-notifications-panel" class="light-outline-soft inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground">
                                     <svg class="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-4-5.65V4a2 2 0 1 0-4 0v1.35A6 6 0 0 0 6 11v3.2a2 2 0 0 1-.6 1.4L4 17h5"/><path d="M9.73 17a2.99 2.99 0 0 0 4.54 0"/></svg>
                                     <span id="app-notifications-badge" class="absolute -right-1 -top-1 hidden min-w-[1.15rem] rounded-full bg-amber-400 px-1.5 py-0.5 text-center text-[10px] font-bold leading-none text-background">0</span>
                                 </button>
-                                <div id="app-notifications-panel" class="absolute right-0 top-[calc(100%+0.75rem)] z-[95] hidden w-[min(26rem,calc(100vw-1.5rem))] overflow-hidden rounded-3xl border border-border/50 bg-card shadow-2xl shadow-black/40 ring-1 ring-border/40">
+                                <div id="app-notifications-panel" class="light-outline-strong absolute right-0 top-[calc(100%+0.75rem)] z-[95] hidden w-[min(26rem,calc(100vw-1.5rem))] overflow-hidden rounded-3xl border border-border/50 bg-card shadow-2xl shadow-black/40 ring-1 ring-border/40">
                                     <div class="border-b border-border/30 px-4 py-3">
                                         <div class="flex items-center justify-between gap-3">
                                             <div>
                                                 <p class="text-sm font-semibold">Notifications</p>
                                                 <p class="text-[11px] text-muted-foreground">Latest 10 events, refreshed live.</p>
                                             </div>
-                                            <span class="inline-flex rounded-full bg-background px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground ring-1 ring-border/40">Live</span>
+                                            <span class="light-outline-soft inline-flex rounded-full bg-background px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground ring-1 ring-border/40">Live</span>
                                         </div>
                                     </div>
                                     <div id="app-notifications-list" class="max-h-[28rem] overflow-y-auto p-2"></div>
                                     <div class="border-t border-border/30 bg-background/70 px-3 py-3">
-                                        <a href="{{ route('notifications.index') }}" class="inline-flex w-full items-center justify-center rounded-2xl bg-card px-4 py-2.5 text-sm font-medium text-foreground ring-1 ring-border/40 transition hover:bg-muted/40">
+                                        <a href="{{ route('notifications.index') }}" class="light-outline inline-flex w-full items-center justify-center rounded-2xl bg-card px-4 py-2.5 text-sm font-medium text-foreground ring-1 ring-border/40 transition hover:bg-muted/40">
                                             Open full notification history
                                         </a>
                                     </div>
@@ -257,11 +292,11 @@
                             </div>
                             <details class="relative ml-1">
                                 <summary class="flex cursor-pointer list-none">
-                                    <span class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-card text-sm font-semibold">
+                                    <span class="light-outline-soft flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-card text-sm font-semibold">
                                         {{ strtoupper(substr(Auth::user()->name ?? 'U', 0, 1)) }}
                                     </span>
                                 </summary>
-                                <div class="absolute right-0 z-50 mt-2 w-52 rounded-3xl bg-card p-2 shadow-xl animate-in">
+                                <div class="light-outline-strong absolute right-0 z-50 mt-2 w-52 rounded-3xl bg-card p-2 shadow-xl animate-in">
                                     <div class="px-4 py-3">
                                         <p class="text-sm font-medium">{{ Auth::user()->name ?? 'User' }}</p>
                                         <p class="text-xs text-muted-foreground">{{ Auth::user()->email ?? '' }}</p>
@@ -730,7 +765,7 @@
                         ? '<a href="' + escapeHtml(item.action_url) + '" class="mt-3 inline-flex text-xs font-medium text-primary transition hover:opacity-80">Open</a>'
                         : '';
 
-                    return '<article class="rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30">'
+                    return '<article class="light-outline rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30">'
                         + '<div class="flex items-start justify-between gap-3">'
                         + '<div class="min-w-0 flex-1">'
                         + '<div class="flex flex-wrap items-center gap-2">'

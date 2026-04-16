@@ -1053,7 +1053,7 @@ function submitFolderAction(): void {
                                 class="border-b border-border/30 bg-muted/15 p-3 xl:border-r xl:border-b-0"
                             >
                                 <div
-                                    class="h-full min-h-[calc(100vh-19.5rem)] rounded-[26px] border border-border/40 bg-gradient-to-b from-background/95 to-muted/10 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] xl:sticky xl:top-4"
+                                    class="light-outline-strong h-full min-h-[calc(100vh-19.5rem)] rounded-[26px] border border-border/40 bg-gradient-to-b from-background/95 to-muted/10 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] xl:sticky xl:top-4"
                                 >
                                     <div class="mb-3 px-1">
                                         <p
@@ -1078,12 +1078,12 @@ function submitFolderAction(): void {
                                             :class="
                                                 !selectedYear
                                                     ? 'border-primary/25 bg-primary/10 font-medium text-primary shadow-[0_12px_30px_-24px_rgba(214,229,126,0.9)]'
-                                                    : 'border-transparent text-muted-foreground hover:border-border/50 hover:bg-background/70 hover:text-foreground'
+                                                    : 'light-outline text-muted-foreground hover:border-border/50 hover:bg-background/70 hover:text-foreground'
                                             "
                                             @click="resetExplorer"
                                         >
                                             <span
-                                                class="flex h-9 w-9 items-center justify-center rounded-2xl border border-border/40 bg-background/80"
+                                                class="light-outline-soft flex h-9 w-9 items-center justify-center rounded-2xl border border-border/40 bg-background/80"
                                             >
                                                 <ReceiptText class="h-4 w-4" />
                                             </span>
@@ -1095,7 +1095,7 @@ function submitFolderAction(): void {
                                         <div
                                             v-for="year in yearFolders"
                                             :key="year.key"
-                                            class="rounded-[22px] border border-border/30 bg-background/35 p-1.5"
+                                            class="light-outline rounded-[22px] border border-border/30 bg-background/35 p-1.5"
                                         >
                                             <button
                                                 type="button"
@@ -1104,12 +1104,12 @@ function submitFolderAction(): void {
                                                     selectedYear === year.key &&
                                                     !selectedMonth
                                                         ? 'border-primary/25 bg-primary/10 font-medium text-primary'
-                                                        : 'border-transparent text-muted-foreground hover:border-border/50 hover:bg-background/80 hover:text-foreground'
+                                                        : 'light-outline text-muted-foreground hover:border-border/50 hover:bg-background/80 hover:text-foreground'
                                                 "
                                                 @click="openYear(year.key)"
                                             >
                                                 <span
-                                                    class="flex h-9 w-9 items-center justify-center rounded-2xl border border-border/40 bg-background/80"
+                                                    class="light-outline-soft flex h-9 w-9 items-center justify-center rounded-2xl border border-border/40 bg-background/80"
                                                 >
                                                     <FolderOpen
                                                         class="h-4 w-4"
@@ -1138,7 +1138,7 @@ function submitFolderAction(): void {
                                                         selectedMonth ===
                                                         month.key
                                                             ? 'border-primary/20 bg-primary/10 font-medium text-primary'
-                                                            : 'border-transparent text-muted-foreground hover:border-border/40 hover:bg-background/60 hover:text-foreground'
+                                                            : 'light-outline-soft text-muted-foreground hover:border-border/40 hover:bg-background/60 hover:text-foreground'
                                                     "
                                                     @click="
                                                         openMonth(month.key)
@@ -1164,7 +1164,7 @@ function submitFolderAction(): void {
 
                             <div class="p-3 pl-0">
                                 <div
-                                    class="flex h-full min-h-[calc(100vh-19.5rem)] flex-col overflow-hidden rounded-[30px] border border-border/35 bg-background/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+                                    class="light-outline-strong flex h-full min-h-[calc(100vh-19.5rem)] flex-col overflow-hidden rounded-[30px] border border-border/35 bg-background/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
                                 >
                                     <div
                                         class="rounded-t-[30px] border-b border-border/30 bg-background/70 px-4 py-3.5 sm:px-5"
@@ -2321,20 +2321,20 @@ function submitFolderAction(): void {
             </Card>
 
             <Dialog v-model:open="previewDialogOpen">
-                <DialogContent class="max-h-[90vh] overflow-hidden sm:max-w-5xl">
+                <DialogContent
+                    class="max-h-[90vh] overflow-hidden sm:max-w-5xl"
+                >
                     <DialogHeader>
                         <DialogTitle>
                             {{ previewDialogTitle }}
                         </DialogTitle>
                         <DialogDescription>
-                            Review the invoice directly from the archive before downloading it.
+                            Review the invoice directly from the archive before
+                            downloading it.
                         </DialogDescription>
                     </DialogHeader>
 
-                    <div
-                        v-if="previewItem"
-                        class="space-y-4"
-                    >
+                    <div v-if="previewItem" class="space-y-4">
                         <div
                             class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
                         >
@@ -2378,9 +2378,14 @@ function submitFolderAction(): void {
                                 v-else
                                 class="flex h-[50vh] flex-col items-center justify-center gap-3 px-6 text-center"
                             >
-                                <FileText class="h-8 w-8 text-muted-foreground" />
-                                <p class="max-w-md text-sm text-muted-foreground">
-                                    This file type does not support inline preview yet.
+                                <FileText
+                                    class="h-8 w-8 text-muted-foreground"
+                                />
+                                <p
+                                    class="max-w-md text-sm text-muted-foreground"
+                                >
+                                    This file type does not support inline
+                                    preview yet.
                                 </p>
                             </div>
                         </div>

@@ -1,21 +1,24 @@
-import { createApp } from 'vue'
+import { createApp } from 'vue';
 
-import RelayCommandSonner from '@/components/power-strip/RelayCommandSonner.vue'
+import RelayCommandSonner from '@/components/power-strip/RelayCommandSonner.vue';
+import { initializeTheme } from '@/composables/useAppearance';
 
-const host = document.getElementById('relay-command-toast-root')
+initializeTheme();
+
+const host = document.getElementById('relay-command-toast-root');
 
 if (host) {
-    let initialGuard = {}
+    let initialGuard = {};
 
     if (host.dataset.initialGuard) {
         try {
-            initialGuard = JSON.parse(host.dataset.initialGuard)
+            initialGuard = JSON.parse(host.dataset.initialGuard);
         } catch {
-            initialGuard = {}
+            initialGuard = {};
         }
     }
 
     createApp(RelayCommandSonner, {
         initialGuard,
-    }).mount(host)
+    }).mount(host);
 }

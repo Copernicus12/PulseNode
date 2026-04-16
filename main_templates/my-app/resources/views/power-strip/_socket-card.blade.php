@@ -36,7 +36,7 @@
     };
 @endphp
 
-<div class="rounded-3xl bg-card p-7" id="socket-card-{{ $idx }}">
+<div class="light-outline-strong rounded-3xl bg-card p-7" id="socket-card-{{ $idx }}">
     {{-- Header --}}
     <div class="flex items-start justify-between">
         <div>
@@ -78,11 +78,11 @@
 
     {{-- Extra metrics --}}
     <div class="mt-6 grid grid-cols-2 gap-4">
-        <div class="rounded-2xl bg-background p-4">
+        <div class="light-outline rounded-2xl bg-background p-4">
             <p class="text-[11px] text-muted-foreground">Voltage</p>
             <p class="mt-1.5 text-sm font-bold tabular-nums"><span id="socket-voltage-{{ $idx }}">{{ number_format($voltage, 1) }}</span> <span class="text-xs font-normal text-muted-foreground">V</span></p>
         </div>
-        <div class="rounded-2xl bg-background p-4">
+        <div class="light-outline rounded-2xl bg-background p-4">
             <p class="text-[11px] text-muted-foreground">Energy</p>
             <p class="mt-1.5 text-sm font-bold tabular-nums"><span id="socket-energy-{{ $idx }}">{{ number_format($energyKwh, 3) }}</span> <span class="text-xs font-normal text-muted-foreground">kWh</span></p>
         </div>

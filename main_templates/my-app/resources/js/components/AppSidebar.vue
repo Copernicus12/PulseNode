@@ -142,7 +142,7 @@ const handleLogout = () => {
                     :class="
                         devicesGroupActive
                             ? 'group relative rounded-2xl bg-primary/8 ring-1 ring-primary/20'
-                            : 'group relative rounded-2xl'
+                            : 'light-outline-soft group relative rounded-2xl'
                     "
                 >
                     <summary
@@ -229,7 +229,7 @@ const handleLogout = () => {
                     :class="
                         isCurrentUrl(archiveElectricityBilling())
                             ? 'bg-primary font-semibold text-primary-foreground'
-                            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                            : 'light-outline-soft text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                     "
                     class="flex items-center gap-3 rounded-2xl px-4 py-3 text-[14px] transition"
                 >
@@ -242,7 +242,9 @@ const handleLogout = () => {
                         stroke-linecap="round"
                         stroke-linejoin="round"
                     >
-                        <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2h7A2.5 2.5 0 0 1 21 9.5v9A2.5 2.5 0 0 1 18.5 21h-13A2.5 2.5 0 0 1 3 18.5z" />
+                        <path
+                            d="M3 7.5A2.5 2.5 0 0 1 5.5 5h4l2 2h7A2.5 2.5 0 0 1 21 9.5v9A2.5 2.5 0 0 1 18.5 21h-13A2.5 2.5 0 0 1 3 18.5z"
+                        />
                         <path d="M8 12h8" />
                         <path d="M8 16h5" />
                     </svg>
@@ -255,7 +257,7 @@ const handleLogout = () => {
                     :class="
                         isCurrentUrl(accountsIndex())
                             ? 'bg-primary font-semibold text-primary-foreground'
-                            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                            : 'light-outline-soft text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                     "
                     class="flex items-center gap-3 rounded-2xl px-4 py-3 text-[14px] transition"
                 >
@@ -275,7 +277,6 @@ const handleLogout = () => {
                     </svg>
                     <span>Accounts</span>
                 </a>
-
             </nav>
         </SidebarContent>
 
@@ -285,7 +286,7 @@ const handleLogout = () => {
                 :class="
                     settingsGroupActive
                         ? 'group rounded-2xl bg-primary/8 ring-1 ring-primary/20'
-                        : 'group rounded-2xl'
+                        : 'light-outline-soft group rounded-2xl'
                 "
             >
                 <summary
@@ -330,7 +331,7 @@ const handleLogout = () => {
                         :class="
                             isCurrentUrl(editElectricityBilling())
                                 ? 'bg-primary font-medium text-primary-foreground'
-                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                                : 'light-outline-soft text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                         "
                         class="flex items-center rounded-xl px-3 py-2 text-sm transition"
                     >
@@ -341,7 +342,7 @@ const handleLogout = () => {
                         :class="
                             isCurrentUrl(powerStripDiagnosticsHref)
                                 ? 'bg-primary font-medium text-primary-foreground'
-                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                                : 'light-outline-soft text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                         "
                         class="flex items-center rounded-xl px-3 py-2 text-sm transition"
                     >
@@ -352,7 +353,7 @@ const handleLogout = () => {
                         :class="
                             isCurrentUrl(editAppearance())
                                 ? 'bg-primary font-medium text-primary-foreground'
-                                : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                                : 'light-outline-soft text-muted-foreground hover:bg-muted/50 hover:text-foreground'
                         "
                         class="flex items-center rounded-xl px-3 py-2 text-sm transition"
                     >

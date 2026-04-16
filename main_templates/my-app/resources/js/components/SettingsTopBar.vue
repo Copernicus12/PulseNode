@@ -14,6 +14,7 @@ import {
     DropdownMenuContent,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import ThemeModeSwitcher from '@/components/ThemeModeSwitcher.vue';
 import UserMenuContent from '@/components/UserMenuContent.vue';
 import { getInitials } from '@/composables/useInitials';
 import { toUrl } from '@/lib/utils';
@@ -623,7 +624,7 @@ onBeforeUnmount(() => {
                     type="text"
                     placeholder="Search pages (Dashboard, Power Strip, Settings...)"
                     autocomplete="off"
-                    class="h-11 w-full rounded-2xl bg-card pr-4 pl-10 text-sm text-foreground placeholder:text-muted-foreground/50 focus:ring-1 focus:ring-primary/30 focus:outline-none"
+                    class="light-outline h-11 w-full rounded-2xl bg-card pr-4 pl-10 text-sm text-foreground placeholder:text-muted-foreground/50 focus:ring-1 focus:ring-primary/30 focus:outline-none"
                     @focus="setSearchOpen(true)"
                     @input="setSearchOpen(true)"
                     @keydown="handleSearchKeydown"
@@ -671,7 +672,7 @@ onBeforeUnmount(() => {
 
         <div class="flex items-center gap-1.5">
             <div
-                class="hidden items-center gap-2 rounded-2xl bg-card px-3 py-2 text-xs text-muted-foreground ring-1 ring-border/30 lg:inline-flex"
+                class="light-outline-soft hidden items-center gap-2 rounded-2xl bg-card px-3 py-2 text-xs text-muted-foreground ring-1 ring-border/30 lg:inline-flex"
             >
                 <span
                     :class="telemetry.online ? 'bg-emerald-400' : 'bg-red-400'"
@@ -683,13 +684,18 @@ onBeforeUnmount(() => {
                 <span class="tabular-nums">{{ telemetry.current }}</span>
             </div>
 
+            <ThemeModeSwitcher
+                compact
+                button-class="h-9 w-9 rounded-2xl text-muted-foreground transition hover:text-foreground"
+            />
+
             <div
                 v-if="user?.role === 'admin'"
                 ref="accountsRoot"
                 class="relative"
             >
                 <button
-                    class="inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground"
+                    class="light-outline-soft inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground"
                     title="Accounts"
                     :aria-expanded="accountsOpen ? 'true' : 'false'"
                     @click.stop="accountsOpen = !accountsOpen"
@@ -705,7 +711,7 @@ onBeforeUnmount(() => {
 
                 <div
                     v-if="accountsOpen"
-                    class="absolute top-[calc(100%+0.75rem)] right-0 z-[95] w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-3xl border border-border/50 bg-card shadow-2xl ring-1 shadow-black/40 ring-border/40"
+                    class="light-outline-strong absolute top-[calc(100%+0.75rem)] right-0 z-[95] w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-3xl border border-border/50 bg-card shadow-2xl ring-1 shadow-black/40 ring-border/40"
                 >
                     <div class="border-b border-border/30 px-4 py-3">
                         <div class="flex items-center justify-between gap-3">
@@ -717,7 +723,7 @@ onBeforeUnmount(() => {
                                 </p>
                             </div>
                             <span
-                                class="inline-flex rounded-full bg-background px-2.5 py-1 text-[10px] font-semibold tracking-[0.16em] text-muted-foreground uppercase ring-1 ring-border/40"
+                                class="light-outline-soft inline-flex rounded-full bg-background px-2.5 py-1 text-[10px] font-semibold tracking-[0.16em] text-muted-foreground uppercase ring-1 ring-border/40"
                             >
                                 Admin
                             </span>
@@ -725,7 +731,7 @@ onBeforeUnmount(() => {
                     </div>
                     <div class="grid gap-2 p-3 sm:grid-cols-3">
                         <div
-                            class="rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30"
+                            class="light-outline rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30"
                         >
                             <p
                                 class="text-[10px] tracking-[0.14em] text-muted-foreground uppercase"
@@ -737,7 +743,7 @@ onBeforeUnmount(() => {
                             </p>
                         </div>
                         <div
-                            class="rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30"
+                            class="light-outline rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30"
                         >
                             <p
                                 class="text-[10px] tracking-[0.14em] text-muted-foreground uppercase"
@@ -749,7 +755,7 @@ onBeforeUnmount(() => {
                             </p>
                         </div>
                         <div
-                            class="rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30"
+                            class="light-outline rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30"
                         >
                             <p
                                 class="text-[10px] tracking-[0.14em] text-muted-foreground uppercase"
@@ -766,7 +772,7 @@ onBeforeUnmount(() => {
                     >
                         <a
                             :href="toUrl(accountsIndex())"
-                            class="inline-flex w-full items-center justify-center rounded-2xl bg-card px-4 py-2.5 text-sm font-medium text-foreground ring-1 ring-border/40 transition hover:bg-muted/40"
+                            class="light-outline inline-flex w-full items-center justify-center rounded-2xl bg-card px-4 py-2.5 text-sm font-medium text-foreground ring-1 ring-border/40 transition hover:bg-muted/40"
                         >
                             Open account center
                         </a>
@@ -776,7 +782,7 @@ onBeforeUnmount(() => {
 
             <div ref="notificationsRoot" class="relative">
                 <button
-                    class="inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground"
+                    class="light-outline-soft inline-flex h-9 w-9 items-center justify-center rounded-2xl text-muted-foreground transition hover:text-foreground"
                     title="Notifications"
                     :aria-expanded="notificationsOpen ? 'true' : 'false'"
                     @click.stop="notificationsOpen = !notificationsOpen"
@@ -794,7 +800,7 @@ onBeforeUnmount(() => {
 
                 <div
                     v-if="notificationsOpen"
-                    class="absolute top-[calc(100%+0.75rem)] right-0 z-[95] w-[min(26rem,calc(100vw-1.5rem))] overflow-hidden rounded-3xl border border-border/50 bg-card shadow-2xl ring-1 shadow-black/40 ring-border/40"
+                    class="light-outline-strong absolute top-[calc(100%+0.75rem)] right-0 z-[95] w-[min(26rem,calc(100vw-1.5rem))] overflow-hidden rounded-3xl border border-border/50 bg-card shadow-2xl ring-1 shadow-black/40 ring-border/40"
                 >
                     <div class="border-b border-border/30 px-4 py-3">
                         <div class="flex items-center justify-between gap-3">
@@ -807,7 +813,7 @@ onBeforeUnmount(() => {
                                 </p>
                             </div>
                             <span
-                                class="inline-flex rounded-full bg-background px-2.5 py-1 text-[10px] font-semibold tracking-[0.16em] text-muted-foreground uppercase ring-1 ring-border/40"
+                                class="light-outline-soft inline-flex rounded-full bg-background px-2.5 py-1 text-[10px] font-semibold tracking-[0.16em] text-muted-foreground uppercase ring-1 ring-border/40"
                             >
                                 Live
                             </span>
@@ -826,7 +832,7 @@ onBeforeUnmount(() => {
                         <article
                             v-for="item in notifications"
                             :key="item.id || item.created_at || item.title"
-                            class="rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30"
+                            class="light-outline rounded-2xl bg-background px-3 py-3 ring-1 ring-border/30"
                         >
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0 flex-1">
@@ -873,7 +879,7 @@ onBeforeUnmount(() => {
                     >
                         <a
                             :href="toUrl(notificationsIndex())"
-                            class="inline-flex w-full items-center justify-center rounded-2xl bg-card px-4 py-2.5 text-sm font-medium text-foreground ring-1 ring-border/40 transition hover:bg-muted/40"
+                            class="light-outline inline-flex w-full items-center justify-center rounded-2xl bg-card px-4 py-2.5 text-sm font-medium text-foreground ring-1 ring-border/40 transition hover:bg-muted/40"
                         >
                             Open full notification history
                         </a>
@@ -884,7 +890,7 @@ onBeforeUnmount(() => {
             <DropdownMenu>
                 <DropdownMenuTrigger as-child>
                     <button
-                        class="ml-1 flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-card text-sm font-semibold"
+                        class="light-outline-soft ml-1 flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-card text-sm font-semibold"
                     >
                         {{ getInitials(user?.name) || 'U' }}
                     </button>

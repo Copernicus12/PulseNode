@@ -1,8 +1,11 @@
-import { createApp } from 'vue'
-import SafetyGuardFieldForm from '@/components/power-strip/SafetyGuardFieldForm.vue'
+import { createApp } from 'vue';
+import SafetyGuardFieldForm from '@/components/power-strip/SafetyGuardFieldForm.vue';
+import { initializeTheme } from '@/composables/useAppearance';
 
-const host = document.getElementById('safety-guard-field-root')
+initializeTheme();
+
+const host = document.getElementById('safety-guard-field-root');
 
 if (host) {
-    createApp(SafetyGuardFieldForm).mount(host)
+    createApp(SafetyGuardFieldForm).mount(host);
 }

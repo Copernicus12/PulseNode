@@ -34,7 +34,7 @@
 @endphp
 
 <div class="space-y-5">
-    <section class="relative overflow-hidden rounded-3xl bg-card p-6">
+    <section class="light-outline-strong relative overflow-hidden rounded-3xl bg-card p-6">
         <div class="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(144,205,244,0.18),transparent_34%),radial-gradient(circle_at_top_right,rgba(245,158,11,0.12),transparent_28%)]"></div>
         <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div class="relative">
@@ -69,7 +69,7 @@
         </div>
     </section>
 
-    <section class="relative overflow-hidden rounded-3xl bg-card p-6">
+    <section class="light-outline-strong relative overflow-hidden rounded-3xl bg-card p-6">
         <div class="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[linear-gradient(180deg,rgba(59,130,246,0.08),transparent)]"></div>
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div class="relative">

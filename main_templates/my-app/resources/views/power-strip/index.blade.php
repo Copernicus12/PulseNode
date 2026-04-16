@@ -17,7 +17,7 @@
     @include('layouts._relay-command-alert', ['relayCommandGuard' => $relayCommandGuard])
 
     {{-- ── Row 1: Operations header ── --}}
-    <div class="rounded-3xl bg-card p-7">
+    <div class="light-outline-strong rounded-3xl bg-card p-7">
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-xl font-bold tracking-tight">Power Strip Command Center</h2>
@@ -50,19 +50,19 @@
 
         {{-- Overview metrics --}}
         <div class="mt-7 grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <div class="rounded-2xl bg-background p-5">
+            <div class="light-outline rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">Instant Load</p>
                 <p class="mt-2.5 text-2xl font-bold tabular-nums" id="total-power">{{ number_format($totalPower, 1) }} <span class="text-sm font-normal text-muted-foreground">W</span></p>
             </div>
-            <div class="rounded-2xl bg-background p-5">
+            <div class="light-outline rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">System Energy Counter</p>
                 <p class="mt-2.5 text-2xl font-bold tabular-nums" id="total-energy">{{ number_format($totalEnergy, 3) }} <span class="text-sm font-normal text-muted-foreground">kWh</span></p>
             </div>
-            <div class="rounded-2xl bg-background p-5">
+            <div class="light-outline rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">Active Sockets</p>
                 <p class="mt-2.5 text-2xl font-bold tabular-nums" id="active-sockets">{{ $activeSockets }} <span class="text-sm font-normal text-muted-foreground">/ 3</span></p>
             </div>
-            <div class="rounded-2xl bg-background p-5">
+            <div class="light-outline rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">Runtime State</p>
                 <p class="mt-2.5 text-2xl font-bold tabular-nums capitalize">{{ $systemStatus }}</p>
             </div>
@@ -80,7 +80,7 @@
     <div class="grid gap-5 lg:grid-cols-2">
 
         {{-- Scene Presets + command log --}}
-        <div class="flex h-full flex-col rounded-3xl bg-card p-7">
+        <div class="light-outline-strong flex h-full flex-col rounded-3xl bg-card p-7">
             <div class="flex items-start justify-between gap-3">
                 <div>
                     <h3 class="text-lg font-bold">Scene Presets</h3>
@@ -90,62 +90,62 @@
             </div>
 
             <div class="mt-5 grid gap-3 sm:grid-cols-2">
-                <button type="button" onclick="applyScene('focus')" class="rounded-2xl bg-background p-4 text-left transition hover:bg-muted">
+                <button type="button" onclick="applyScene('focus')" class="light-outline rounded-2xl bg-background p-4 text-left transition hover:bg-muted">
                     <p class="text-sm font-semibold">Focus</p>
                     <p class="text-xs text-muted-foreground">S1 ON, S2 ON, S3 OFF</p>
                 </button>
-                <button type="button" onclick="applyScene('night')" class="rounded-2xl bg-background p-4 text-left transition hover:bg-muted">
+                <button type="button" onclick="applyScene('night')" class="light-outline rounded-2xl bg-background p-4 text-left transition hover:bg-muted">
                     <p class="text-sm font-semibold">Night</p>
                     <p class="text-xs text-muted-foreground">S1 OFF, S2 OFF, S3 ON</p>
                 </button>
-                <button type="button" onclick="applyScene('away')" class="rounded-2xl bg-background p-4 text-left transition hover:bg-muted">
+                <button type="button" onclick="applyScene('away')" class="light-outline rounded-2xl bg-background p-4 text-left transition hover:bg-muted">
                     <p class="text-sm font-semibold">Away</p>
                     <p class="text-xs text-muted-foreground">All OFF</p>
                 </button>
-                <button type="button" onclick="applyScene('boost')" class="rounded-2xl bg-background p-4 text-left transition hover:bg-muted">
+                <button type="button" onclick="applyScene('boost')" class="light-outline rounded-2xl bg-background p-4 text-left transition hover:bg-muted">
                     <p class="text-sm font-semibold">Boost</p>
                     <p class="text-xs text-muted-foreground">All ON</p>
                 </button>
             </div>
 
-            <div class="mt-5 flex min-h-[330px] flex-col rounded-2xl bg-background p-4">
+            <div class="light-outline mt-5 flex min-h-[330px] flex-col rounded-2xl bg-background p-4">
                 <div class="flex items-center justify-between">
                     <p class="text-sm font-semibold">Command Log</p>
                     <button type="button" onclick="clearCommandLog()" class="text-xs text-muted-foreground transition hover:text-foreground">Clear</button>
                 </div>
                 <div id="command-log" class="mt-3 max-h-[250px] min-h-[170px] flex-1 space-y-2 overflow-auto pr-1 text-xs"></div>
                 <div class="mt-4 grid gap-2 sm:grid-cols-3">
-                    <div class="rounded-xl bg-card px-3 py-2">
+                    <div class="light-outline-soft rounded-xl bg-card px-3 py-2">
                         <p class="text-[11px] text-muted-foreground">Commands</p>
                         <p id="log-total" class="mt-1 text-sm font-semibold tabular-nums">0</p>
                     </div>
-                    <div class="rounded-xl bg-card px-3 py-2">
+                    <div class="light-outline-soft rounded-xl bg-card px-3 py-2">
                         <p class="text-[11px] text-muted-foreground">Errors</p>
                         <p id="log-errors" class="mt-1 text-sm font-semibold tabular-nums">0</p>
                     </div>
-                    <div class="rounded-xl bg-card px-3 py-2">
+                    <div class="light-outline-soft rounded-xl bg-card px-3 py-2">
                         <p class="text-[11px] text-muted-foreground">Last action</p>
                         <p id="log-last-action" class="mt-1 truncate text-sm font-semibold">-</p>
                     </div>
                 </div>
             </div>
 
-            <div class="mt-5 rounded-2xl bg-background p-4">
+            <div class="light-outline mt-5 rounded-2xl bg-background p-4">
                 <div class="flex items-center justify-between">
                     <p class="text-sm font-semibold">Automation Notes</p>
                     <span id="automation-notes-status" class="text-[11px] text-muted-foreground">Live recommendations</span>
                 </div>
                 <div class="mt-3 space-y-2 text-xs text-muted-foreground">
-                    <p id="automation-note-1" class="rounded-xl bg-card px-3 py-2">Waiting for recent commands...</p>
-                    <p id="automation-note-2" class="rounded-xl bg-card px-3 py-2">Run a scene to get contextual recommendations.</p>
-                    <p id="automation-note-3" class="rounded-xl bg-card px-3 py-2">Use Test Guard after changing policy values.</p>
+                    <p id="automation-note-1" class="light-outline-soft rounded-xl bg-card px-3 py-2">Waiting for recent commands...</p>
+                    <p id="automation-note-2" class="light-outline-soft rounded-xl bg-card px-3 py-2">Run a scene to get contextual recommendations.</p>
+                    <p id="automation-note-3" class="light-outline-soft rounded-xl bg-card px-3 py-2">Use Test Guard after changing policy values.</p>
                 </div>
             </div>
         </div>
 
         {{-- Safety guard + quick operations --}}
         <div class="flex flex-col gap-5">
-            <div class="rounded-3xl bg-card p-7">
+            <div class="light-outline-strong rounded-3xl bg-card p-7">
                 <div id="safety-guard-field-root" class="w-full">
                     <p class="text-sm text-muted-foreground">Loading safety guard form...</p>
                 </div>

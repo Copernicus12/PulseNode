@@ -1,5 +1,8 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}"  @class(['dark' => ($appearance ?? 'system') == 'dark'])>
+<html
+    lang="{{ str_replace('_', '-', app()->getLocale()) }}"
+    @class(['dark' => ($appearance ?? 'system') == 'dark'])
+>
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,15 +10,24 @@
         {{-- Inline script to detect system dark mode preference and apply it immediately --}}
         <script>
             (function() {
-                const appearance = '{{ $appearance ?? "system" }}';
-
-                if (appearance === 'system') {
-                    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-
-                    if (prefersDark) {
-                        document.documentElement.classList.add('dark');
+                let appearance = '{{ $appearance ?? "system" }}';
+                try {
+                    const storedAppearance = window.localStorage.getItem('appearance');
+                    if (storedAppearance === 'light' || storedAppearance === 'dark' || storedAppearance === 'system') {
+                        appearance = storedAppearance;
                     }
+                } catch (error) {
+                    // Ignore storage access issues and keep the server fallback.
                 }
+
+                const resolvedAppearance = appearance === 'system'
+                    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                    : appearance;
+
+                document.documentElement.classList.toggle('dark', resolvedAppearance === 'dark');
+                document.documentElement.style.colorScheme = resolvedAppearance;
+                document.documentElement.dataset.appearance = appearance;
+                document.documentElement.dataset.resolvedAppearance = resolvedAppearance;
             })();
         </script>
 
@@ -23,10 +35,12 @@
         <style>
             html {
                 background-color: oklch(1 0 0);
+                color-scheme: light;
             }
 
             html.dark {
                 background-color: oklch(0.145 0 0);
+                color-scheme: dark;
             }
         </style>
 

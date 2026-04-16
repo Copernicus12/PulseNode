@@ -22,7 +22,7 @@
     @include('layouts._relay-command-alert', ['relayCommandGuard' => $relayCommandGuard])
 
     {{-- ── Row 1: Live Monitoring (full-width, like Camera CCTV) ── --}}
-    <div class="rounded-3xl bg-card p-7">
+    <div class="light-outline-strong rounded-3xl bg-card p-7">
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-xl font-bold tracking-tight">Live Monitoring</h2>
@@ -48,23 +48,23 @@
         </div>
 
         <div class="mt-7 grid grid-cols-2 gap-4 xl:grid-cols-5">
-            <div class="rounded-2xl bg-background p-5">
+            <div class="light-outline rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">Voltage</p>
                 <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-voltage">{{ $voltage }} <span class="text-sm font-normal text-muted-foreground">V</span></p>
             </div>
-            <div class="rounded-2xl bg-background p-5">
+            <div class="light-outline rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">Total Current</p>
                 <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-current">{{ $current }} <span class="text-sm font-normal text-muted-foreground">A</span></p>
             </div>
-            <div class="rounded-2xl bg-background p-5">
+            <div class="light-outline rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">Active Power</p>
                 <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-power">{{ $power }} <span class="text-sm font-normal text-muted-foreground">W</span></p>
             </div>
-            <div class="rounded-2xl bg-background p-5">
+            <div class="light-outline rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">Energy</p>
                 <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-energy">{{ $energy }} <span class="text-sm font-normal text-muted-foreground">kWh</span></p>
             </div>
-            <div class="rounded-2xl bg-background p-5">
+            <div class="light-outline rounded-2xl bg-background p-5">
                 <div class="flex items-start justify-between gap-3">
                     <p class="text-xs text-muted-foreground">Today Cost</p>
                     <span id="dash-billing-source" class="rounded-full border border-border/40 px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
@@ -87,7 +87,7 @@
 
             {{-- Socket 1 --}}
             @php $s1 = $sockets[0]; $on1 = $s1['is_on']; @endphp
-            <div id="dashboard-socket-1" class="rounded-3xl bg-card p-7">
+            <div id="dashboard-socket-1" class="light-outline-strong rounded-3xl bg-card p-7">
                 <div class="flex items-start justify-between">
                     <div>
                         <h3 class="text-lg font-bold">{{ $s1['label'] }}</h3>
@@ -117,7 +117,7 @@
 
             {{-- Socket 2 --}}
             @php $s2 = $sockets[1]; $on2 = $s2['is_on']; @endphp
-            <div id="dashboard-socket-2" class="rounded-3xl bg-card p-7">
+            <div id="dashboard-socket-2" class="light-outline-strong rounded-3xl bg-card p-7">
                 <div class="flex items-start justify-between">
                     <div>
                         <h3 class="text-lg font-bold">{{ $s2['label'] }}</h3>
@@ -147,7 +147,7 @@
 
             {{-- Socket 3 --}}
             @php $s3 = $sockets[2]; $on3 = $s3['is_on']; @endphp
-            <div id="dashboard-socket-3" class="rounded-3xl bg-card p-7">
+            <div id="dashboard-socket-3" class="light-outline-strong rounded-3xl bg-card p-7">
                 <div class="flex items-start justify-between">
                     <div>
                         <h3 class="text-lg font-bold">{{ $s3['label'] }}</h3>
@@ -180,7 +180,7 @@
         <div class="flex flex-col gap-5">
 
             {{-- Energy Usage — interactive weekly chart --}}
-            <div class="flex-[1.5] rounded-3xl bg-card p-7" id="energy-usage-card">
+            <div class="light-outline-strong flex-[1.5] rounded-3xl bg-card p-7" id="energy-usage-card">
                 <div class="flex items-start justify-between">
                     <div>
                         <h3 class="text-lg font-bold">Energy Usage</h3>
@@ -246,7 +246,7 @@
 
             {{-- Energy details modal --}}
             <div id="energy-modal" class="fixed inset-0 z-[70] hidden items-end justify-center bg-black/70 p-4 backdrop-blur-sm sm:items-center">
-                <div id="energy-modal-panel" class="w-full max-w-4xl scale-95 rounded-3xl bg-card p-6 opacity-0 transition-all duration-300 sm:p-7">
+                <div id="energy-modal-panel" class="light-outline-strong w-full max-w-4xl scale-95 rounded-3xl bg-card p-6 opacity-0 transition-all duration-300 sm:p-7">
                     <div class="flex items-start justify-between gap-4">
                         <div>
                             <h3 class="text-xl font-bold">Energy Day Details</h3>
@@ -256,17 +256,17 @@
                     </div>
 
                     <div class="mt-5 grid gap-4 md:grid-cols-3">
-                        <div class="rounded-2xl bg-background p-4">
+                        <div class="light-outline rounded-2xl bg-background p-4">
                             <p class="text-xs text-muted-foreground">Total day consumption</p>
                             <p class="mt-1 text-xl font-bold tabular-nums" id="energy-modal-total">0.0000 kWh</p>
                             <p class="mt-1 text-[11px] text-muted-foreground" id="energy-modal-interval">00:00 - 00:00</p>
                         </div>
-                        <div class="rounded-2xl bg-background p-4">
+                        <div class="light-outline rounded-2xl bg-background p-4">
                             <p class="text-xs text-muted-foreground">Warnings</p>
                             <p class="mt-1 text-xl font-bold tabular-nums"><span id="energy-modal-warning-overload">0</span> overload</p>
                             <p class="text-[11px] text-muted-foreground"><span id="energy-modal-warning-high">0</span> high load</p>
                         </div>
-                        <div class="rounded-2xl bg-background p-4">
+                        <div class="light-outline rounded-2xl bg-background p-4">
                             <p class="text-xs text-muted-foreground">Average voltage</p>
                             <p class="mt-1 text-xl font-bold tabular-nums" id="energy-modal-voltage">0.0 V</p>
                             <p class="text-[11px] text-muted-foreground">Measured from all samples</p>
@@ -274,12 +274,12 @@
                     </div>
 
                     <div class="mt-5 grid gap-4 lg:grid-cols-2">
-                        <div class="rounded-2xl bg-background p-4">
+                        <div class="light-outline rounded-2xl bg-background p-4">
                             <h4 class="text-sm font-semibold">Sockets breakdown</h4>
                             <div class="mt-3 space-y-2 text-sm" id="energy-modal-sockets"></div>
                         </div>
 
-                        <div class="rounded-2xl bg-background p-4">
+                        <div class="light-outline rounded-2xl bg-background p-4">
                             <h4 class="text-sm font-semibold">Most active intervals</h4>
                             <div class="mt-3 space-y-2 text-sm" id="energy-modal-intervals"></div>
                         </div>

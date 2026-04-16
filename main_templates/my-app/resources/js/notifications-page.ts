@@ -1,14 +1,17 @@
-import { createApp } from 'vue'
-import NotificationsFilterBar from '@/components/notifications/NotificationsFilterBar.vue'
+import { createApp } from 'vue';
+import NotificationsFilterBar from '@/components/notifications/NotificationsFilterBar.vue';
+import { initializeTheme } from '@/composables/useAppearance';
 
-const host = document.getElementById('notifications-filter-root')
-const payload = document.getElementById('notifications-filter-props')
+initializeTheme();
+
+const host = document.getElementById('notifications-filter-root');
+const payload = document.getElementById('notifications-filter-props');
 
 if (host && payload?.textContent) {
     try {
-        const props = JSON.parse(payload.textContent)
-        createApp(NotificationsFilterBar, props).mount(host)
+        const props = JSON.parse(payload.textContent);
+        createApp(NotificationsFilterBar, props).mount(host);
     } catch (error) {
-        console.error('Unable to mount notifications filters', error)
+        console.error('Unable to mount notifications filters', error);
     }
 }

@@ -30,7 +30,7 @@
 @endphp
 
 <div class="space-y-5">
-    <section class="rounded-3xl bg-card p-6">
+    <section class="light-outline-strong rounded-3xl bg-card p-6">
         <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
             <div class="max-w-3xl">
                 <div class="flex flex-wrap items-center gap-3">
@@ -95,7 +95,7 @@
     </section>
 
     <section class="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-        <div class="rounded-3xl bg-card p-6">
+        <div class="light-outline-strong rounded-3xl bg-card p-6">
             <div class="flex items-start justify-between gap-3">
                 <div>
                     <h3 class="text-lg font-bold">What to do next</h3>
@@ -142,7 +142,7 @@
             </div>
         </div>
 
-        <div class="rounded-3xl bg-card p-6">
+        <div class="light-outline-strong rounded-3xl bg-card p-6">
             <h3 class="text-lg font-bold">How to read the score</h3>
             <p class="mt-1 text-sm text-muted-foreground">A simple summary of reserve, stability, and avoidable loss.</p>
 
@@ -175,7 +175,7 @@
         </div>
     </section>
 
-    <section class="rounded-3xl bg-card p-6">
+    <section class="light-outline-strong rounded-3xl bg-card p-6">
         <div class="flex items-start justify-between gap-3">
             <div>
                 <h3 class="text-lg font-bold">Socket overview</h3>

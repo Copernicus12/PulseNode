@@ -41,7 +41,7 @@
         </div>
     @endif
 
-    <section class="relative overflow-hidden rounded-3xl bg-card p-5 sm:p-6">
+    <section class="light-outline-strong relative overflow-hidden rounded-3xl bg-card p-5 sm:p-6">
         <div class="pointer-events-none absolute inset-0 bg-linear-to-r from-primary/5 via-transparent to-transparent"></div>
 
         <div class="relative flex flex-wrap items-start justify-between gap-4">
@@ -80,7 +80,7 @@
 
     @if($deviceSection === 'overview')
         <section class="space-y-4">
-            <div class="rounded-3xl bg-card p-5 sm:p-6">
+            <div class="light-outline-strong rounded-3xl bg-card p-5 sm:p-6">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
                         <h3 class="text-lg font-bold">Live Detection by Socket</h3>
@@ -162,7 +162,7 @@
                 </div>
             </div>
 
-            <section class="rounded-3xl bg-card p-5 sm:p-6">
+            <section class="light-outline-strong rounded-3xl bg-card p-5 sm:p-6">
                 <h3 class="text-lg font-bold">Latest Events</h3>
                 <p class="mt-1 text-sm text-muted-foreground">Last {{ $recentDetections->count() }} recognitions.</p>
 
@@ -320,7 +320,7 @@
 
     @if($deviceSection === 'profiles')
         <section class="space-y-4">
-            <div class="rounded-3xl bg-card p-5 sm:p-6">
+            <div class="light-outline-strong rounded-3xl bg-card p-5 sm:p-6">
                 <div class="flex flex-wrap items-start justify-between gap-4">
                     <div>
                         <h3 class="text-lg font-bold">Profile Library</h3>
@@ -338,7 +338,7 @@
                 @endif
             </div>
 
-            <div class="rounded-3xl bg-card p-3 sm:p-4">
+            <div class="light-outline-strong rounded-3xl bg-card p-3 sm:p-4">
                 <div class="overflow-x-auto rounded-2xl bg-background ring-1 ring-border/30">
                     <table class="w-full min-w-[860px] text-sm">
                         <thead>
@@ -384,7 +384,7 @@
 
     @if($deviceSection === 'plans')
         <section class="space-y-4">
-            <div class="rounded-3xl bg-card p-5 sm:p-6">
+            <div class="light-outline-strong rounded-3xl bg-card p-5 sm:p-6">
                 <div class="flex flex-wrap items-start justify-between gap-4">
                     <div>
                         <h3 class="text-lg font-bold">Detection Plans</h3>
@@ -403,7 +403,7 @@
 
             <div class="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
                 @forelse($detectionPlans as $plan)
-                    <article class="rounded-3xl bg-card p-4 sm:p-5">
+                    <article class="light-outline-strong rounded-3xl bg-card p-4 sm:p-5">
                         <div class="flex items-start justify-between gap-2">
                             <div>
                                 <p class="text-base font-semibold">{{ $plan->name }}</p>
@@ -454,7 +454,7 @@
                         </div>
                     </article>
                 @empty
-                    <div class="rounded-3xl bg-card p-5 text-sm text-muted-foreground ring-1 ring-border/30 md:col-span-2 2xl:col-span-3">
+                    <div class="light-outline-strong rounded-3xl bg-card p-5 text-sm text-muted-foreground ring-1 ring-border/30 md:col-span-2 2xl:col-span-3">
                         No detection plans yet. Create one to control matching behavior.
                     </div>
                 @endforelse
@@ -540,7 +540,7 @@
 
     @if($deviceSection === 'activity')
         <section class="space-y-4">
-            <div class="rounded-3xl bg-card p-5 sm:p-6">
+            <div class="light-outline-strong rounded-3xl bg-card p-5 sm:p-6">
                 <h3 class="text-lg font-bold">Current Socket Status</h3>
                 <p class="mt-1 text-sm text-muted-foreground">Live snapshot for each socket before drilling into event history.</p>
 
@@ -576,7 +576,7 @@
                 </div>
             </div>
 
-            <div class="rounded-3xl bg-card p-5 sm:p-6">
+            <div class="light-outline-strong rounded-3xl bg-card p-5 sm:p-6">
                 <h3 class="text-lg font-bold">Recent Detection Events</h3>
                 <p class="mt-1 text-sm text-muted-foreground">Latest recognition updates saved by the detection engine.</p>
 
