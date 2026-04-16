@@ -3,6 +3,7 @@
 namespace Tests\Feature\Settings;
 
 use App\Models\BillingInvoiceFile;
+use App\Models\BillingInvoiceFolder;
 use App\Models\User;
 use App\Support\BillingInvoiceStorage;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -15,6 +16,18 @@ use Tests\TestCase;
 class BillingInvoiceArchiveTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $storage = $this->app->make(BillingInvoiceStorage::class);
+
+        $storage->filesCollection()->deleteMany([]);
+        $storage->chunksCollection()->deleteMany([]);
+        BillingInvoiceFile::query()->delete();
+        BillingInvoiceFolder::query()->delete();
+    }
 
     public function test_invoice_archive_page_can_render_empty_state(): void
     {
@@ -261,12 +274,12 @@ class BillingInvoiceArchiveTest extends TestCase
             ])
             ->assertRedirect(route('electricity-billing.archive'));
 
-        $this->assertDatabaseMissing('billing_invoice_files', [
-            'id' => 'inv-delete-year-target',
-        ]);
-        $this->assertDatabaseHas('billing_invoice_files', [
-            'id' => 'inv-delete-year-keep',
-        ]);
+        $this->assertFalse(
+            BillingInvoiceFile::query()->where('id', 'inv-delete-year-target')->exists(),
+        );
+        $this->assertTrue(
+            BillingInvoiceFile::query()->where('id', 'inv-delete-year-keep')->exists(),
+        );
         Storage::disk('local')->assertMissing($targetInvoice->storage_path);
         Storage::disk('local')->assertExists($keptInvoice->storage_path);
     }

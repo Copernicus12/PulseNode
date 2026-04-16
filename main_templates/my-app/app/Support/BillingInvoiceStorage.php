@@ -49,6 +49,21 @@ class BillingInvoiceStorage
         return is_string($path) && str_starts_with($path, self::GRIDFS_PREFIX);
     }
 
+    public function gridFsPath(string $fileId): string
+    {
+        return self::GRIDFS_PREFIX.$fileId;
+    }
+
+    public function filesCollection(): \MongoDB\Collection
+    {
+        return $this->gridFsCollection('files');
+    }
+
+    public function chunksCollection(): \MongoDB\Collection
+    {
+        return $this->gridFsCollection('chunks');
+    }
+
     public function openDownloadStream(string $path)
     {
         return $this->bucket()->openDownloadStream(
@@ -84,7 +99,22 @@ class BillingInvoiceStorage
 
     private function toGridFsPath(string $fileId): string
     {
-        return self::GRIDFS_PREFIX.$fileId;
+        return $this->gridFsPath($fileId);
+    }
+
+    private function gridFsCollection(string $suffix): \MongoDB\Collection
+    {
+        $dsn = (string) config('database.connections.mongodb.dsn', '');
+        $database = (string) config('database.connections.mongodb.database', '');
+        $bucketName = (string) config('esp32.mongodb.billing_invoices_bucket', 'billing_invoices');
+
+        if ($dsn === '' || $database === '') {
+            throw new RuntimeException('MongoDB is not configured for invoice storage.');
+        }
+
+        return (new Client($dsn))
+            ->selectDatabase($database)
+            ->selectCollection($bucketName.'.'.$suffix);
     }
 
     private function bucket(): Bucket

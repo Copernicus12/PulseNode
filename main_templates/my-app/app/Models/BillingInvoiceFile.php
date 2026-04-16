@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use MongoDB\Laravel\Eloquent\Model;
 
 class BillingInvoiceFile extends Model
 {
-    protected $table = 'billing_invoice_files';
+    protected $connection = 'mongodb';
+
+    protected $collection = 'billing_invoice_files';
 
     protected $primaryKey = 'id';
 

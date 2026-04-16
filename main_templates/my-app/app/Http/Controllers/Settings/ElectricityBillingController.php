@@ -292,26 +292,102 @@ class ElectricityBillingController extends Controller
 
     private function invoiceItems(?Authenticatable $user): array
     {
-        return $this->invoiceQuery($user)
+        $itemsByStoragePath = [];
+
+        $this->invoiceQuery($user)
             ->orderByDesc('billing_period')
             ->orderByDesc('created_at')
             ->get()
-            ->map(fn (BillingInvoiceFile $invoice) => [
-                'id' => (string) $invoice->id,
-                'name' => (string) $invoice->original_name,
-                'period' => (string) $invoice->billing_period,
-                'year' => (int) $invoice->billing_year,
-                'month' => (int) $invoice->billing_month,
-                'size_bytes' => (int) $invoice->size_bytes,
-                'mime_type' => (string) $invoice->mime_type,
-                'extension' => (string) ($invoice->file_extension ?? ''),
-                'uploaded_at' => optional($invoice->created_at)?->toISOString(),
-                'preview_url' => route('electricity-billing.invoices.preview', $invoice->id),
-                'download_url' => route('electricity-billing.invoices.download', $invoice->id),
-                'delete_url' => route('electricity-billing.invoices.destroy', $invoice->id),
-            ])
-            ->values()
-            ->all();
+            ->each(function (BillingInvoiceFile $invoice) use (&$itemsByStoragePath): void {
+                $itemsByStoragePath[$invoice->storage_path] = $this->invoiceItemFromModel($invoice);
+            });
+
+        foreach ($this->gridFsInvoiceItems($user) as $item) {
+            $itemsByStoragePath[$item['storage_path']] = $itemsByStoragePath[$item['storage_path']] ?? $item;
+        }
+
+        return array_values($itemsByStoragePath);
+    }
+
+    private function gridFsInvoiceItems(?Authenticatable $user): array
+    {
+        $ownerKey = $this->ownerKey($user);
+
+        if ($ownerKey === '') {
+            return [];
+        }
+
+        $items = [];
+
+        foreach (
+            $this->invoiceStorage->filesCollection()->find([
+                'metadata.owner_key' => $ownerKey,
+            ], [
+                'sort' => ['uploadDate' => -1],
+            ]) as $document
+        ) {
+            $item = $this->invoiceItemFromGridFsDocument($document);
+
+            if ($item !== null) {
+                $items[] = $item;
+            }
+        }
+
+        return $items;
+    }
+
+    private function invoiceItemFromModel(BillingInvoiceFile $invoice): array
+    {
+        return [
+            'id' => (string) $invoice->id,
+            'name' => (string) $invoice->original_name,
+            'period' => (string) $invoice->billing_period,
+            'year' => (int) $invoice->billing_year,
+            'month' => (int) $invoice->billing_month,
+            'size_bytes' => (int) $invoice->size_bytes,
+            'mime_type' => (string) $invoice->mime_type,
+            'extension' => (string) ($invoice->file_extension ?? ''),
+            'uploaded_at' => optional($invoice->created_at)?->toISOString(),
+            'preview_url' => route('electricity-billing.invoices.preview', $invoice->id),
+            'download_url' => route('electricity-billing.invoices.download', $invoice->id),
+            'delete_url' => route('electricity-billing.invoices.destroy', $invoice->id),
+            'storage_path' => (string) $invoice->storage_path,
+        ];
+    }
+
+    private function invoiceItemFromGridFsDocument($document): ?array
+    {
+        $metadata = $document['metadata'] ?? [];
+        $billingPeriod = (string) ($metadata['billing_period'] ?? '');
+
+        if ($billingPeriod === '') {
+            return null;
+        }
+
+        $fileId = (string) $document['_id'];
+        $originalName = (string) ($metadata['original_name'] ?? $document['filename'] ?? 'invoice');
+        $mimeType = (string) ($metadata['mime_type'] ?? 'application/octet-stream');
+        $extension = (string) ($metadata['file_extension'] ?? pathinfo($originalName, PATHINFO_EXTENSION));
+        $sizeBytes = (int) ($document['length'] ?? 0);
+        $uploadedAt = isset($document['uploadDate']) && method_exists($document['uploadDate'], 'toDateTime')
+            ? $document['uploadDate']->toDateTime()->format(DATE_ATOM)
+            : null;
+
+        return [
+            'id' => $fileId,
+            'name' => $originalName,
+            'period' => $billingPeriod,
+            'year' => (int) ($metadata['billing_year'] ?? substr($billingPeriod, 0, 4)),
+            'month' => (int) ($metadata['billing_month'] ?? substr($billingPeriod, 5, 2)),
+            'size_bytes' => $sizeBytes,
+            'mime_type' => $mimeType,
+            'extension' => $extension,
+            'uploaded_at' => $uploadedAt,
+            'preview_url' => route('electricity-billing.invoices.preview', $fileId),
+            'download_url' => route('electricity-billing.invoices.download', $fileId),
+            'delete_url' => route('electricity-billing.invoices.destroy', $fileId),
+            'storage_path' => $this->invoiceStorage->gridFsPath($fileId),
+        ];
     }
 
     private function invoiceFolders(?Authenticatable $user): array
