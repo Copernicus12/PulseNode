@@ -29,7 +29,7 @@
                         </div>
                     </div>
                     
-                    <div class="relative overflow-hidden rounded-3xl border border-white/20 bg-white/60 p-6 backdrop-blur-xl dark:border-gray-700/50 dark:bg-gray-800/60">
+                    <div ref="headerPanelRef" class="relative overflow-hidden rounded-3xl border border-white/20 bg-white/60 p-6 backdrop-blur-xl dark:border-gray-700/50 dark:bg-gray-800/60">
                         <div class="absolute inset-0 bg-gradient-to-r from-gray-500/5 via-gray-400/5 to-gray-600/5"></div>
                         <div class="relative flex flex-wrap items-center justify-between gap-4">
                             <div class="flex items-center gap-4">
@@ -60,6 +60,14 @@
                                 <div class="rounded-full border border-white/40 bg-white/50 px-4 py-2 backdrop-blur-sm dark:border-slate-600/50 dark:bg-slate-700/50">
                                     <span class="text-xs text-slate-600 dark:text-slate-400">Last sync: {{ lastUpdate }}</span>
                                 </div>
+                                <button
+                                    type="button"
+                                    @click="openHelpTour"
+                                    class="group flex h-10 w-10 items-center justify-center rounded-full border border-white/50 bg-white/70 text-slate-700 shadow-sm transition-all duration-200 hover:scale-105 hover:bg-white hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-gray-500/40 dark:border-slate-600/50 dark:bg-slate-700/60 dark:text-slate-200 dark:hover:bg-slate-600"
+                                    aria-label="Open dashboard guide"
+                                >
+                                    <span class="text-lg font-semibold leading-none transition-transform duration-200 group-hover:scale-110">?</span>
+                                </button>
                                 <!-- Settings Dropdown -->
                                 <div class="relative group">
                                     <button class="rounded-full border border-white/40 bg-white/50 p-2 backdrop-blur-sm transition-colors hover:bg-white/70 dark:border-slate-600/50 dark:bg-slate-700/50 dark:hover:bg-slate-700/70">
@@ -131,7 +139,7 @@
                     </div>
                     
                     <!-- Tabs Navigation -->
-                    <div class="mt-6">
+                    <div ref="tabsPanelRef" class="mt-6">
                         <div class="relative overflow-hidden rounded-3xl border border-white/20 bg-white/40 backdrop-blur-xl dark:border-gray-700/50 dark:bg-gray-800/40">
                             <div class="flex p-1">
                                 <button 
@@ -181,7 +189,7 @@
                 <div class="mx-auto max-w-7xl">
                     
                     <!-- Overview Tab -->
-                    <div v-if="selectedTab === 'overview'" class="space-y-6">
+                    <div v-if="false" class="space-y-6">
                         <div class="grid gap-6 lg:grid-cols-3"></div>
                     </div>
                     
@@ -244,7 +252,7 @@
                         </div>
                     </div>
                 </div>
-            </div>"
+            </div>
 
             <!-- Tab Content -->
             <div class="px-6 py-8">
@@ -255,7 +263,7 @@
                         <div class="grid gap-6 lg:grid-cols-3">
                             
                             <!-- Power & Energy Analytics -->
-                            <div class="lg:col-span-2">
+                            <div ref="overviewPanelRef" class="lg:col-span-2">
                                 <div class="relative overflow-hidden rounded-3xl border border-white/20 bg-white/60 p-6 backdrop-blur-xl dark:border-gray-700/50 dark:bg-gray-800/60">
                                     <div class="absolute inset-0 bg-gradient-to-br from-gray-500/10 via-gray-400/5 to-gray-600/10"></div>
                                     <div class="relative">
@@ -401,7 +409,7 @@
             </div>
 
             <!-- Smart Relay Controls -->
-            <div class="px-6 pb-12">
+            <div ref="relayPanelRef" class="px-6 pb-12">
                 <div class="mx-auto max-w-7xl">
                     <div class="relative overflow-hidden rounded-3xl border border-white/20 bg-white/60 p-6 backdrop-blur-xl dark:border-gray-700/50 dark:bg-gray-800/60">
                         <div class="absolute inset-0 bg-gradient-to-br from-gray-500/5 via-gray-400/5 to-gray-600/5"></div>
@@ -506,11 +514,77 @@
                 </div>
             </div>
         </div>
+
+        <div v-if="helpTourOpen" class="fixed inset-0 z-[80]">
+            <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm transition-opacity duration-300"></div>
+            <div
+                v-if="helpTourRect"
+                class="pointer-events-none absolute rounded-[28px] border border-white/70 bg-white/5 shadow-[0_0_0_9999px_rgba(15,23,42,0.72)] transition-all duration-300 ease-out"
+                :style="helpTourSpotlightStyle"
+            ></div>
+
+            <div class="absolute inset-x-4 bottom-4 mx-auto max-w-md sm:inset-x-auto sm:right-6 sm:bottom-6">
+                <div class="pointer-events-auto rounded-3xl border border-white/20 bg-slate-950/95 p-5 text-white shadow-2xl">
+                    <div class="flex items-start justify-between gap-4">
+                        <div>
+                            <p class="text-xs uppercase tracking-[0.3em] text-slate-400">Guided tour</p>
+                            <h3 class="mt-2 text-xl font-semibold">{{ activeHelpTourStep.title }}</h3>
+                        </div>
+                        <button
+                            type="button"
+                            @click="closeHelpTour"
+                            class="rounded-full p-2 text-slate-400 transition-colors hover:bg-white/10 hover:text-white"
+                            aria-label="Close dashboard guide"
+                        >
+                            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <p class="mt-3 text-sm leading-6 text-slate-300">
+                        {{ activeHelpTourStep.description }}
+                    </p>
+
+                    <div class="mt-5 flex items-center justify-between text-xs text-slate-400">
+                        <span>Step {{ helpTourProgress }}</span>
+                        <span>{{ activeHelpTourStep.target }}</span>
+                    </div>
+
+                    <div class="mt-4 flex items-center gap-3">
+                        <button
+                            type="button"
+                            @click="previousHelpTourStep"
+                            :disabled="helpTourStepIndex === 0"
+                            class="rounded-full border border-white/15 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                            Back
+                        </button>
+                        <div class="ml-auto flex items-center gap-2">
+                            <button
+                                type="button"
+                                @click="closeHelpTour"
+                                class="rounded-full border border-white/15 px-4 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+                            >
+                                Skip
+                            </button>
+                            <button
+                                type="button"
+                                @click="nextHelpTourStep"
+                                class="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 transition-transform hover:scale-[1.02]"
+                            >
+                                {{ helpTourStepIndex === helpTourSteps.length - 1 ? 'Finish' : 'Next' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </AppLayout>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import AppLayout from '@/layouts/AppLayout.vue'
 import axios from 'axios'
 
@@ -578,6 +652,144 @@ const relayCards = [
     { id: 2, title: 'Kitchen Circuit', meta: 'Priza B · 220V' },
     { id: 3, title: 'Office Desk', meta: 'Priza C · 220V' },
 ]
+
+const headerPanelRef = ref(null)
+const tabsPanelRef = ref(null)
+const overviewPanelRef = ref(null)
+const relayPanelRef = ref(null)
+
+const helpTourOpen = ref(false)
+const helpTourStepIndex = ref(0)
+const helpTourRect = ref(null)
+const helpTourTargets = {
+    header: headerPanelRef,
+    tabs: tabsPanelRef,
+    overview: overviewPanelRef,
+    relay: relayPanelRef,
+}
+
+const helpTourSteps = [
+    {
+        title: 'Status and actions',
+        description: 'Check connection state, last sync, and quick actions from the dashboard header.',
+        target: 'header',
+        tab: 'overview',
+    },
+    {
+        title: 'Switch sections',
+        description: 'Use the tabs to move between the overview, analytics, and devices views.',
+        target: 'tabs',
+        tab: 'overview',
+    },
+    {
+        title: 'Monitor energy',
+        description: 'The overview cards show live power, voltage, current, and system status at a glance.',
+        target: 'overview',
+        tab: 'overview',
+    },
+    {
+        title: 'Control relays',
+        description: 'The relay cards let you turn devices on or off and see each device status in real time.',
+        target: 'relay',
+        tab: 'overview',
+    },
+]
+
+const activeHelpTourStep = computed(() => helpTourSteps[helpTourStepIndex.value] ?? helpTourSteps[0])
+const helpTourProgress = computed(() => `${helpTourStepIndex.value + 1} / ${helpTourSteps.length}`)
+const helpTourSpotlightStyle = computed(() => {
+    if (!helpTourRect.value) {
+        return null
+    }
+
+    return {
+        top: `${helpTourRect.value.top}px`,
+        left: `${helpTourRect.value.left}px`,
+        width: `${helpTourRect.value.width}px`,
+        height: `${helpTourRect.value.height}px`,
+    }
+})
+
+const resolveHelpTourTarget = () => {
+    const targetKey = activeHelpTourStep.value.target
+    return helpTourTargets[targetKey]?.value ?? null
+}
+
+const updateHelpTourFocus = async () => {
+    if (!helpTourOpen.value) {
+        return
+    }
+
+    if (activeHelpTourStep.value.tab) {
+        selectedTab.value = activeHelpTourStep.value.tab
+    }
+
+    await nextTick()
+
+    const target = resolveHelpTourTarget()
+    if (!target) {
+        helpTourRect.value = null
+        return
+    }
+
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+    await nextTick()
+
+    requestAnimationFrame(() => {
+        const rect = target.getBoundingClientRect()
+        helpTourRect.value = {
+            top: Math.max(12, rect.top - 12),
+            left: Math.max(12, rect.left - 12),
+            width: rect.width + 24,
+            height: rect.height + 24,
+        }
+    })
+}
+
+const openHelpTour = () => {
+    helpTourOpen.value = true
+    helpTourStepIndex.value = 0
+    void updateHelpTourFocus()
+}
+
+const closeHelpTour = () => {
+    helpTourOpen.value = false
+    helpTourRect.value = null
+}
+
+const nextHelpTourStep = async () => {
+    if (helpTourStepIndex.value >= helpTourSteps.length - 1) {
+        closeHelpTour()
+        return
+    }
+
+    helpTourStepIndex.value += 1
+    await updateHelpTourFocus()
+}
+
+const previousHelpTourStep = async () => {
+    if (helpTourStepIndex.value === 0) {
+        return
+    }
+
+    helpTourStepIndex.value -= 1
+    await updateHelpTourFocus()
+}
+
+const handleTourViewportChange = () => {
+    if (helpTourOpen.value) {
+        void updateHelpTourFocus()
+    }
+}
+
+watch(helpTourOpen, (isOpen) => {
+    document.body.style.overflow = isOpen ? 'hidden' : ''
+
+    if (!isOpen) {
+        helpTourRect.value = null
+    }
+})
 
 // Methods
 const fetchData = async () => {
@@ -672,6 +884,7 @@ const toggleRelay = async (relayId, state) => {
 onMounted(() => {
     fetchData()
     updateInterval.value = setInterval(fetchData, 5000) // Update every 5 seconds
+    window.addEventListener('resize', handleTourViewportChange)
     
     // Show welcome message
     setTimeout(() => {
@@ -685,5 +898,8 @@ onUnmounted(() => {
     if (updateInterval.value) {
         clearInterval(updateInterval.value)
     }
+
+    window.removeEventListener('resize', handleTourViewportChange)
+    document.body.style.overflow = ''
 })
 </script>

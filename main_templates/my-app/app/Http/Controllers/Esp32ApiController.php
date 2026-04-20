@@ -164,9 +164,10 @@ class Esp32ApiController extends Controller
         $profiles = DeviceProfile::query()->latest('last_trained_at')->get();
         $plans = DetectionPlan::query()
             ->where('is_active', true)
-            ->orderByRaw('CASE WHEN socket_scope IS NULL THEN 0 ELSE 1 END DESC')
             ->latest('updated_at')
-            ->get();
+            ->get()
+            ->sortByDesc(fn (DetectionPlan $plan): int => $plan->socket_scope === null ? 0 : 1)
+            ->values();
 
         $detections = collect([1, 2, 3])->map(function (int $socketIndex) use ($profiler, $profiles, $plans): array {
             $plan = $profiler->resolvePlanForSocket($socketIndex, $plans);

@@ -31,6 +31,7 @@
 @endphp
 
 <a href="{{ route('dashboard') }}"
+    data-tour="nav-dashboard"
     data-search-link="1"
     data-search-label="dashboard"
    @class([
@@ -43,6 +44,7 @@
 </a>
 
 <a href="{{ route('power-strip.index') }}"
+    data-tour="nav-power-strip"
     data-search-link="1"
     data-search-label="power strip"
    @class([
@@ -57,6 +59,7 @@
 </a>
 
 <details
+    data-tour="nav-devices-group"
     @if($isDevicesRoute) open @endif
     @class([
         'group relative rounded-2xl',
@@ -88,6 +91,7 @@
         </div>
         @foreach($devicesLinks as $item)
             <a href="{{ $item['href'] }}"
+                data-tour="nav-devices-{{ $item['key'] ?? strtolower($item['title']) }}"
                 data-search-link="1"
                 data-search-label="{{ $item['label'] }}"
                 @class([
@@ -103,6 +107,7 @@
 </details>
 
 <a href="{{ route('history.index') }}"
+    data-tour="nav-history"
     data-search-link="1"
     data-search-label="history"
    @class([
@@ -115,6 +120,7 @@
 </a>
 
 <a href="{{ route('electricity-billing.archive') }}"
+    data-tour="nav-invoice-archive"
     data-search-link="1"
     data-search-label="invoice archive invoices bills receipts folders files upload"
    @class([
@@ -132,6 +138,7 @@
 
 @if(Auth::user()?->isAdmin())
     <a href="{{ route('accounts.index') }}"
+        data-tour="nav-accounts"
         data-search-link="1"
         data-search-label="accounts permissions users admin"
        @class([

@@ -514,7 +514,7 @@ onUnmounted(() => {
 
 <template>
   <div class="mx-auto max-w-[1360px] space-y-5 lg:space-y-6">
-    <Card class="relative overflow-hidden gap-0 rounded-3xl border-border/30 py-0 shadow-none">
+    <Card id="history-overview-card" class="relative overflow-hidden gap-0 rounded-3xl border-border/30 py-0 shadow-none">
       <div class="pointer-events-none absolute inset-0 bg-linear-to-r from-primary/5 via-transparent to-transparent" />
 
       <CardHeader class="relative p-5 pb-0 sm:p-6 sm:pb-0">
@@ -670,7 +670,7 @@ onUnmounted(() => {
 
     <div class="grid items-start gap-5 xl:items-stretch xl:grid-cols-[minmax(0,1.62fr)_minmax(320px,0.9fr)]">
       <div class="space-y-5">
-        <Card class="gap-0 rounded-3xl border-border/30 py-0 shadow-none">
+        <Card id="history-hourly-map" class="gap-0 rounded-3xl border-border/30 py-0 shadow-none">
           <CardHeader class="p-5 pb-0 sm:p-6 sm:pb-0">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <CardTitle class="text-base">

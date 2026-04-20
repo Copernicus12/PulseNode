@@ -41,7 +41,7 @@
         </div>
     @endif
 
-    <section class="light-outline-strong relative overflow-hidden rounded-3xl bg-card p-5 sm:p-6">
+    <section id="devices-overview" class="light-outline-strong relative overflow-hidden rounded-3xl bg-card p-5 sm:p-6">
         <div class="pointer-events-none absolute inset-0 bg-linear-to-r from-primary/5 via-transparent to-transparent"></div>
 
         <div class="relative flex flex-wrap items-start justify-between gap-4">
@@ -319,7 +319,7 @@
     @endif
 
     @if($deviceSection === 'profiles')
-        <section class="space-y-4">
+        <section id="devices-profiles-library" class="space-y-4">
             <div class="light-outline-strong rounded-3xl bg-card p-5 sm:p-6">
                 <div class="flex flex-wrap items-start justify-between gap-4">
                     <div>
@@ -383,7 +383,7 @@
     @endif
 
     @if($deviceSection === 'plans')
-        <section class="space-y-4">
+        <section id="devices-plans-hub" class="space-y-4">
             <div class="light-outline-strong rounded-3xl bg-card p-5 sm:p-6">
                 <div class="flex flex-wrap items-start justify-between gap-4">
                     <div>
@@ -539,7 +539,7 @@
     @endif
 
     @if($deviceSection === 'activity')
-        <section class="space-y-4">
+        <section id="devices-activity-log" class="space-y-4">
             <div class="light-outline-strong rounded-3xl bg-card p-5 sm:p-6">
                 <h3 class="text-lg font-bold">Current Socket Status</h3>
                 <p class="mt-1 text-sm text-muted-foreground">Live snapshot for each socket before drilling into event history.</p>

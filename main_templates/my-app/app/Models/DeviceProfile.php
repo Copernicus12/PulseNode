@@ -3,12 +3,16 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use MongoDB\Laravel\Eloquent\Model;
 
 class DeviceProfile extends Model
 {
     use HasFactory;
+
+    protected $connection = 'mongodb';
+
+    protected $collection = 'device_profiles';
 
     protected $fillable = [
         'name',

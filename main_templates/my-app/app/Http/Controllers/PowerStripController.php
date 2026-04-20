@@ -328,15 +328,23 @@ class PowerStripController extends Controller
 
     private function buildDevicesPageData(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth, string $section, int $recentDetectionsLimit): array
     {
+        $recentDetections = collect();
+
+        try {
+            $recentDetections = DeviceDetection::query()
+                ->with(['profile', 'plan'])
+                ->latest('detected_at')
+                ->limit($recentDetectionsLimit)
+                ->get();
+        } catch (\Throwable) {
+            $recentDetections = collect();
+        }
+
         return [
             ...$this->buildDevicesViewModel($store, $profiler, $connectionHealth),
             'deviceSection' => $section,
             'deviceSectionMeta' => $this->deviceSectionMeta($section),
-            'recentDetections' => DeviceDetection::query()
-                ->with(['profile', 'plan'])
-                ->latest('detected_at')
-                ->limit($recentDetectionsLimit)
-                ->get(),
+            'recentDetections' => $recentDetections,
         ];
     }
 
@@ -346,12 +354,25 @@ class PowerStripController extends Controller
 
         $updatedAt = $latest['updated_at'] ?? null;
         $lastSeen = $updatedAt ? Carbon::parse($updatedAt)->diffForHumans() : 'Never';
-        $profiles = DeviceProfile::query()->latest('last_trained_at')->get();
-        $detectionPlans = DetectionPlan::query()
-            ->orderByDesc('is_active')
-            ->orderByRaw('CASE WHEN socket_scope IS NULL THEN 0 ELSE 1 END DESC')
-            ->latest('updated_at')
-            ->get();
+        $profiles = collect();
+        $detectionPlans = collect();
+
+        try {
+            $profiles = DeviceProfile::query()->latest('last_trained_at')->get();
+        } catch (\Throwable) {
+            $profiles = collect();
+        }
+
+        try {
+            $detectionPlans = DetectionPlan::query()
+                ->orderByDesc('is_active')
+                ->latest('updated_at')
+                ->get()
+                ->sortByDesc(fn (DetectionPlan $plan): int => $plan->socket_scope === null ? 0 : 1)
+                ->values();
+        } catch (\Throwable) {
+            $detectionPlans = collect();
+        }
 
         $planBySocket = collect([1, 2, 3])->mapWithKeys(function (int $socketIndex) use ($profiler, $detectionPlans): array {
             return [$socketIndex => $profiler->resolvePlanForSocket($socketIndex, $detectionPlans)];
@@ -361,7 +382,11 @@ class PowerStripController extends Controller
             ->map(fn (int $socketIndex): array => $profiler->detectSocket($socketIndex, $profiles, $planBySocket->get($socketIndex)))
             ->keyBy('socket_index');
 
-        $profiler->syncDetections($detections->values()->all());
+        try {
+            $profiler->syncDetections($detections->values()->all());
+        } catch (\Throwable) {
+            // Keep page rendering even when detection persistence is unavailable.
+        }
 
         $socketCards = collect($sockets)->map(function (array $socket) use ($detections): array {
             return [
@@ -371,7 +396,13 @@ class PowerStripController extends Controller
         })->values();
 
         $profileCategories = ['Computer', 'Display', 'Accessory', 'Appliance', 'Network', 'Lighting', 'Custom'];
-        $recordedEvents = (int) DeviceDetection::query()->count();
+        $recordedEvents = 0;
+
+        try {
+            $recordedEvents = (int) DeviceDetection::query()->count();
+        } catch (\Throwable) {
+            $recordedEvents = 0;
+        }
         $detectionStats = [
             'trained_profiles' => $profiles->count(),
             'matched_now' => $detections->where('state', 'matched')->count(),

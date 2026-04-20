@@ -239,7 +239,7 @@ function deleteProfile(id: string) {
 
     <SettingsLayout>
         <div class="space-y-6 pl-1 lg:pl-3">
-            <header class="relative overflow-hidden rounded-[28px] border border-border/40 bg-gradient-to-r from-primary/12 via-primary/6 to-transparent px-6 py-5 shadow-none">
+            <header id="billing-settings-hero" class="relative overflow-hidden rounded-[28px] border border-border/40 bg-gradient-to-r from-primary/12 via-primary/6 to-transparent px-6 py-5 shadow-none">
                 <div class="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-primary/10 to-transparent blur-2xl" />
                 <div class="relative space-y-2">
                     <h2 class="bg-gradient-to-r from-foreground via-foreground to-primary bg-clip-text text-xl font-semibold tracking-tight text-transparent">
@@ -343,6 +343,7 @@ function deleteProfile(id: string) {
                         </div>
 
                         <div
+                            id="billing-settings-profiles"
                             class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/40 bg-background/60 px-4 py-3"
                         >
                             <div class="space-y-1">
@@ -369,6 +370,7 @@ function deleteProfile(id: string) {
                                 <Dialog v-model:open="profileDialogOpen">
                                     <DialogTrigger as-child>
                                         <Button
+                                            id="billing-settings-manage-profiles"
                                             type="button"
                                             variant="outline"
                                             class="rounded-xl"

@@ -22,7 +22,7 @@
     @include('layouts._relay-command-alert', ['relayCommandGuard' => $relayCommandGuard])
 
     {{-- ── Row 1: Live Monitoring (full-width, like Camera CCTV) ── --}}
-    <div class="light-outline-strong rounded-3xl bg-card p-7">
+    <div id="dashboard-live-card" class="light-outline-strong rounded-3xl bg-card p-7">
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-xl font-bold tracking-tight">Live Monitoring</h2>
@@ -39,12 +39,24 @@
                     @endif
                 </div>
             </div>
-            @if($isOnline)
+            <div class="flex items-center gap-2">
+                <button
+                    type="button"
+                    id="dashboard-help-button"
+                    onclick="startGlobalFeatureTour()"
+                    class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-border/40 bg-background text-sm font-bold text-foreground/80 transition hover:scale-105 hover:bg-muted/40 hover:text-foreground"
+                    aria-label="Open dashboard guide"
+                    title="Open dashboard guide"
+                >
+                    ?
+                </button>
+                @if($isOnline)
                 <span class="inline-flex w-fit items-center gap-2 rounded-full bg-primary/15 px-4 py-1.5 text-sm font-medium text-primary">
                     <span class="relative flex h-1.5 w-1.5"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span><span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary"></span></span>
                     {{ $activeRelays }}/3 active
                 </span>
-            @endif
+                @endif
+            </div>
         </div>
 
         <div class="mt-7 grid grid-cols-2 gap-4 xl:grid-cols-5">
@@ -80,7 +92,7 @@
     </div>
 
     {{-- ── Row 2: Bento grid (Socket 1 + 2 | Current Distribution + CTA) ── --}}
-    <div class="grid gap-5 lg:grid-cols-2">
+    <div id="dashboard-socket-grid" class="grid gap-5 lg:grid-cols-2">
 
         {{-- Left column --}}
         <div class="flex flex-col gap-5">
@@ -289,7 +301,7 @@
             </div>
 
             {{-- PulseNode CTA — like "Upgrade to Pro" (lime bg) --}}
-            <div class="rounded-3xl bg-primary p-7 text-primary-foreground">
+            <div id="dashboard-cta-card" class="rounded-3xl bg-primary p-7 text-primary-foreground">
                 <h3 class="text-lg font-bold">PulseNode</h3>
                 <p class="mt-1.5 text-sm opacity-70">ESP32 Smart Power Strip</p>
                 <div class="mt-5 flex flex-wrap gap-3">

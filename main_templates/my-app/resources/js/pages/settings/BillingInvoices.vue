@@ -842,6 +842,7 @@ function submitFolderAction(): void {
     <SettingsLayout wide>
         <div class="space-y-4">
             <div
+                id="invoice-archive-hero"
                 class="rounded-[24px] border border-border/40 bg-gradient-to-br from-background via-background to-muted/10 px-5 py-4 shadow-[0_24px_80px_-64px_rgba(0,0,0,0.9)]"
             >
                 <div
@@ -980,6 +981,7 @@ function submitFolderAction(): void {
             </div>
 
             <Card
+                id="invoice-archive-explorer"
                 class="mt-2 gap-1 overflow-hidden rounded-[28px] border border-border/50 bg-card/95 py-1 shadow-[0_28px_90px_-70px_rgba(0,0,0,0.95)]"
             >
                 <CardContent class="p-0">

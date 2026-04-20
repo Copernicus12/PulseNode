@@ -556,7 +556,7 @@ watch(
             container-aria-label="Accounts notifications"
         />
 
-        <Card class="relative overflow-hidden border-border/40 shadow-none">
+        <Card id="accounts-workspace-header" class="relative overflow-hidden border-border/40 shadow-none">
             <div
                 class="pointer-events-none absolute inset-0 bg-linear-to-r from-primary/8 via-transparent to-transparent"
             />
@@ -855,7 +855,7 @@ watch(
                 </CardContent>
             </Card>
 
-            <Card class="border-border/40 shadow-none">
+            <Card id="accounts-workspace-detail" class="border-border/40 shadow-none">
                 <template v-if="selectedUser && selectedForm">
                     <CardHeader class="gap-3 p-4 sm:p-5">
                         <div

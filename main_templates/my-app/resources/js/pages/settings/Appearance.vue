@@ -84,7 +84,7 @@ const currentLanguageFromServer = computed(() =>
 
     <SettingsLayout>
         <div class="space-y-6 pl-1 lg:pl-3">
-            <header class="relative overflow-hidden rounded-[28px] border border-border/40 bg-gradient-to-r from-primary/12 via-primary/6 to-transparent px-6 py-5 shadow-none">
+            <header id="appearance-settings-hero" class="relative overflow-hidden rounded-[28px] border border-border/40 bg-gradient-to-r from-primary/12 via-primary/6 to-transparent px-6 py-5 shadow-none">
                 <div class="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-primary/10 to-transparent blur-2xl" />
                 <div class="relative space-y-2">
                     <h2 class="bg-gradient-to-r from-foreground via-foreground to-primary bg-clip-text text-xl font-semibold tracking-tight text-transparent">
@@ -97,7 +97,7 @@ const currentLanguageFromServer = computed(() =>
             </header>
 
             <div class="grid gap-4 md:grid-cols-2">
-                <Card class="border-border/40 bg-card/70 shadow-none">
+                <Card id="appearance-theme-panel" class="border-border/40 bg-card/70 shadow-none">
                     <CardContent class="flex items-center gap-4 p-5">
                         <div class="rounded-2xl bg-primary/12 p-3 text-primary">
                             <Monitor class="h-5 w-5" />

@@ -3,12 +3,16 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use MongoDB\Laravel\Eloquent\Model;
 
 class DeviceDetection extends Model
 {
     use HasFactory;
+
+    protected $connection = 'mongodb';
+
+    protected $collection = 'device_detections';
 
     protected $fillable = [
         'socket_index',

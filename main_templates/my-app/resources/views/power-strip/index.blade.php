@@ -17,7 +17,7 @@
     @include('layouts._relay-command-alert', ['relayCommandGuard' => $relayCommandGuard])
 
     {{-- ── Row 1: Operations header ── --}}
-    <div class="light-outline-strong rounded-3xl bg-card p-7">
+    <div id="powerstrip-command-center" class="light-outline-strong rounded-3xl bg-card p-7">
         <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <h2 class="text-xl font-bold tracking-tight">Power Strip Command Center</h2>
@@ -70,7 +70,7 @@
     </div>
 
     {{-- ── Row 2: Socket control cards ── --}}
-    <div class="grid gap-5 lg:grid-cols-3">
+    <div id="powerstrip-sockets-grid" class="grid gap-5 lg:grid-cols-3">
         @foreach($sockets as $socket)
             @include('power-strip._socket-card', ['socket' => $socket])
         @endforeach
@@ -145,13 +145,13 @@
 
         {{-- Safety guard + quick operations --}}
         <div class="flex flex-col gap-5">
-            <div class="light-outline-strong rounded-3xl bg-card p-7">
+            <div id="powerstrip-safety-guard" class="light-outline-strong rounded-3xl bg-card p-7">
                 <div id="safety-guard-field-root" class="w-full">
                     <p class="text-sm text-muted-foreground">Loading safety guard form...</p>
                 </div>
             </div>
 
-            <div class="rounded-3xl bg-primary p-7 text-primary-foreground">
+            <div id="powerstrip-service-ops" class="rounded-3xl bg-primary p-7 text-primary-foreground">
                 <h3 class="text-lg font-bold">Service Operations</h3>
                 <p class="mt-1.5 text-sm opacity-70">Direct maintenance controls</p>
                 <div class="mt-5 flex flex-wrap gap-3">
