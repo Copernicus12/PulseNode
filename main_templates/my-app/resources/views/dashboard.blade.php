@@ -27,16 +27,17 @@
             <div>
                 <h2 class="text-xl font-bold tracking-tight">Live Monitoring</h2>
                 <div class="mt-1.5 flex items-center gap-2">
-                    @if($isOnline)
-                        <span class="relative flex h-2 w-2">
-                            <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-                            <span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
-                        </span>
-                        <span class="text-sm text-muted-foreground">{{ $activeRelays }} sockets online</span>
-                    @else
-                        <span class="h-2 w-2 rounded-full bg-red-400"></span>
-                        <span class="text-sm text-muted-foreground">Offline @if($lastSeen)&middot; {{ $lastSeenAgo }}@endif</span>
-                    @endif
+                    <span id="dashboard-live-dot" class="{{ $isOnline ? 'relative flex' : 'flex' }} h-2 w-2">
+                        <span id="dashboard-live-dot-ping" class="{{ $isOnline ? 'absolute inline-flex' : 'hidden' }} h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                        <span id="dashboard-live-dot-core" class="{{ $isOnline ? 'relative inline-flex bg-emerald-500' : 'inline-flex bg-red-400' }} h-2 w-2 rounded-full"></span>
+                    </span>
+                    <span id="dashboard-live-status-text" class="text-sm text-muted-foreground">
+                        @if($isOnline)
+                            {{ $activeRelays }} sockets online
+                        @else
+                            Offline @if($lastSeen)&middot; {{ $lastSeenAgo }}@endif
+                        @endif
+                    </span>
                 </div>
             </div>
             <div class="flex items-center gap-2">
@@ -50,31 +51,53 @@
                 >
                     ?
                 </button>
-                @if($isOnline)
-                <span class="inline-flex w-fit items-center gap-2 rounded-full bg-primary/15 px-4 py-1.5 text-sm font-medium text-primary">
+                <span id="dashboard-active-relays-badge" class="{{ $isOnline ? 'inline-flex' : 'hidden' }} w-fit items-center gap-2 rounded-full bg-primary/15 px-4 py-1.5 text-sm font-medium text-primary">
                     <span class="relative flex h-1.5 w-1.5"><span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span><span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-primary"></span></span>
-                    {{ $activeRelays }}/3 active
+                    <span id="dashboard-active-relays-count">{{ $activeRelays }}/3 active</span>
                 </span>
-                @endif
             </div>
         </div>
 
         <div class="mt-7 grid grid-cols-2 gap-4 xl:grid-cols-5">
             <div class="light-outline rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">Voltage</p>
-                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-voltage">{{ $voltage }} <span class="text-sm font-normal text-muted-foreground">V</span></p>
+                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-voltage">
+                    @if($isOnline)
+                        {{ $voltage }} <span class="text-sm font-normal text-muted-foreground">V</span>
+                    @else
+                        <span class="text-base font-semibold text-muted-foreground">Unavailable</span>
+                    @endif
+                </p>
             </div>
             <div class="light-outline rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">Total Current</p>
-                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-current">{{ $current }} <span class="text-sm font-normal text-muted-foreground">A</span></p>
+                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-current">
+                    @if($isOnline)
+                        {{ $current }} <span class="text-sm font-normal text-muted-foreground">A</span>
+                    @else
+                        <span class="text-base font-semibold text-muted-foreground">Unavailable</span>
+                    @endif
+                </p>
             </div>
             <div class="light-outline rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">Active Power</p>
-                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-power">{{ $power }} <span class="text-sm font-normal text-muted-foreground">W</span></p>
+                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-power">
+                    @if($isOnline)
+                        {{ $power }} <span class="text-sm font-normal text-muted-foreground">W</span>
+                    @else
+                        <span class="text-base font-semibold text-muted-foreground">Unavailable</span>
+                    @endif
+                </p>
             </div>
             <div class="light-outline rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">Energy</p>
-                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-energy">{{ $energy }} <span class="text-sm font-normal text-muted-foreground">kWh</span></p>
+                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-energy">
+                    @if($isOnline)
+                        {{ $energy }} <span class="text-sm font-normal text-muted-foreground">kWh</span>
+                    @else
+                        <span class="text-base font-semibold text-muted-foreground">Unavailable</span>
+                    @endif
+                </p>
             </div>
             <div class="light-outline rounded-2xl bg-background p-5">
                 <div class="flex items-start justify-between gap-3">
@@ -83,9 +106,15 @@
                         {{ $dashboardProfileSource === 'saved_profile' ? 'saved' : 'current' }}
                     </span>
                 </div>
-                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-today-cost">{{ $formatMoney((float) ($dashboardBilling['day']['total_cost'] ?? 0)) }}</p>
+                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-today-cost">
+                    @if($isOnline)
+                        {{ $formatMoney((float) ($dashboardBilling['day']['total_cost'] ?? 0)) }}
+                    @else
+                        <span class="text-base font-semibold text-muted-foreground">Unavailable</span>
+                    @endif
+                </p>
                 <p class="mt-1 text-[11px] text-muted-foreground" id="dash-today-cost-context">
-                    {{ $dashboardProfileLabel }} · {{ $formatMoney($dashboardPriceWithTax) }}/kWh
+                    {{ $isOnline ? $dashboardProfileLabel . ' · ' . $formatMoney($dashboardPriceWithTax) . '/kWh' : 'Waiting for fresh telemetry' }}
                 </p>
             </div>
         </div>
@@ -114,12 +143,18 @@
                     </button>
                 </div>
                 <div class="mt-7 flex items-baseline justify-between">
-                    <span id="dash-socket-current-1" class="text-sm text-muted-foreground">{{ $s1['current'] }} A</span>
-                    <span class="text-2xl font-bold tabular-nums"><span id="dash-socket-power-1">{{ $s1['power'] }}</span><span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span></span>
+                    <span id="dash-socket-current-1" class="text-sm text-muted-foreground">{{ $isOnline ? $s1['current'] . ' A' : 'Unavailable' }}</span>
+                    <span id="dash-socket-power-1" class="text-2xl font-bold tabular-nums">
+                        @if($isOnline)
+                            {{ $s1['power'] }}<span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span>
+                        @else
+                            <span class="text-sm font-semibold text-muted-foreground">Unavailable</span>
+                        @endif
+                    </span>
                 </div>
-                @php $hasLoad1 = $on1 && ((float) $s1['current'] > 0.01); $pct1 = $hasLoad1 ? max(15, min(95, ($s1['current'] / max(5, $current ?: 1)) * 100)) : 0; @endphp
+                @php $hasLoad1 = $isOnline && $on1 && ((float) $s1['current'] > 0.01); $pct1 = $hasLoad1 ? max(15, min(95, ($s1['current'] / max(5, $current ?: 1)) * 100)) : 0; @endphp
                 <div class="mt-5 h-11 w-full rounded-full bg-muted">
-                    <div class="flex h-full items-center rounded-full px-1.5 transition-all duration-700 {{ $hasLoad1 ? 'bg-primary/15' : '' }}" style="width: max(2.75rem, {{ $pct1 }}%)">
+                    <div id="dash-socket-load-1" class="flex h-full items-center rounded-full px-1.5 transition-all duration-700 {{ $hasLoad1 ? 'bg-primary/15' : '' }}" style="width: max(2.75rem, {{ $pct1 }}%)">
                         <span class="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow transition-colors duration-700 {{ $on1 ? 'bg-primary/30 ring-1 ring-primary/20' : 'bg-muted-foreground/20' }}">
                             <svg class="h-3.5 w-3.5 {{ $on1 ? 'text-primary' : 'text-muted-foreground' }} transition-colors duration-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                         </span>
@@ -144,12 +179,18 @@
                     </button>
                 </div>
                 <div class="mt-7 flex items-baseline justify-between">
-                    <span id="dash-socket-current-2" class="text-sm text-muted-foreground">{{ $s2['current'] }} A</span>
-                    <span class="text-2xl font-bold tabular-nums"><span id="dash-socket-power-2">{{ $s2['power'] }}</span><span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span></span>
+                    <span id="dash-socket-current-2" class="text-sm text-muted-foreground">{{ $isOnline ? $s2['current'] . ' A' : 'Unavailable' }}</span>
+                    <span id="dash-socket-power-2" class="text-2xl font-bold tabular-nums">
+                        @if($isOnline)
+                            {{ $s2['power'] }}<span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span>
+                        @else
+                            <span class="text-sm font-semibold text-muted-foreground">Unavailable</span>
+                        @endif
+                    </span>
                 </div>
-                @php $hasLoad2 = $on2 && ((float) $s2['current'] > 0.01); $pct2 = $hasLoad2 ? max(15, min(95, ($s2['current'] / max(5, $current ?: 1)) * 100)) : 0; @endphp
+                @php $hasLoad2 = $isOnline && $on2 && ((float) $s2['current'] > 0.01); $pct2 = $hasLoad2 ? max(15, min(95, ($s2['current'] / max(5, $current ?: 1)) * 100)) : 0; @endphp
                 <div class="mt-5 h-11 w-full rounded-full bg-muted">
-                    <div class="flex h-full items-center rounded-full px-1.5 transition-all duration-700 {{ $hasLoad2 ? 'bg-primary/15' : '' }}" style="width: max(2.75rem, {{ $pct2 }}%)">
+                    <div id="dash-socket-load-2" class="flex h-full items-center rounded-full px-1.5 transition-all duration-700 {{ $hasLoad2 ? 'bg-primary/15' : '' }}" style="width: max(2.75rem, {{ $pct2 }}%)">
                         <span class="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow transition-colors duration-700 {{ $on2 ? 'bg-primary/30 ring-1 ring-primary/20' : 'bg-muted-foreground/20' }}">
                             <svg class="h-3.5 w-3.5 {{ $on2 ? 'text-primary' : 'text-muted-foreground' }} transition-colors duration-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                         </span>
@@ -174,12 +215,18 @@
                     </button>
                 </div>
                 <div class="mt-7 flex items-baseline justify-between">
-                    <span id="dash-socket-current-3" class="text-sm text-muted-foreground">{{ $s3['current'] }} A</span>
-                    <span class="text-2xl font-bold tabular-nums"><span id="dash-socket-power-3">{{ $s3['power'] }}</span><span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span></span>
+                    <span id="dash-socket-current-3" class="text-sm text-muted-foreground">{{ $isOnline ? $s3['current'] . ' A' : 'Unavailable' }}</span>
+                    <span id="dash-socket-power-3" class="text-2xl font-bold tabular-nums">
+                        @if($isOnline)
+                            {{ $s3['power'] }}<span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span>
+                        @else
+                            <span class="text-sm font-semibold text-muted-foreground">Unavailable</span>
+                        @endif
+                    </span>
                 </div>
-                @php $hasLoad3 = $on3 && ((float) $s3['current'] > 0.01); $pct3 = $hasLoad3 ? max(15, min(95, ($s3['current'] / max(5, $current ?: 1)) * 100)) : 0; @endphp
+                @php $hasLoad3 = $isOnline && $on3 && ((float) $s3['current'] > 0.01); $pct3 = $hasLoad3 ? max(15, min(95, ($s3['current'] / max(5, $current ?: 1)) * 100)) : 0; @endphp
                 <div class="mt-5 h-11 w-full rounded-full bg-muted">
-                    <div class="flex h-full items-center rounded-full px-1.5 transition-all duration-700 {{ $hasLoad3 ? 'bg-primary/15' : '' }}" style="width: max(2.75rem, {{ $pct3 }}%)">
+                    <div id="dash-socket-load-3" class="flex h-full items-center rounded-full px-1.5 transition-all duration-700 {{ $hasLoad3 ? 'bg-primary/15' : '' }}" style="width: max(2.75rem, {{ $pct3 }}%)">
                         <span class="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow transition-colors duration-700 {{ $on3 ? 'bg-primary/30 ring-1 ring-primary/20' : 'bg-muted-foreground/20' }}">
                             <svg class="h-3.5 w-3.5 {{ $on3 ? 'text-primary' : 'text-muted-foreground' }} transition-colors duration-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                         </span>
@@ -334,7 +381,122 @@ var dashboardRelayState = {
     3: {{ $on3 ? 'true' : 'false' }},
 };
 var dashboardBillingState = @json($dashboardBilling);
+var dashboardLiveIsOnline = @json($isOnline);
+var dashboardOfflineAfterMs = {{ max(30, (int) config('esp32.connection.offline_after_seconds', 300)) * 1000 }};
 var energyHistoryRefreshTimer = null;
+
+function dashboardIsFresh(data) {
+    if (!data || !data.updated_at) return false;
+    var timestamp = Date.parse(data.updated_at);
+    return Number.isFinite(timestamp) && (Date.now() - timestamp) <= dashboardOfflineAfterMs;
+}
+
+function dashboardUnavailableHtml() {
+    return '<span class="text-base font-semibold text-muted-foreground">Unavailable</span>';
+}
+
+function dashboardSocketUnavailableHtml() {
+    return '<span class="text-sm font-semibold text-muted-foreground">Unavailable</span>';
+}
+
+function dashboardUnit(unit) {
+    return ' <span class="text-sm font-normal text-muted-foreground">' + unit + '</span>';
+}
+
+function setDashboardSocketLoad(idx, active, currentValue, totalCurrent) {
+    var load = document.getElementById('dash-socket-load-' + idx);
+    if (!load) return;
+
+    load.classList.toggle('bg-primary/15', !!active);
+
+    var pct = 0;
+    if (active) {
+        pct = Math.max(15, Math.min(95, (currentValue / Math.max(5, totalCurrent || 1)) * 100));
+    }
+
+    load.style.width = 'max(2.75rem, ' + pct + '%)';
+}
+
+function dashboardLastSeenLabel(updatedAt) {
+    if (!updatedAt) return '';
+    var timestamp = Date.parse(updatedAt);
+    if (!Number.isFinite(timestamp)) return '';
+
+    var diffSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+    if (diffSeconds < 60) return diffSeconds + ' sec ago';
+    if (diffSeconds < 3600) return Math.floor(diffSeconds / 60) + ' min ago';
+    if (diffSeconds < 86400) return Math.floor(diffSeconds / 3600) + ' h ago';
+    if (diffSeconds < 604800) return Math.floor(diffSeconds / 86400) + ' d ago';
+
+    var weeks = Math.floor(diffSeconds / 604800);
+    return weeks + ' week' + (weeks === 1 ? '' : 's') + ' ago';
+}
+
+function setDashboardLiveStatus(online, data) {
+    dashboardLiveIsOnline = !!online;
+
+    var dot = document.getElementById('dashboard-live-dot');
+    var ping = document.getElementById('dashboard-live-dot-ping');
+    var core = document.getElementById('dashboard-live-dot-core');
+    var label = document.getElementById('dashboard-live-status-text');
+    var badge = document.getElementById('dashboard-active-relays-badge');
+    var count = document.getElementById('dashboard-active-relays-count');
+
+    if (dot) {
+        dot.classList.toggle('relative', online);
+        dot.classList.toggle('flex', !online);
+    }
+
+    if (ping) {
+        ping.classList.toggle('hidden', !online);
+        ping.classList.toggle('absolute', online);
+        ping.classList.toggle('inline-flex', online);
+    }
+
+    if (core) {
+        core.classList.remove('bg-emerald-500', 'bg-red-400');
+        core.classList.add(online ? 'bg-emerald-500' : 'bg-red-400');
+    }
+
+    if (label) {
+        if (online) {
+            var active = [1, 2, 3].filter(function(idx) {
+                return Boolean(data && data['relay_' + idx]);
+            }).length;
+            label.textContent = active + ' sockets online';
+            if (count) count.textContent = active + '/3 active';
+        } else {
+            var lastSeen = dashboardLastSeenLabel(data && data.updated_at);
+            label.textContent = 'Offline' + (lastSeen ? ' · ' + lastSeen : '');
+        }
+    }
+
+    if (badge) {
+        badge.classList.toggle('hidden', !online);
+        badge.classList.toggle('inline-flex', online);
+    }
+}
+
+function renderDashboardLiveUnavailable(data) {
+    setDashboardLiveStatus(false, data || {});
+
+    ['dash-voltage', 'dash-current', 'dash-power', 'dash-energy', 'dash-energy-total', 'dash-today-cost'].forEach(function(id) {
+        var item = document.getElementById(id);
+        if (item) item.innerHTML = dashboardUnavailableHtml();
+    });
+
+    [1, 2, 3].forEach(function(idx) {
+        var currentEl = document.getElementById('dash-socket-current-' + idx);
+        var powerEl = document.getElementById('dash-socket-power-' + idx);
+
+        if (currentEl) currentEl.textContent = 'Unavailable';
+        if (powerEl) powerEl.innerHTML = dashboardSocketUnavailableHtml();
+        setDashboardSocketLoad(idx, false, 0, 0);
+    });
+
+    var contextEl = document.getElementById('dash-today-cost-context');
+    if (contextEl) contextEl.textContent = 'Waiting for fresh telemetry';
+}
 
 function formatDashboardMoney(value, currency) {
     try {
@@ -387,12 +549,12 @@ function applyDashboardBilling(billingSummary) {
     var profileSourceEl = document.getElementById('dash-billing-source');
     var contextEl = document.getElementById('dash-today-cost-context');
 
-    if (todayCostEl) todayCostEl.textContent = formatDashboardMoney(totalCost, currency);
+    if (todayCostEl && dashboardLiveIsOnline) todayCostEl.textContent = formatDashboardMoney(totalCost, currency);
     if (dayCostEl) dayCostEl.textContent = formatDashboardMoney(totalCost, currency);
     if (rateEl) rateEl.textContent = formatDashboardMoney(priceWithTax, currency) + '/kWh';
     if (profileLabelEl) profileLabelEl.textContent = profileLabel;
     if (profileSourceEl) profileSourceEl.textContent = profileSource;
-    if (contextEl) contextEl.textContent = profileLabel + ' · ' + formatDashboardMoney(priceWithTax, currency) + '/kWh';
+    if (contextEl && dashboardLiveIsOnline) contextEl.textContent = profileLabel + ' · ' + formatDashboardMoney(priceWithTax, currency) + '/kWh';
 }
 
 function sendRelayCommand(idx, turnOn) {
@@ -666,13 +828,23 @@ renderEnergyBars(energyState);
 bindEnergyBars();
 
 function applyLatestDashboard(d) {
+    if (!dashboardIsFresh(d)) {
+        renderDashboardLiveUnavailable(d);
+        return;
+    }
+
+    setDashboardLiveStatus(true, d);
+
     var el = function(id) { return document.getElementById(id); };
-    var u = function(unit) { return ' <span class="text-sm font-normal text-muted-foreground">' + unit + '</span>'; };
-    if (el('dash-voltage')) el('dash-voltage').innerHTML = parseFloat(d.voltage || 0).toFixed(1) + u('V');
-    if (el('dash-current')) el('dash-current').innerHTML = parseFloat(d.current || 0).toFixed(3) + u('A');
-    if (el('dash-power')) el('dash-power').innerHTML = parseFloat(d.power || 0).toFixed(1) + u('W');
-    if (el('dash-energy')) el('dash-energy').innerHTML = parseFloat(d.energy || 0).toFixed(4) + u('kWh');
-    if (el('dash-energy-total')) el('dash-energy-total').innerHTML = parseFloat(d.energy || 0).toFixed(4) + u('kWh');
+    if (el('dash-voltage')) el('dash-voltage').innerHTML = parseFloat(d.voltage || 0).toFixed(1) + dashboardUnit('V');
+    if (el('dash-current')) el('dash-current').innerHTML = parseFloat(d.current || 0).toFixed(3) + dashboardUnit('A');
+    if (el('dash-power')) el('dash-power').innerHTML = parseFloat(d.power || 0).toFixed(1) + dashboardUnit('W');
+    if (el('dash-energy')) el('dash-energy').innerHTML = parseFloat(d.energy || 0).toFixed(4) + dashboardUnit('kWh');
+    if (el('dash-energy-total')) el('dash-energy-total').innerHTML = parseFloat(d.energy || 0).toFixed(4) + dashboardUnit('kWh');
+    applyDashboardBilling(dashboardBillingState);
+
+    var totalCurrent = parseFloat(d.current || 0);
+
     [1, 2, 3].forEach(function(idx) {
         var relayOn = Boolean(d['relay_' + idx]);
         dashboardRelayState[idx] = relayOn;
@@ -685,7 +857,9 @@ function applyLatestDashboard(d) {
         if (currentEl) currentEl.textContent = current.toFixed(3) + ' A';
 
         var powerEl = el('dash-socket-power-' + idx);
-        if (powerEl) powerEl.textContent = power.toFixed(1);
+        if (powerEl) powerEl.innerHTML = power.toFixed(1) + dashboardUnit('W');
+
+        setDashboardSocketLoad(idx, relayOn && current > 0.01, current, totalCurrent);
     });
 }
 

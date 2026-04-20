@@ -52,15 +52,33 @@
         <div class="mt-7 grid grid-cols-2 gap-4 lg:grid-cols-4">
             <div class="light-outline rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">Instant Load</p>
-                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="total-power">{{ number_format($totalPower, 1) }} <span class="text-sm font-normal text-muted-foreground">W</span></p>
+                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="total-power">
+                    @if($isOnline)
+                        {{ number_format($totalPower, 1) }} <span class="text-sm font-normal text-muted-foreground">W</span>
+                    @else
+                        <span class="text-base font-semibold text-muted-foreground">Unavailable</span>
+                    @endif
+                </p>
             </div>
             <div class="light-outline rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">System Energy Counter</p>
-                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="total-energy">{{ number_format($totalEnergy, 3) }} <span class="text-sm font-normal text-muted-foreground">kWh</span></p>
+                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="total-energy">
+                    @if($isOnline)
+                        {{ number_format($totalEnergy, 3) }} <span class="text-sm font-normal text-muted-foreground">kWh</span>
+                    @else
+                        <span class="text-base font-semibold text-muted-foreground">Unavailable</span>
+                    @endif
+                </p>
             </div>
             <div class="light-outline rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">Active Sockets</p>
-                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="active-sockets">{{ $activeSockets }} <span class="text-sm font-normal text-muted-foreground">/ 3</span></p>
+                <p class="mt-2.5 text-2xl font-bold tabular-nums" id="active-sockets">
+                    @if($isOnline)
+                        {{ $activeSockets }} <span class="text-sm font-normal text-muted-foreground">/ 3</span>
+                    @else
+                        <span class="text-base font-semibold text-muted-foreground">Unavailable</span>
+                    @endif
+                </p>
             </div>
             <div class="light-outline rounded-2xl bg-background p-5">
                 <p class="text-xs text-muted-foreground">Runtime State</p>
@@ -72,7 +90,7 @@
     {{-- ── Row 2: Socket control cards ── --}}
     <div id="powerstrip-sockets-grid" class="grid gap-5 lg:grid-cols-3">
         @foreach($sockets as $socket)
-            @include('power-strip._socket-card', ['socket' => $socket])
+            @include('power-strip._socket-card', ['socket' => $socket, 'isOnline' => $isOnline])
         @endforeach
     </div>
 
@@ -313,10 +331,26 @@ var relayState = {
     2: {{ !empty($sockets[1]['is_on']) ? 'true' : 'false' }},
     3: {{ !empty($sockets[2]['is_on']) ? 'true' : 'false' }},
 };
+var powerStripLiveIsOnline = @json($isOnline);
+var powerStripOfflineAfterMs = {{ max(30, (int) config('esp32.connection.offline_after_seconds', 300)) * 1000 }};
 
 function asNumber(value) {
     var num = Number(value);
     return Number.isFinite(num) ? num : 0;
+}
+
+function isPowerStripFresh(data) {
+    if (!data || !data.updated_at) return false;
+    var timestamp = Date.parse(data.updated_at);
+    return Number.isFinite(timestamp) && (Date.now() - timestamp) <= powerStripOfflineAfterMs;
+}
+
+function powerStripUnavailableHtml(size) {
+    return '<span class="' + (size === 'sm' ? 'text-sm' : 'text-base') + ' font-semibold text-muted-foreground">Unavailable</span>';
+}
+
+function powerStripUnit(unit, size) {
+    return ' <span class="' + (size === 'xs' ? 'text-xs' : 'text-sm') + ' font-normal text-muted-foreground">' + unit + '</span>';
 }
 
 function formatUpdatedLabel(updatedAt) {
@@ -335,6 +369,62 @@ function resolveSocketStatus(isOn, powerW) {
     if (powerW >= 2500) return { label: 'Overload', dotClass: 'bg-red-500' };
     if (powerW >= 1800) return { label: 'High Load', dotClass: 'bg-amber-500' };
     return { label: 'Normal', dotClass: 'bg-emerald-500' };
+}
+
+function setPowerStripSocketLoad(idx, active, currentValue) {
+    var load = document.getElementById('socket-load-' + idx);
+    var knob = document.getElementById('socket-load-knob-' + idx);
+    var icon = document.getElementById('socket-load-icon-' + idx);
+    if (!load) return;
+
+    var pct = active ? Math.max(15, Math.min(95, (currentValue / 5) * 100)) : 0;
+    load.style.width = 'max(2.75rem, ' + pct + '%)';
+    load.classList.toggle('bg-primary/15', !!active);
+
+    if (knob) {
+        knob.classList.toggle('bg-primary/30', !!active);
+        knob.classList.toggle('ring-1', !!active);
+        knob.classList.toggle('ring-primary/20', !!active);
+        knob.classList.toggle('bg-muted-foreground/20', !active);
+    }
+
+    if (icon) {
+        icon.classList.toggle('text-primary', !!active);
+        icon.classList.toggle('text-muted-foreground', !active);
+    }
+}
+
+function renderPowerStripUnavailable(data) {
+    powerStripLiveIsOnline = false;
+
+    var el = function(id) { return document.getElementById(id); };
+    ['total-power', 'total-energy', 'active-sockets'].forEach(function(id) {
+        var item = el(id);
+        if (item) item.innerHTML = powerStripUnavailableHtml();
+    });
+
+    [1, 2, 3].forEach(function(idx) {
+        var currentEl = el('socket-current-' + idx);
+        var powerEl = el('socket-power-' + idx);
+        var voltageEl = el('socket-voltage-' + idx);
+        var energyEl = el('socket-energy-' + idx);
+        var statusLabelEl = el('socket-status-label-' + idx);
+        var statusDotEl = el('socket-status-dot-' + idx);
+        var updatedEl = el('socket-updated-' + idx);
+
+        if (currentEl) currentEl.textContent = 'Unavailable';
+        if (powerEl) powerEl.innerHTML = powerStripUnavailableHtml('sm');
+        if (voltageEl) voltageEl.innerHTML = powerStripUnavailableHtml('sm');
+        if (energyEl) energyEl.innerHTML = powerStripUnavailableHtml('sm');
+        if (statusLabelEl) statusLabelEl.textContent = 'Offline';
+        if (statusDotEl) {
+            statusDotEl.classList.remove('bg-emerald-500', 'bg-amber-500', 'bg-muted-foreground/40');
+            statusDotEl.classList.add('bg-red-500');
+        }
+        if (updatedEl) updatedEl.textContent = formatUpdatedLabel(data && data.updated_at);
+
+        setPowerStripSocketLoad(idx, false, 0);
+    });
 }
 
 function setSocketToggleState(idx, isOn, pending) {
@@ -517,10 +607,16 @@ restoreLog();
 loadGuardPolicy();
 
 function applyLatestMetrics(d) {
+    if (!isPowerStripFresh(d)) {
+        renderPowerStripUnavailable(d);
+        return;
+    }
+
+    powerStripLiveIsOnline = true;
+
     var el = function(id) { return document.getElementById(id); };
-    var u = function(unit) { return ' <span class="text-sm font-normal text-muted-foreground">' + unit + '</span>'; };
-    if (el('total-power')) el('total-power').innerHTML = parseFloat(d.power || 0).toFixed(1) + u('W');
-    if (el('total-energy')) el('total-energy').innerHTML = parseFloat(d.energy || 0).toFixed(3) + u('kWh');
+    if (el('total-power')) el('total-power').innerHTML = parseFloat(d.power || 0).toFixed(1) + powerStripUnit('W');
+    if (el('total-energy')) el('total-energy').innerHTML = parseFloat(d.energy || 0).toFixed(3) + powerStripUnit('kWh');
     if (el('active-sockets')) {
         var count = 0;
         if (d.relay_1) count++;
@@ -535,17 +631,20 @@ function applyLatestMetrics(d) {
         setSocketToggleState(idx, relayOn, false);
 
         var current = asNumber(d['current_' + idx]);
-        var power = voltage * current;
+        var power = d['power_' + idx] !== undefined ? asNumber(d['power_' + idx]) : voltage * current;
         var status = resolveSocketStatus(relayOn, power);
 
         var currentEl = el('socket-current-' + idx);
         if (currentEl) currentEl.textContent = current.toFixed(3) + ' A';
 
         var powerEl = el('socket-power-' + idx);
-        if (powerEl) powerEl.textContent = power.toFixed(1);
+        if (powerEl) powerEl.innerHTML = power.toFixed(1) + powerStripUnit('W');
 
         var voltageEl = el('socket-voltage-' + idx);
-        if (voltageEl) voltageEl.textContent = voltage.toFixed(1);
+        if (voltageEl) voltageEl.innerHTML = voltage.toFixed(1) + powerStripUnit('V', 'xs');
+
+        var energyEl = el('socket-energy-' + idx);
+        if (energyEl) energyEl.innerHTML = asNumber(d.energy).toFixed(3) + powerStripUnit('kWh', 'xs');
 
         var statusLabelEl = el('socket-status-label-' + idx);
         if (statusLabelEl) statusLabelEl.textContent = status.label;
@@ -558,6 +657,8 @@ function applyLatestMetrics(d) {
 
         var updatedEl = el('socket-updated-' + idx);
         if (updatedEl) updatedEl.textContent = formatUpdatedLabel(d.updated_at);
+
+        setPowerStripSocketLoad(idx, relayOn && current > 0.01, current);
     });
 }
 

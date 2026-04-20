@@ -659,16 +659,32 @@
     }
 
     function lastSeenLabel(updatedAt) {
-        if (!updatedAt) return 'never';
+        if (!updatedAt) return 'Never';
 
         var ts = Date.parse(updatedAt);
-        if (!Number.isFinite(ts)) return 'unknown';
+        if (!Number.isFinite(ts)) return 'Unknown';
 
         var diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
         if (diffSec < 5) return 'just now';
         if (diffSec < 60) return diffSec + ' sec ago';
         if (diffSec < 3600) return Math.floor(diffSec / 60) + ' min ago';
-        return Math.floor(diffSec / 3600) + ' h ago';
+        if (diffSec < 86400) return Math.floor(diffSec / 3600) + ' h ago';
+        if (diffSec < 604800) return Math.floor(diffSec / 86400) + ' d ago';
+
+        var value = 0;
+        var unit = 'week';
+
+        if (diffSec < 2629800) {
+            value = Math.floor(diffSec / 604800);
+        } else if (diffSec < 31557600) {
+            value = Math.floor(diffSec / 2629800);
+            unit = 'month';
+        } else {
+            value = Math.floor(diffSec / 31557600);
+            unit = 'year';
+        }
+
+        return value + ' ' + unit + (value === 1 ? '' : 's') + ' ago';
     }
 
     function applyDetection(detection) {

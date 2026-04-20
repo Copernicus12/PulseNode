@@ -1,6 +1,7 @@
 {{-- Socket Card — Roomy rounded dark theme --}}
 @php
     $idx       = $socket['index'];
+    $isOnline  = $isOnline ?? true;
     $label     = $socket['label'];
     $isOn      = $socket['is_on'];
     $voltage   = $socket['voltage'];
@@ -16,7 +17,7 @@
     $timeAgo = $updatedAt ? \Carbon\Carbon::parse($updatedAt)->diffForHumans() : 'No data';
 
     $maxCurrent = 5;
-    $hasLoad = $isOn && ((float) $current > 0.01);
+    $hasLoad = $isOnline && $isOn && ((float) $current > 0.01);
     $pct = $hasLoad ? max(15, min(95, ($current / $maxCurrent) * 100)) : 0;
 
     $statusDot = match($status) {
@@ -34,6 +35,11 @@
         'offline'   => 'Offline',
         default     => 'Unknown',
     };
+
+    if (!$isOnline) {
+        $statusDot = 'bg-red-500';
+        $statusLabel = 'Offline';
+    }
 @endphp
 
 <div class="light-outline-strong rounded-3xl bg-card p-7" id="socket-card-{{ $idx }}">
@@ -63,15 +69,23 @@
 
     {{-- Values --}}
     <div class="mt-6 flex items-baseline justify-between">
-        <span id="socket-current-{{ $idx }}" class="text-sm text-muted-foreground">{{ number_format($current, 3) }} A</span>
-        <span class="text-2xl font-bold tabular-nums"><span id="socket-power-{{ $idx }}">{{ number_format($powerW, 1) }}</span><span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span></span>
+        <span id="socket-current-{{ $idx }}" class="text-sm text-muted-foreground">
+            {{ $isOnline ? number_format($current, 3) . ' A' : 'Unavailable' }}
+        </span>
+        <span id="socket-power-{{ $idx }}" class="text-2xl font-bold tabular-nums">
+            @if($isOnline)
+                {{ number_format($powerW, 1) }}<span class="ml-0.5 text-sm font-normal text-muted-foreground">W</span>
+            @else
+                <span class="text-sm font-semibold text-muted-foreground">Unavailable</span>
+            @endif
+        </span>
     </div>
 
     {{-- Slider bar --}}
     <div class="mt-5 h-11 w-full rounded-full bg-muted">
-        <div class="flex h-full items-center rounded-full px-1.5 transition-all duration-700 {{ $hasLoad ? 'bg-primary/15' : '' }}" style="width: max(2.75rem, {{ $pct }}%)">
-            <span class="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow transition-colors duration-700 {{ $isOn ? 'bg-primary/30 ring-1 ring-primary/20' : 'bg-muted-foreground/20' }}">
-                <svg class="h-3.5 w-3.5 {{ $isOn ? 'text-primary' : 'text-muted-foreground' }} transition-colors duration-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        <div id="socket-load-{{ $idx }}" class="flex h-full items-center rounded-full px-1.5 transition-all duration-700 {{ $hasLoad ? 'bg-primary/15' : '' }}" style="width: max(2.75rem, {{ $pct }}%)">
+            <span id="socket-load-knob-{{ $idx }}" class="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow transition-colors duration-700 {{ $hasLoad ? 'bg-primary/30 ring-1 ring-primary/20' : 'bg-muted-foreground/20' }}">
+                <svg id="socket-load-icon-{{ $idx }}" class="h-3.5 w-3.5 {{ $hasLoad ? 'text-primary' : 'text-muted-foreground' }} transition-colors duration-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
             </span>
         </div>
     </div>
@@ -80,11 +94,23 @@
     <div class="mt-6 grid grid-cols-2 gap-4">
         <div class="light-outline rounded-2xl bg-background p-4">
             <p class="text-[11px] text-muted-foreground">Voltage</p>
-            <p class="mt-1.5 text-sm font-bold tabular-nums"><span id="socket-voltage-{{ $idx }}">{{ number_format($voltage, 1) }}</span> <span class="text-xs font-normal text-muted-foreground">V</span></p>
+            <p id="socket-voltage-{{ $idx }}" class="mt-1.5 text-sm font-bold tabular-nums">
+                @if($isOnline)
+                    {{ number_format($voltage, 1) }} <span class="text-xs font-normal text-muted-foreground">V</span>
+                @else
+                    <span class="text-sm font-semibold text-muted-foreground">Unavailable</span>
+                @endif
+            </p>
         </div>
         <div class="light-outline rounded-2xl bg-background p-4">
             <p class="text-[11px] text-muted-foreground">Energy</p>
-            <p class="mt-1.5 text-sm font-bold tabular-nums"><span id="socket-energy-{{ $idx }}">{{ number_format($energyKwh, 3) }}</span> <span class="text-xs font-normal text-muted-foreground">kWh</span></p>
+            <p id="socket-energy-{{ $idx }}" class="mt-1.5 text-sm font-bold tabular-nums">
+                @if($isOnline)
+                    {{ number_format($energyKwh, 3) }} <span class="text-xs font-normal text-muted-foreground">kWh</span>
+                @else
+                    <span class="text-sm font-semibold text-muted-foreground">Unavailable</span>
+                @endif
+            </p>
         </div>
     </div>
 </div>

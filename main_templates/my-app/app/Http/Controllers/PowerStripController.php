@@ -397,7 +397,7 @@ class PowerStripController extends Controller
         [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus] = $this->buildStripViewModel($store->latest(), $connectionHealth);
 
         $updatedAt = $latest['updated_at'] ?? null;
-        $lastSeen = $updatedAt ? Carbon::parse($updatedAt)->diffForHumans() : 'Never';
+        $lastSeen = $this->telemetryAgeLabel($updatedAt);
         $profiles = collect();
         $detectionPlans = collect();
 
