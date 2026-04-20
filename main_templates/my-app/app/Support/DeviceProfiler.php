@@ -64,23 +64,42 @@ class DeviceProfiler
         ];
     }
 
-    public function detectSocket(int $socketIndex, Collection $profiles, ?DetectionPlan $plan = null): array
+    public function detectSocket(int $socketIndex, Collection $profiles, ?DetectionPlan $plan = null, ?bool $isRelayOn = null): array
     {
         $resolvedPlan = $plan ?? $this->resolvePlanForSocket($socketIndex);
         $windowSamples = $resolvedPlan?->window_samples ?? $this->windowSamplesForStrategy($resolvedPlan?->strategy ?? 'balanced');
         $minSamples = max(2, (int) ($resolvedPlan?->min_samples ?? 3));
         $matchThreshold = (int) ($resolvedPlan?->match_threshold ?? 68);
 
-        $signature = $this->buildSocketSignature($socketIndex, (int) $windowSamples, $minSamples);
-
-        if ($signature === null) {
+        if ($isRelayOn === false) {
             return [
                 'socket_index' => $socketIndex,
                 'state' => 'idle',
                 'confidence' => 0,
-                'label' => 'No active device',
-                'category' => 'Idle socket',
-                'reason' => 'Not enough recent activity for this detection plan.',
+                'label' => 'Socket is off',
+                'category' => 'Powered off',
+                'reason' => 'The socket is switched off, so there is no active device to detect.',
+                'signature' => null,
+                'profile' => null,
+                'plan' => $resolvedPlan,
+                'required_samples' => $minSamples,
+            ];
+        }
+
+        $signature = $this->buildSocketSignature($socketIndex, (int) $windowSamples, $minSamples);
+
+        if ($signature === null) {
+            $isOn = $isRelayOn === true;
+
+            return [
+                'socket_index' => $socketIndex,
+                'state' => 'idle',
+                'confidence' => 0,
+                'label' => $isOn ? 'Powered on, no load' : 'Socket is off',
+                'category' => $isOn ? 'Powered on' : 'Powered off',
+                'reason' => $isOn
+                    ? 'The socket is on, but no active load signature is available yet.'
+                    : 'The socket is switched off, so there is no active device to detect.',
                 'signature' => null,
                 'profile' => null,
                 'plan' => $resolvedPlan,
@@ -100,17 +119,22 @@ class DeviceProfiler
         }
 
         if ($bestProfile !== null && $bestConfidence >= $matchThreshold) {
+            $matchedProfileLabel = $bestProfile->name;
+            $matchedPlanLabel = $resolvedPlan?->name ?? 'Default plan';
+
             return [
                 'socket_index' => $socketIndex,
                 'state' => 'matched',
                 'confidence' => $bestConfidence,
-                'label' => $bestProfile->name,
+                'label' => 'Matched - '.$matchedProfileLabel,
                 'category' => $bestProfile->category,
-                'reason' => 'Matched against a saved power signature profile.',
+                'reason' => 'Matched profile "'.$matchedProfileLabel.'" under plan "'.$matchedPlanLabel.'".',
                 'signature' => $signature,
                 'profile' => $bestProfile,
                 'plan' => $resolvedPlan,
                 'required_samples' => $minSamples,
+                'matched_profile_name' => $matchedProfileLabel,
+                'matched_plan_name' => $matchedPlanLabel,
             ];
         }
 
@@ -128,6 +152,48 @@ class DeviceProfiler
             'plan' => $resolvedPlan,
             'required_samples' => $minSamples,
         ];
+    }
+
+    public function normalizeDominantMatches(Collection $detections): Collection
+    {
+        $detections = $detections->values();
+
+        $dominantSocketIndexes = [];
+
+        $detections
+            ->filter(function (array $detection): bool {
+                return ($detection['state'] ?? 'idle') === 'matched' && ($detection['profile'] ?? null) !== null;
+            })
+            ->groupBy(function (array $detection): string {
+                $profile = $detection['profile'] ?? null;
+
+                if ($profile !== null && isset($profile->id)) {
+                    return 'profile:'.$profile->id;
+                }
+
+                return 'profile:'.(string) ($detection['matched_profile_name'] ?? $detection['label'] ?? 'unknown');
+            })
+            ->each(function (Collection $group) use (&$dominantSocketIndexes): void {
+                $topConfidence = (int) $group->max('confidence');
+
+                $group->each(function (array $detection) use (&$dominantSocketIndexes, $topConfidence): void {
+                    if ((int) ($detection['confidence'] ?? 0) === $topConfidence) {
+                        $dominantSocketIndexes[(string) $detection['socket_index']] = true;
+                    }
+                });
+            });
+
+        return $detections->map(function (array $detection) use ($dominantSocketIndexes): array {
+            if (($detection['state'] ?? 'idle') !== 'matched') {
+                return $detection;
+            }
+
+            if (isset($dominantSocketIndexes[(string) $detection['socket_index']])) {
+                return $detection;
+            }
+
+            return $this->demoteShadowedMatch($detection);
+        })->values();
     }
 
     public function syncDetections(array $detections): void
@@ -183,6 +249,32 @@ class DeviceProfiler
                 ...$payload,
             ]);
         }
+    }
+
+    private function demoteShadowedMatch(array $detection): array
+    {
+        $profileName = (string) (
+            $detection['matched_profile_name']
+            ?? ($detection['profile']?->name ?? null)
+            ?? $detection['label']
+            ?? 'device'
+        );
+
+        $signature = is_array($detection['signature'] ?? null) ? $detection['signature'] : null;
+        [$label, $category, $reason] = $signature !== null
+            ? $this->heuristicGuess($signature)
+            : ['Unknown device', 'Unknown', 'Another socket already carries the dominant match.'];
+
+        $detection['state'] = 'unknown';
+        $detection['label'] = $label;
+        $detection['category'] = $category;
+        $detection['reason'] = $reason;
+        $detection['profile'] = null;
+        $detection['matched_profile_name'] = null;
+        $detection['matched_plan_name'] = null;
+        $detection['confidence'] = (int) ($detection['confidence'] ?? 0);
+
+        return $detection;
     }
 
     public function profilePayloadFromSignature(array $signature, array $attributes): array

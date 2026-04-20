@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 class PowerStripController extends Controller
@@ -423,8 +424,12 @@ class PowerStripController extends Controller
         });
 
         $detections = collect([1, 2, 3])
-            ->map(fn (int $socketIndex): array => $profiler->detectSocket($socketIndex, $profiles, $planBySocket->get($socketIndex)))
-            ->keyBy('socket_index');
+            ->map(function (int $socketIndex) use ($profiler, $profiles, $planBySocket, $latest): array {
+                $relayOn = (bool) ($latest["relay_{$socketIndex}"] ?? false);
+
+                return $profiler->detectSocket($socketIndex, $profiles, $planBySocket->get($socketIndex), $relayOn);
+            });
+        $detections = $profiler->normalizeDominantMatches($detections)->keyBy('socket_index');
 
         try {
             $profiler->syncDetections($detections->values()->all());
@@ -552,7 +557,11 @@ class PowerStripController extends Controller
             return 'off';
         }
 
-        $power = (float) ($latest['power'] ?? 0);
+        $power = (float) ($latest["power_{$index}"] ?? 0);
+        if ($power <= 0.1) {
+            return 'idle';
+        }
+
         if ($power > 2500) {
             return 'overload';
         }
@@ -560,7 +569,7 @@ class PowerStripController extends Controller
             return 'high_load';
         }
 
-        return 'normal';
+        return 'matched';
     }
 
     private function deriveSystemStatus(array $latest, Esp32ConnectionHealth $connectionHealth): string

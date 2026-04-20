@@ -159,8 +159,9 @@ class Esp32ApiController extends Controller
         return response()->json(EnergyReading::dayDetails($parsed));
     }
 
-    public function liveDetections(DeviceProfiler $profiler): JsonResponse
+    public function liveDetections(Esp32StateStore $store, DeviceProfiler $profiler): JsonResponse
     {
+        $latest = $store->latest();
         $profiles = DeviceProfile::query()->latest('last_trained_at')->get();
         $plans = DetectionPlan::query()
             ->where('is_active', true)
@@ -169,20 +170,26 @@ class Esp32ApiController extends Controller
             ->sortByDesc(fn (DetectionPlan $plan): int => $plan->socket_scope === null ? 0 : 1)
             ->values();
 
-        $detections = collect([1, 2, 3])->map(function (int $socketIndex) use ($profiler, $profiles, $plans): array {
+        $detections = collect([1, 2, 3])->map(function (int $socketIndex) use ($profiler, $profiles, $plans, $latest): array {
             $plan = $profiler->resolvePlanForSocket($socketIndex, $plans);
-            $detection = $profiler->detectSocket($socketIndex, $profiles, $plan);
+            $relayOn = (bool) ($latest["relay_{$socketIndex}"] ?? false);
 
-            return [
-                'socket_index' => $socketIndex,
-                'state' => (string) ($detection['state'] ?? 'idle'),
-                'confidence' => (int) ($detection['confidence'] ?? 0),
-                'label' => (string) ($detection['label'] ?? 'Unknown'),
-                'category' => (string) ($detection['category'] ?? 'Unknown'),
-                'reason' => (string) ($detection['reason'] ?? ''),
-                'required_samples' => (int) ($detection['required_samples'] ?? 3),
-            ];
-        })->values();
+            return $profiler->detectSocket($socketIndex, $profiles, $plan, $relayOn);
+        });
+
+        $detections = $profiler->normalizeDominantMatches($detections)
+            ->map(function (array $detection): array {
+                return [
+                    'socket_index' => (int) ($detection['socket_index'] ?? 0),
+                    'state' => (string) ($detection['state'] ?? 'idle'),
+                    'confidence' => (int) ($detection['confidence'] ?? 0),
+                    'label' => (string) ($detection['label'] ?? 'Unknown'),
+                    'category' => (string) ($detection['category'] ?? 'Unknown'),
+                    'reason' => (string) ($detection['reason'] ?? ''),
+                    'required_samples' => (int) ($detection['required_samples'] ?? 3),
+                ];
+            })
+            ->values();
 
         return response()->json([
             'status' => 'ok',

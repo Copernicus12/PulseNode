@@ -10,6 +10,26 @@
         'idle' => 'bg-muted text-muted-foreground ring-1 ring-border/40',
     ];
 
+    $socketStatusClasses = [
+        'off' => 'bg-muted text-muted-foreground ring-1 ring-border/40',
+        'idle' => 'bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30',
+        'matched' => 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30',
+        'normal' => 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30',
+        'high_load' => 'bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30',
+        'overload' => 'bg-red-500/15 text-red-300 ring-1 ring-red-500/30',
+        'offline' => 'bg-muted text-muted-foreground ring-1 ring-border/40',
+    ];
+
+    $socketStatusLabels = [
+        'off' => 'Off',
+        'idle' => 'Idle',
+        'matched' => 'Matched',
+        'normal' => 'Matched',
+        'high_load' => 'High load',
+        'overload' => 'Overload',
+        'offline' => 'Offline',
+    ];
+
     $scopeLabel = static function (?int $scope): string {
         return $scope ? 'Socket '.$scope : 'All sockets';
     };
@@ -103,8 +123,8 @@
                                     <p class="text-xs uppercase tracking-[0.14em] text-muted-foreground">Socket {{ $socket['index'] }}</p>
                                     <h4 class="mt-1 text-base font-semibold">{{ $socket['label'] }}</h4>
                                 </div>
-                                <span id="devices-state-badge-{{ $socket['index'] }}" class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium {{ $detectionStateClasses[$detection['state']] ?? 'bg-muted text-muted-foreground ring-1 ring-border/40' }}">
-                                    {{ ucfirst($detection['state']) }}
+                                <span id="devices-state-badge-{{ $socket['index'] }}" class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium {{ $socketStatusClasses[$socket['status']] ?? 'bg-muted text-muted-foreground ring-1 ring-border/40' }}">
+                                    {{ $socketStatusLabels[$socket['status']] ?? ucfirst(str_replace('_', ' ', $socket['status'])) }}
                                 </span>
                             </div>
 
@@ -142,6 +162,8 @@
                                     data-signature-peak="{{ $signature ? number_format($signature['peak_power_w'], 1).' W' : '' }}"
                                     data-signature-variability="{{ $signature ? number_format($signature['variability_pct'], 1).'%' : '' }}"
                                     data-signature-startup="{{ $signature ? number_format($signature['startup_ratio'], 2).'x' : '' }}"
+                                    data-signature-samples="{{ $signature ? (string) $signature['sample_count'] : '' }}"
+                                    data-signature-window="{{ $signature ? number_format($signature['duration_minutes'], 1).' min' : '' }}"
                                     data-required-samples="{{ $detection['required_samples'] ?? 3 }}"
                                     class="rounded-xl bg-card px-3.5 py-2 text-xs font-medium text-muted-foreground ring-1 ring-border/40 transition hover:text-foreground"
                                 >
@@ -187,133 +209,154 @@
             </section>
         </section>
 
-        <div id="socket-details-modal" data-modal class="fixed inset-0 z-[80] hidden items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
-            <div class="w-full max-w-2xl rounded-3xl bg-card p-6 sm:p-7 ring-1 ring-border/50">
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <p class="text-xs uppercase tracking-[0.14em] text-muted-foreground">Socket details</p>
-                        <h4 id="socket-details-title" class="mt-1 text-lg font-semibold">Socket</h4>
-                        <p class="mt-1 text-sm text-muted-foreground">Expanded view with detection, plan, and signature details.</p>
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <span id="socket-details-state" class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium">Idle</span>
-                        <button type="button" data-modal-close class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-background text-muted-foreground ring-1 ring-border/40 transition hover:text-foreground">
-                            <span class="sr-only">Close</span>
-                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="mt-5 grid gap-3 sm:grid-cols-3">
-                    <div class="rounded-2xl bg-background p-4 ring-1 ring-border/30">
-                        <p class="text-xs text-muted-foreground">Power</p>
-                        <p id="socket-details-power" class="mt-1 text-sm font-semibold">0.0 W</p>
-                    </div>
-                    <div class="rounded-2xl bg-background p-4 ring-1 ring-border/30">
-                        <p class="text-xs text-muted-foreground">Current</p>
-                        <p id="socket-details-current" class="mt-1 text-sm font-semibold">0.000 A</p>
-                    </div>
-                    <div class="rounded-2xl bg-background p-4 ring-1 ring-border/30">
-                        <p class="text-xs text-muted-foreground">Confidence</p>
-                        <p id="socket-details-confidence" class="mt-1 text-sm font-semibold">0%</p>
-                    </div>
-                </div>
-
-                <div class="mt-4 rounded-2xl bg-background p-4 ring-1 ring-border/30">
-                    <p class="text-xs font-medium text-muted-foreground">Detection</p>
-                    <p id="socket-details-label" class="mt-1 text-sm font-semibold">Unknown device</p>
-                    <p id="socket-details-category" class="text-xs text-muted-foreground">Unknown</p>
-                    <p id="socket-details-reason" class="mt-2 text-xs text-muted-foreground">No detection reason available.</p>
-                </div>
-
-                <div class="mt-4 rounded-2xl bg-background p-4 ring-1 ring-border/30">
-                    <p class="text-xs font-medium text-muted-foreground">Detection plan</p>
-                    <p id="socket-details-plan-name" class="mt-1 text-sm font-semibold">Default plan</p>
-                    <p id="socket-details-plan-meta" class="mt-0.5 text-xs text-muted-foreground">No active plan. Default balanced detection is used.</p>
-                </div>
-
-                <div class="mt-4 rounded-2xl bg-background p-4 ring-1 ring-border/30">
-                    <div class="flex items-center justify-between gap-3">
-                        <p class="text-xs font-medium text-muted-foreground">Signature snapshot</p>
-                        <p id="socket-details-signature-fallback" class="hidden text-xs text-muted-foreground">Not enough samples.</p>
-                    </div>
-                    <div id="socket-details-signature-grid" class="mt-2.5 grid grid-cols-2 gap-3 text-xs">
-                        <div>
-                            <p class="text-muted-foreground">Avg power</p>
-                            <p id="socket-details-signature-avg" class="font-medium tabular-nums">-</p>
+        <div id="socket-details-modal" data-modal class="fixed inset-0 z-[80] hidden items-center justify-center bg-black/70 p-4 backdrop-blur-md">
+            <div class="relative w-full max-w-3xl overflow-hidden rounded-[2rem] border border-border/50 bg-card shadow-2xl shadow-black/30">
+                <div class="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-emerald-400/70 to-transparent"></div>
+                <div class="max-h-[calc(100vh-2rem)] overflow-y-auto">
+                    <div class="px-6 pb-6 pt-5 sm:px-7 sm:pb-7 sm:pt-6">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="min-w-0">
+                                <p class="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Socket details</p>
+                                <h4 id="socket-details-title" class="mt-1 text-2xl font-semibold tracking-tight">Socket</h4>
+                                <p class="mt-2 max-w-2xl text-sm text-muted-foreground">Expanded view with detection, plan, and signature details.</p>
+                            </div>
+                            <div class="flex shrink-0 items-center gap-2">
+                                <span id="socket-details-state" class="inline-flex rounded-full px-3 py-1.5 text-xs font-medium">Idle</span>
+                                <button type="button" data-modal-close class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-background text-muted-foreground ring-1 ring-border/40 transition hover:text-foreground">
+                                    <span class="sr-only">Close</span>
+                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                </button>
+                            </div>
                         </div>
-                        <div>
-                            <p class="text-muted-foreground">Peak power</p>
-                            <p id="socket-details-signature-peak" class="font-medium tabular-nums">-</p>
+
+                        <div class="mt-6 grid gap-3 sm:grid-cols-3">
+                            <div class="rounded-2xl bg-background/80 p-4 ring-1 ring-border/30">
+                                <p class="text-xs text-muted-foreground">Power</p>
+                                <p id="socket-details-power" class="mt-1 text-lg font-semibold tabular-nums">0.0 W</p>
+                            </div>
+                            <div class="rounded-2xl bg-background/80 p-4 ring-1 ring-border/30">
+                                <p class="text-xs text-muted-foreground">Current</p>
+                                <p id="socket-details-current" class="mt-1 text-lg font-semibold tabular-nums">0.000 A</p>
+                            </div>
+                            <div class="rounded-2xl bg-background/80 p-4 ring-1 ring-border/30">
+                                <p class="text-xs text-muted-foreground">Confidence</p>
+                                <p id="socket-details-confidence" class="mt-1 text-lg font-semibold tabular-nums">0%</p>
+                            </div>
                         </div>
-                        <div>
-                            <p class="text-muted-foreground">Variability</p>
-                            <p id="socket-details-signature-variability" class="font-medium tabular-nums">-</p>
+
+                        <div class="mt-4 grid gap-4 lg:grid-cols-5">
+                            <div class="rounded-2xl bg-background/80 p-4 ring-1 ring-border/30 lg:col-span-3">
+                                <p class="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Detection</p>
+                                <p id="socket-details-label" class="mt-2 text-lg font-semibold leading-tight">Unknown device</p>
+                                <p id="socket-details-category" class="mt-1 text-sm text-muted-foreground">Unknown</p>
+                                <p id="socket-details-reason" class="mt-3 text-sm leading-6 text-muted-foreground">No detection reason available.</p>
+                            </div>
+
+                            <div class="rounded-2xl bg-background/80 p-4 ring-1 ring-border/30 lg:col-span-2">
+                                <p class="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Detection plan</p>
+                                <p id="socket-details-plan-name" class="mt-2 text-lg font-semibold leading-tight">Default plan</p>
+                                <p id="socket-details-plan-meta" class="mt-1 text-sm leading-6 text-muted-foreground">No active plan. Default balanced detection is used.</p>
+                            </div>
                         </div>
-                        <div>
-                            <p class="text-muted-foreground">Startup ratio</p>
-                            <p id="socket-details-signature-startup" class="font-medium tabular-nums">-</p>
+
+                        <div class="mt-4 rounded-2xl bg-background/80 p-4 ring-1 ring-border/30">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <p class="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Training snapshot</p>
+                                    <p class="mt-1 text-sm text-muted-foreground">Average from recent active samples, not live power.</p>
+                                </div>
+                                <p id="socket-details-signature-fallback" class="hidden text-xs text-muted-foreground">Not enough samples.</p>
+                            </div>
+                            <div id="socket-details-signature-grid" class="mt-4 grid grid-cols-2 gap-4 text-sm sm:grid-cols-3 lg:grid-cols-6">
+                                <div class="rounded-xl bg-card/70 px-3 py-3 ring-1 ring-border/20">
+                                    <p class="text-[11px] text-muted-foreground">Avg power</p>
+                                    <p id="socket-details-signature-avg" class="mt-1 font-medium tabular-nums">-</p>
+                                </div>
+                                <div class="rounded-xl bg-card/70 px-3 py-3 ring-1 ring-border/20">
+                                    <p class="text-[11px] text-muted-foreground">Peak power</p>
+                                    <p id="socket-details-signature-peak" class="mt-1 font-medium tabular-nums">-</p>
+                                </div>
+                                <div class="rounded-xl bg-card/70 px-3 py-3 ring-1 ring-border/20">
+                                    <p class="text-[11px] text-muted-foreground">Variability</p>
+                                    <p id="socket-details-signature-variability" class="mt-1 font-medium tabular-nums">-</p>
+                                </div>
+                                <div class="rounded-xl bg-card/70 px-3 py-3 ring-1 ring-border/20">
+                                    <p class="text-[11px] text-muted-foreground">Startup ratio</p>
+                                    <p id="socket-details-signature-startup" class="mt-1 font-medium tabular-nums">-</p>
+                                </div>
+                                <div class="rounded-xl bg-card/70 px-3 py-3 ring-1 ring-border/20">
+                                    <p class="text-[11px] text-muted-foreground">Samples</p>
+                                    <p id="socket-details-signature-samples" class="mt-1 font-medium tabular-nums">-</p>
+                                </div>
+                                <div class="rounded-xl bg-card/70 px-3 py-3 ring-1 ring-border/20">
+                                    <p class="text-[11px] text-muted-foreground">Window</p>
+                                    <p id="socket-details-signature-window" class="mt-1 font-medium tabular-nums">-</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-5 flex flex-wrap justify-end gap-2">
+                            <button type="button" data-modal-close class="rounded-xl bg-background px-3.5 py-2.5 text-sm text-muted-foreground ring-1 ring-border/40 transition hover:text-foreground">Close</button>
+                            <button
+                                id="socket-details-train-profile-button"
+                                type="button"
+                                data-modal-open="train-profile-modal"
+                                data-socket-index=""
+                                data-socket-label=""
+                                class="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90"
+                            >
+                                Train profile
+                            </button>
                         </div>
                     </div>
-                </div>
-
-                <div class="mt-5 flex flex-wrap justify-end gap-2">
-                    <button type="button" data-modal-close class="rounded-xl bg-background px-3.5 py-2 text-sm text-muted-foreground ring-1 ring-border/40 transition hover:text-foreground">Close</button>
-                    <button
-                        id="socket-details-train-profile-button"
-                        type="button"
-                        data-modal-open="train-profile-modal"
-                        data-socket-index=""
-                        data-socket-label=""
-                        class="rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90"
-                    >
-                        Train profile
-                    </button>
                 </div>
             </div>
         </div>
 
-        <div id="train-profile-modal" data-modal class="fixed inset-0 z-[80] hidden items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
-            <div class="w-full max-w-lg rounded-3xl bg-card p-6 sm:p-7 ring-1 ring-border/50">
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <p class="text-xs uppercase tracking-[0.14em] text-muted-foreground">Train profile</p>
-                        <h4 class="mt-1 text-lg font-semibold">Capture current socket signature</h4>
-                        <p class="mt-1 text-sm text-muted-foreground">Source: <span data-train-profile-socket class="font-medium text-foreground">Socket</span></p>
+        <div id="train-profile-modal" data-modal class="fixed inset-0 z-[80] hidden items-center justify-center bg-black/70 p-4 backdrop-blur-md">
+            <div class="relative w-full max-w-xl overflow-hidden rounded-[2rem] border border-border/50 bg-card shadow-2xl shadow-black/30">
+                <div class="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-lime-300/70 to-transparent"></div>
+                <div class="p-6 sm:p-7">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <p class="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Train profile</p>
+                            <h4 class="mt-1 text-2xl font-semibold tracking-tight">Capture current socket signature</h4>
+                            <p class="mt-2 text-sm text-muted-foreground">Source: <span data-train-profile-socket class="font-medium text-foreground">Socket</span></p>
+                        </div>
+                        <button type="button" data-modal-close class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-background text-muted-foreground ring-1 ring-border/40 transition hover:text-foreground">
+                            <span class="sr-only">Close</span>
+                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        </button>
                     </div>
-                    <button type="button" data-modal-close class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-background text-muted-foreground ring-1 ring-border/40 transition hover:text-foreground">
-                        <span class="sr-only">Close</span>
-                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                    </button>
+
+                    <form method="POST" action="{{ route('devices.profiles.store') }}" class="mt-6 space-y-3">
+                        @csrf
+                        <input id="train-profile-socket-index" type="hidden" name="socket_index" value="">
+                        <input type="hidden" name="redirect_route" value="{{ $currentDevicesRoute }}">
+
+                        <div>
+                            <label class="text-xs text-muted-foreground">Device name</label>
+                            <input data-modal-initial-focus name="name" type="text" placeholder="Laptop charger" class="mt-1 h-11 w-full rounded-xl border border-border/40 bg-background px-3 text-sm outline-none focus:border-primary/50" required>
+                        </div>
+                        <div>
+                            <label class="text-xs text-muted-foreground">Category</label>
+                            <select name="category" class="mt-1 h-11 w-full rounded-xl border border-border/40 bg-background px-3 text-sm outline-none focus:border-primary/50" required>
+                                @foreach($profileCategories as $category)
+                                    <option value="{{ $category }}">{{ $category }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-xs text-muted-foreground">Notes</label>
+                            <textarea name="notes" rows="3" placeholder="Optional context for this signature" class="mt-1 w-full rounded-xl border border-border/40 bg-background px-3 py-2 text-sm outline-none focus:border-primary/50"></textarea>
+                        </div>
+
+                        <div class="flex flex-wrap justify-end gap-2 pt-1">
+                            <button type="button" data-modal-close class="rounded-xl bg-background px-3.5 py-2.5 text-sm text-muted-foreground ring-1 ring-border/40 transition hover:text-foreground">Cancel</button>
+                            <button type="submit" class="rounded-xl bg-primary px-3.5 py-2.5 text-sm font-medium text-primary-foreground transition hover:opacity-90">Save profile</button>
+                        </div>
+                    </form>
                 </div>
-
-                <form method="POST" action="{{ route('devices.profiles.store') }}" class="mt-5 space-y-3">
-                    @csrf
-                    <input id="train-profile-socket-index" type="hidden" name="socket_index" value="">
-                    <input type="hidden" name="redirect_route" value="{{ $currentDevicesRoute }}">
-
-                    <div>
-                        <label class="text-xs text-muted-foreground">Device name</label>
-                        <input data-modal-initial-focus name="name" type="text" placeholder="Laptop charger" class="mt-1 h-11 w-full rounded-xl border border-border/40 bg-background px-3 text-sm outline-none focus:border-primary/50" required>
-                    </div>
-                    <div>
-                        <label class="text-xs text-muted-foreground">Category</label>
-                        <select name="category" class="mt-1 h-11 w-full rounded-xl border border-border/40 bg-background px-3 text-sm outline-none focus:border-primary/50" required>
-                            @foreach($profileCategories as $category)
-                                <option value="{{ $category }}">{{ $category }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div>
-                        <label class="text-xs text-muted-foreground">Notes</label>
-                        <textarea name="notes" rows="3" placeholder="Optional context for this signature" class="mt-1 w-full rounded-xl border border-border/40 bg-background px-3 py-2 text-sm outline-none focus:border-primary/50"></textarea>
-                    </div>
-
-                    <div class="flex flex-wrap justify-end gap-2 pt-1">
-                        <button type="button" data-modal-close class="rounded-xl bg-background px-3.5 py-2 text-sm text-muted-foreground ring-1 ring-border/40 transition hover:text-foreground">Cancel</button>
-                        <button type="submit" class="rounded-xl bg-primary px-3.5 py-2 text-sm font-medium text-primary-foreground transition hover:opacity-90">Save profile</button>
-                    </div>
-                </form>
             </div>
         </div>
     @endif
@@ -555,7 +598,7 @@
                                     <p class="mt-1 text-sm font-semibold" id="devices-detection-label-{{ $socket['index'] }}">{{ $detection['label'] }}</p>
                                     <p class="text-xs text-muted-foreground" id="devices-detection-category-{{ $socket['index'] }}">{{ $detection['category'] }}</p>
                                 </div>
-                                <span id="devices-state-badge-{{ $socket['index'] }}" class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium {{ $detectionStateClasses[$detection['state']] ?? 'bg-muted text-muted-foreground ring-1 ring-border/40' }}">{{ ucfirst($detection['state']) }}</span>
+                                <span id="devices-state-badge-{{ $socket['index'] }}" class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium {{ $socketStatusClasses[$socket['status']] ?? 'bg-muted text-muted-foreground ring-1 ring-border/40' }}">{{ $socketStatusLabels[$socket['status']] ?? ucfirst(str_replace('_', ' ', $socket['status'])) }}</span>
                             </div>
                             <p class="mt-2 text-xs text-muted-foreground">
                                 <span id="devices-socket-power-{{ $socket['index'] }}">{{ number_format($socket['power_w'], 1) }}</span> W
@@ -653,6 +696,46 @@
         return 'bg-muted-foreground/40';
     }
 
+    function socketStatusClass(isOn, powerW) {
+        if (!isOn) {
+            return 'bg-muted text-muted-foreground ring-1 ring-border/40';
+        }
+
+        if (powerW <= 0.1) {
+            return 'bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30';
+        }
+
+        if (powerW >= 2500) {
+            return 'bg-red-500/15 text-red-300 ring-1 ring-red-500/30';
+        }
+
+        if (powerW >= 1800) {
+            return 'bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30';
+        }
+
+        return 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30';
+    }
+
+    function socketStatusLabel(isOn, powerW) {
+        if (!isOn) {
+            return 'Off';
+        }
+
+        if (powerW <= 0.1) {
+            return 'Idle';
+        }
+
+        if (powerW >= 2500) {
+            return 'Overload';
+        }
+
+        if (powerW >= 1800) {
+            return 'High load';
+        }
+
+        return 'Matched';
+    }
+
     function stateLabel(state) {
         var value = String(state || 'idle');
         return value.charAt(0).toUpperCase() + value.slice(1);
@@ -696,12 +779,6 @@
         var state = String(detection.state || 'idle');
         var confidence = Math.max(0, Math.min(99, Math.round(asNumber(detection.confidence))));
 
-        var badgeEl = document.getElementById('devices-state-badge-' + socketIndex);
-        if (badgeEl) {
-            badgeEl.className = 'inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium ' + stateBadgeClass(state);
-            badgeEl.textContent = stateLabel(state);
-        }
-
         var labelEl = document.getElementById('devices-detection-label-' + socketIndex);
         if (labelEl) {
             labelEl.textContent = detection.label || 'Unknown device';
@@ -727,6 +804,14 @@
         var reasonEl = document.getElementById('devices-detection-reason-' + socketIndex);
         if (reasonEl) {
             reasonEl.textContent = detection.reason || 'No detection reason available.';
+        }
+
+        if (
+            window.pulsenodeRefreshDeviceDetailsModal
+            && window.__pulsenodeActiveSocketDetailsIndex
+            && String(window.__pulsenodeActiveSocketDetailsIndex) === String(socketIndex)
+        ) {
+            window.pulsenodeRefreshDeviceDetailsModal(window.__pulsenodeActiveSocketDetailsIndex);
         }
     }
 
@@ -764,17 +849,30 @@
 
         [1, 2, 3].forEach(function (socketIndex) {
             var current = asNumber(data['current_' + socketIndex]);
-            var power = voltage * current;
+            var powerKey = 'power_' + socketIndex;
+            var hasPowerReading = Object.prototype.hasOwnProperty.call(data, powerKey);
+            var power = hasPowerReading ? asNumber(data[powerKey]) : voltage * current;
+            var relayOn = Boolean(data['relay_' + socketIndex]);
 
             var currentEl = document.getElementById('devices-socket-current-' + socketIndex);
             if (currentEl) currentEl.textContent = current.toFixed(3);
 
             var powerEl = document.getElementById('devices-socket-power-' + socketIndex);
             if (powerEl) powerEl.textContent = power.toFixed(1);
+
+            var badgeEl = document.getElementById('devices-state-badge-' + socketIndex);
+            if (badgeEl) {
+                badgeEl.className = 'inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium ' + socketStatusClass(relayOn, power);
+                badgeEl.textContent = socketStatusLabel(relayOn, power);
+            }
         });
 
         var lastSyncEl = document.getElementById('devices-last-sync');
         if (lastSyncEl) lastSyncEl.textContent = lastSeenLabel(data.updated_at);
+
+        if (window.pulsenodeRefreshDeviceDetailsModal && window.__pulsenodeActiveSocketDetailsIndex) {
+            window.pulsenodeRefreshDeviceDetailsModal(window.__pulsenodeActiveSocketDetailsIndex);
+        }
 
         fetchLiveDetections(false);
     });
@@ -783,6 +881,8 @@
 })();
 
 (function () {
+    window.__pulsenodeActiveSocketDetailsIndex = null;
+
     function allModals() {
         return Array.prototype.slice.call(document.querySelectorAll('[data-modal]'));
     }
@@ -808,6 +908,10 @@
         modal.classList.add('hidden');
         modal.classList.remove('flex');
 
+        if (modal.id === 'socket-details-modal') {
+            window.__pulsenodeActiveSocketDetailsIndex = null;
+        }
+
         var anyOpen = allModals().some(function (entry) { return isOpen(entry); });
         if (!anyOpen) {
             document.body.classList.remove('overflow-hidden');
@@ -819,6 +923,86 @@
         if (!el) return fallback;
         return (el.textContent || '').trim() || fallback;
     }
+
+    function isModalVisible(modalId) {
+        var modal = document.getElementById(modalId);
+        return !!(modal && isOpen(modal));
+    }
+
+    function refreshSocketDetailsModal(socketIndex) {
+        var activeIndex = String(socketIndex || '');
+        if (!activeIndex) {
+            return;
+        }
+
+        var detailsTitleEl = document.getElementById('socket-details-title');
+        var detailsStateEl = document.getElementById('socket-details-state');
+        var detailsPowerEl = document.getElementById('socket-details-power');
+        var detailsCurrentEl = document.getElementById('socket-details-current');
+        var detailsConfidenceEl = document.getElementById('socket-details-confidence');
+        var detailsLabelEl = document.getElementById('socket-details-label');
+        var detailsCategoryEl = document.getElementById('socket-details-category');
+        var detailsReasonEl = document.getElementById('socket-details-reason');
+        var detailsPlanNameEl = document.getElementById('socket-details-plan-name');
+        var detailsPlanMetaEl = document.getElementById('socket-details-plan-meta');
+        var detailsSignatureAvgEl = document.getElementById('socket-details-signature-avg');
+        var detailsSignaturePeakEl = document.getElementById('socket-details-signature-peak');
+        var detailsSignatureVariabilityEl = document.getElementById('socket-details-signature-variability');
+        var detailsSignatureStartupEl = document.getElementById('socket-details-signature-startup');
+        var detailsSignatureSamplesEl = document.getElementById('socket-details-signature-samples');
+        var detailsSignatureWindowEl = document.getElementById('socket-details-signature-window');
+        var detailsSignatureGridEl = document.getElementById('socket-details-signature-grid');
+        var detailsSignatureFallbackEl = document.getElementById('socket-details-signature-fallback');
+        var sourceStateEl = document.getElementById('devices-state-badge-' + activeIndex);
+        var sourceButton = document.querySelector('[data-modal-open="socket-details-modal"][data-socket-index="' + activeIndex + '"]');
+
+        if (detailsTitleEl) {
+            detailsTitleEl.textContent = sourceButton ? (sourceButton.getAttribute('data-socket-label') || ('Socket ' + activeIndex)) : ('Socket ' + activeIndex);
+        }
+
+        if (detailsStateEl && sourceStateEl) {
+            detailsStateEl.className = sourceStateEl.className;
+            detailsStateEl.textContent = sourceStateEl.textContent;
+        }
+
+        if (detailsPowerEl) detailsPowerEl.textContent = textFromElement('devices-socket-power-' + activeIndex, '0.0') + ' W';
+        if (detailsCurrentEl) detailsCurrentEl.textContent = textFromElement('devices-socket-current-' + activeIndex, '0.000') + ' A';
+        if (detailsConfidenceEl) detailsConfidenceEl.textContent = textFromElement('devices-confidence-text-' + activeIndex, '0%');
+        if (detailsLabelEl) detailsLabelEl.textContent = textFromElement('devices-detection-label-' + activeIndex, 'Unknown device');
+        if (detailsCategoryEl) detailsCategoryEl.textContent = textFromElement('devices-detection-category-' + activeIndex, 'Unknown');
+        if (detailsReasonEl) detailsReasonEl.textContent = textFromElement('devices-detection-reason-' + activeIndex, 'No detection reason available.');
+
+        if (detailsPlanNameEl) {
+            detailsPlanNameEl.textContent = sourceButton ? (sourceButton.getAttribute('data-plan-name') || 'Default plan') : 'Default plan';
+        }
+
+        if (detailsPlanMetaEl && sourceButton) {
+            detailsPlanMetaEl.textContent = sourceButton.getAttribute('data-plan-meta') || sourceButton.getAttribute('data-plan-empty') || 'No active plan. Default balanced detection is used.';
+        }
+
+        if (detailsSignatureGridEl && detailsSignatureFallbackEl && sourceButton) {
+            var hasSignature = sourceButton.getAttribute('data-signature-available') === '1';
+            var requiredSamples = sourceButton.getAttribute('data-required-samples') || '3';
+
+            if (hasSignature) {
+                detailsSignatureGridEl.classList.remove('hidden');
+                detailsSignatureFallbackEl.classList.add('hidden');
+            } else {
+                detailsSignatureGridEl.classList.add('hidden');
+                detailsSignatureFallbackEl.classList.remove('hidden');
+                detailsSignatureFallbackEl.textContent = 'Not enough samples (min ' + requiredSamples + ') to build a fingerprint.';
+            }
+        }
+
+        if (detailsSignatureAvgEl && sourceButton) detailsSignatureAvgEl.textContent = sourceButton.getAttribute('data-signature-avg') || '-';
+        if (detailsSignaturePeakEl && sourceButton) detailsSignaturePeakEl.textContent = sourceButton.getAttribute('data-signature-peak') || '-';
+        if (detailsSignatureVariabilityEl && sourceButton) detailsSignatureVariabilityEl.textContent = sourceButton.getAttribute('data-signature-variability') || '-';
+        if (detailsSignatureStartupEl && sourceButton) detailsSignatureStartupEl.textContent = sourceButton.getAttribute('data-signature-startup') || '-';
+        if (detailsSignatureSamplesEl && sourceButton) detailsSignatureSamplesEl.textContent = sourceButton.getAttribute('data-signature-samples') || '-';
+        if (detailsSignatureWindowEl && sourceButton) detailsSignatureWindowEl.textContent = sourceButton.getAttribute('data-signature-window') || '-';
+    }
+
+    window.pulsenodeRefreshDeviceDetailsModal = refreshSocketDetailsModal;
 
     Array.prototype.slice.call(document.querySelectorAll('[data-modal-open]')).forEach(function (button) {
         button.addEventListener('click', function () {
@@ -844,79 +1028,14 @@
 
             if (modalId === 'socket-details-modal') {
                 var detailsSocketIndex = button.getAttribute('data-socket-index') || '';
-                var detailsSocketLabel = button.getAttribute('data-socket-label') || ('Socket ' + detailsSocketIndex);
-
-                var detailsTitleEl = document.getElementById('socket-details-title');
-                if (detailsTitleEl) detailsTitleEl.textContent = detailsSocketLabel;
-
-                var detailsStateEl = document.getElementById('socket-details-state');
-                var sourceStateEl = document.getElementById('devices-state-badge-' + detailsSocketIndex);
-                if (detailsStateEl && sourceStateEl) {
-                    detailsStateEl.className = sourceStateEl.className;
-                    detailsStateEl.textContent = sourceStateEl.textContent;
-                }
-
-                var detailsPowerEl = document.getElementById('socket-details-power');
-                if (detailsPowerEl) detailsPowerEl.textContent = textFromElement('devices-socket-power-' + detailsSocketIndex, '0.0') + ' W';
-
-                var detailsCurrentEl = document.getElementById('socket-details-current');
-                if (detailsCurrentEl) detailsCurrentEl.textContent = textFromElement('devices-socket-current-' + detailsSocketIndex, '0.000') + ' A';
-
-                var detailsConfidenceEl = document.getElementById('socket-details-confidence');
-                if (detailsConfidenceEl) detailsConfidenceEl.textContent = textFromElement('devices-confidence-text-' + detailsSocketIndex, '0%');
-
-                var detailsLabelEl = document.getElementById('socket-details-label');
-                if (detailsLabelEl) detailsLabelEl.textContent = textFromElement('devices-detection-label-' + detailsSocketIndex, 'Unknown device');
-
-                var detailsCategoryEl = document.getElementById('socket-details-category');
-                if (detailsCategoryEl) detailsCategoryEl.textContent = textFromElement('devices-detection-category-' + detailsSocketIndex, 'Unknown');
-
-                var detailsReasonEl = document.getElementById('socket-details-reason');
-                if (detailsReasonEl) detailsReasonEl.textContent = textFromElement('devices-detection-reason-' + detailsSocketIndex, 'No detection reason available.');
-
-                var detailsPlanNameEl = document.getElementById('socket-details-plan-name');
-                if (detailsPlanNameEl) {
-                    detailsPlanNameEl.textContent = button.getAttribute('data-plan-name') || 'Default plan';
-                }
-
-                var detailsPlanMetaEl = document.getElementById('socket-details-plan-meta');
-                if (detailsPlanMetaEl) {
-                    detailsPlanMetaEl.textContent = button.getAttribute('data-plan-meta') || button.getAttribute('data-plan-empty') || 'No active plan. Default balanced detection is used.';
-                }
-
-                var signatureGridEl = document.getElementById('socket-details-signature-grid');
-                var signatureFallbackEl = document.getElementById('socket-details-signature-fallback');
-                var hasSignature = button.getAttribute('data-signature-available') === '1';
-                var requiredSamples = button.getAttribute('data-required-samples') || '3';
-
-                if (signatureGridEl && signatureFallbackEl) {
-                    if (hasSignature) {
-                        signatureGridEl.classList.remove('hidden');
-                        signatureFallbackEl.classList.add('hidden');
-                    } else {
-                        signatureGridEl.classList.add('hidden');
-                        signatureFallbackEl.classList.remove('hidden');
-                        signatureFallbackEl.textContent = 'Not enough samples (min ' + requiredSamples + ') to build a fingerprint.';
-                    }
-                }
-
-                var detailsSignatureAvgEl = document.getElementById('socket-details-signature-avg');
-                if (detailsSignatureAvgEl) detailsSignatureAvgEl.textContent = button.getAttribute('data-signature-avg') || '-';
-
-                var detailsSignaturePeakEl = document.getElementById('socket-details-signature-peak');
-                if (detailsSignaturePeakEl) detailsSignaturePeakEl.textContent = button.getAttribute('data-signature-peak') || '-';
-
-                var detailsSignatureVariabilityEl = document.getElementById('socket-details-signature-variability');
-                if (detailsSignatureVariabilityEl) detailsSignatureVariabilityEl.textContent = button.getAttribute('data-signature-variability') || '-';
-
-                var detailsSignatureStartupEl = document.getElementById('socket-details-signature-startup');
-                if (detailsSignatureStartupEl) detailsSignatureStartupEl.textContent = button.getAttribute('data-signature-startup') || '-';
-
                 var detailsTrainButton = document.getElementById('socket-details-train-profile-button');
                 if (detailsTrainButton) {
                     detailsTrainButton.setAttribute('data-socket-index', detailsSocketIndex);
-                    detailsTrainButton.setAttribute('data-socket-label', detailsSocketLabel);
+                    detailsTrainButton.setAttribute('data-socket-label', button.getAttribute('data-socket-label') || ('Socket ' + detailsSocketIndex));
                 }
+
+                window.__pulsenodeActiveSocketDetailsIndex = detailsSocketIndex;
+                refreshSocketDetailsModal(window.__pulsenodeActiveSocketDetailsIndex);
             }
 
             openModal(modal);
@@ -926,6 +1045,9 @@
     Array.prototype.slice.call(document.querySelectorAll('[data-modal-close]')).forEach(function (button) {
         button.addEventListener('click', function () {
             var modal = button.closest('[data-modal]');
+            if (modal && modal.id === 'socket-details-modal') {
+                window.__pulsenodeActiveSocketDetailsIndex = null;
+            }
             closeModal(modal);
         });
     });
@@ -940,6 +1062,9 @@
 
     document.addEventListener('keydown', function (event) {
         if (event.key !== 'Escape') return;
+        if (isModalVisible('socket-details-modal')) {
+            window.__pulsenodeActiveSocketDetailsIndex = null;
+        }
         allModals().forEach(function (modal) {
             if (isOpen(modal)) closeModal(modal);
         });

@@ -85,9 +85,9 @@ class EnergySample extends Model
         $s2Delta = $deltaEnergy * $r2;
         $s3Delta = $deltaEnergy * $r3;
 
-        $p1 = $voltage * $c1;
-        $p2 = $voltage * $c2;
-        $p3 = $voltage * $c3;
+        $p1 = max(0.0, (float) ($latest['power_1'] ?? ($voltage * $c1)));
+        $p2 = max(0.0, (float) ($latest['power_2'] ?? ($voltage * $c2)));
+        $p3 = max(0.0, (float) ($latest['power_3'] ?? ($voltage * $c3)));
 
         $warningLevel = $power > 2500 ? 'overload' : ($power > 1800 ? 'high' : 'normal');
 
