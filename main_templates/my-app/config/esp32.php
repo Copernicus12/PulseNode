@@ -2,11 +2,11 @@
 
 return [
     'mqtt' => [
-        'enabled' => env('ESP32_MQTT_ENABLED', false),
-        'host' => env('ESP32_MQTT_HOST', '127.0.0.1'),
+        'enabled' => env('ESP32_MQTT_ENABLED', true),
+        'host' => env('ESP32_MQTT_HOST', 'broker.hivemq.com'),
         'port' => (int) env('ESP32_MQTT_PORT', 1883),
-        'command_topic' => env('ESP32_MQTT_COMMAND_TOPIC', 'esp32/cmd'),
-        'data_topic' => env('ESP32_MQTT_DATA_TOPIC', 'esp32/data'),
+        'command_topic' => env('ESP32_MQTT_COMMAND_TOPIC', 'razvy_esp32_2026/cmd'),
+        'data_topic' => env('ESP32_MQTT_DATA_TOPIC', 'razvy_esp32_2026/data'),
         'username' => env('ESP32_MQTT_USERNAME'),
         'password' => env('ESP32_MQTT_PASSWORD'),
         'publisher_binary' => env('ESP32_MQTT_PUBLISHER_BINARY', 'mosquitto_pub'),

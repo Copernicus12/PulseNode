@@ -16,17 +16,9 @@ class Esp32RelayPublisher
             'state' => $normalizedState,
         ]);
 
-        if (! config('esp32.mqtt.enabled')) {
-            return [
-                'sent' => $payload ?: '',
-                'published' => false,
-                'message' => 'MQTT disabled in config/esp32.php',
-            ];
-        }
-
-        $host = (string) config('esp32.mqtt.host', '127.0.0.1');
+        $host = (string) config('esp32.mqtt.host', 'broker.hivemq.com');
         $port = (int) config('esp32.mqtt.port', 1883);
-        $topic = (string) config('esp32.mqtt.command_topic', 'esp32/cmd');
+        $topic = (string) config('esp32.mqtt.command_topic', 'razvy_esp32_2026/cmd');
         $username = config('esp32.mqtt.username');
         $password = config('esp32.mqtt.password');
         $clientId = 'laravel-relay-publisher-'.bin2hex(random_bytes(4));

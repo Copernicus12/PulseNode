@@ -27,9 +27,9 @@
             <div>
                 <h2 class="text-xl font-bold tracking-tight">Live Monitoring</h2>
                 <div class="mt-1.5 flex items-center gap-2">
-                    <span id="dashboard-live-dot" class="{{ $isOnline ? 'relative flex' : 'flex' }} h-2 w-2">
-                        <span id="dashboard-live-dot-ping" class="{{ $isOnline ? 'absolute inline-flex' : 'hidden' }} h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-                        <span id="dashboard-live-dot-core" class="{{ $isOnline ? 'relative inline-flex bg-emerald-500' : 'inline-flex bg-red-400' }} h-2 w-2 rounded-full"></span>
+                    <span id="dashboard-live-dot" class="relative inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                        <span id="dashboard-live-dot-ping" class="{{ $isOnline ? 'absolute inline-flex' : 'hidden' }} inset-0 animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                        <span id="dashboard-live-dot-core" class="{{ $isOnline ? 'relative bg-emerald-500' : 'bg-red-400' }} h-2 w-2 rounded-full"></span>
                     </span>
                     <span id="dashboard-live-status-text" class="text-sm text-muted-foreground">
                         @if($isOnline)
@@ -449,8 +449,7 @@ function setDashboardLiveStatus(online, data) {
     var count = document.getElementById('dashboard-active-relays-count');
 
     if (dot) {
-        dot.classList.toggle('relative', online);
-        dot.classList.toggle('flex', !online);
+        dot.className = 'relative inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center';
     }
 
     if (ping) {

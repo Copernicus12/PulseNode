@@ -15,11 +15,11 @@ class PowerStripDiagnosticsController extends Controller
             'diagnostics' => [
                 'latest' => $store->latest(),
                 'connection' => [
-                    'mqtt_broker' => (string) config('esp32.mqtt.host', '127.0.0.1'),
+                    'mqtt_broker' => (string) config('esp32.mqtt.host', 'broker.hivemq.com'),
                     'mqtt_port' => (int) config('esp32.mqtt.port', 1883),
-                    'mqtt_enabled' => (bool) config('esp32.mqtt.enabled', false),
-                    'command_topic' => (string) config('esp32.mqtt.command_topic', 'esp32/cmd'),
-                    'telemetry_topic' => (string) config('esp32.mqtt.telemetry_topic', 'esp32/telemetry'),
+                    'mqtt_enabled' => (bool) config('esp32.mqtt.enabled', true),
+                    'command_topic' => (string) config('esp32.mqtt.command_topic', 'razvy_esp32_2026/cmd'),
+                    'telemetry_topic' => (string) config('esp32.mqtt.data_topic', 'razvy_esp32_2026/data'),
                     'publish_interval_seconds' => 10,
                     'dashboard_poll_seconds' => 5,
                 ],
