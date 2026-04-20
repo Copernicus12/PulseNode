@@ -1099,12 +1099,6 @@
             skipBtn.addEventListener('click', finishTour);
             closeBtn.addEventListener('click', finishTour);
 
-            overlay.addEventListener('click', function (event) {
-                if (event.target === overlay) {
-                    finishTour();
-                }
-            });
-
             document.addEventListener('keydown', function (event) {
                 if (!state.active) return;
 
