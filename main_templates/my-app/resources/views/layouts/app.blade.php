@@ -361,7 +361,6 @@
 
                     <div class="mt-5 flex items-center justify-between text-xs text-zinc-400">
                         <span id="global-tour-progress">Step 1 / 1</span>
-                        <span id="global-tour-anchor">main-content-scroll</span>
                     </div>
 
                     <div class="mt-4 flex items-center gap-3">
@@ -710,13 +709,12 @@
             var titleEl = document.getElementById('global-tour-title');
             var descEl = document.getElementById('global-tour-description');
             var progressEl = document.getElementById('global-tour-progress');
-            var anchorEl = document.getElementById('global-tour-anchor');
             var backBtn = document.getElementById('global-tour-back');
             var skipBtn = document.getElementById('global-tour-skip');
             var nextBtn = document.getElementById('global-tour-next');
             var closeBtn = document.getElementById('global-tour-close');
 
-            if (!overlay || !backdrop || !spotlight || !titleEl || !descEl || !progressEl || !anchorEl || !backBtn || !skipBtn || !nextBtn || !closeBtn) {
+            if (!overlay || !backdrop || !spotlight || !titleEl || !descEl || !progressEl || !backBtn || !skipBtn || !nextBtn || !closeBtn) {
                 return;
             }
 
@@ -1032,7 +1030,6 @@
                 titleEl.textContent = step.title;
                 descEl.textContent = step.description;
                 progressEl.textContent = 'Step ' + (state.index + 1) + ' / ' + tourSteps.length;
-                anchorEl.textContent = (step.selector || '').replace('#', '');
                 updateControls();
 
                 var target = findStepTarget(step)

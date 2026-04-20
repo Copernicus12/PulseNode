@@ -246,7 +246,13 @@
                         <p class="text-sm text-muted-foreground">Weekly consumption overview</p>
                     </div>
                     <div class="text-right">
-                        <span class="text-lg font-bold tabular-nums" id="dash-energy-total">{{ $energy }} <span class="text-sm font-normal text-muted-foreground">kWh</span></span>
+                        <span class="text-lg font-bold tabular-nums" id="dash-energy-total">
+                            @if($isOnline)
+                                {{ $energy }} <span class="text-sm font-normal text-muted-foreground">kWh</span>
+                            @else
+                                <span class="text-base font-semibold text-muted-foreground">Unavailable</span>
+                            @endif
+                        </span>
                         <p class="mt-0.5 text-[11px] text-muted-foreground">Instant reading</p>
                     </div>
                 </div>
