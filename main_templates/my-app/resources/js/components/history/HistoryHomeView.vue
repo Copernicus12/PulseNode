@@ -42,6 +42,8 @@ type DayWindowItem = {
   day_short: string
   total: number
   is_today?: boolean
+  is_future?: boolean
+  is_selectable?: boolean
 }
 
 type DaySelectorMeta = {
@@ -174,7 +176,7 @@ const selectedHourKey = ref<string | null>(null)
 const selectedMinuteKey = ref<string | null>(null)
 const pickerDate = ref<string | undefined>(historyState.value.daySelector?.anchor_date ?? historyState.value.daySelector?.window_end ?? undefined)
 
-const liveLastSeen = ref(historyState.value.lastSeen)
+const liveLastSeen = ref(historyLastSeenLabel(historyState.value))
 const liveOnline = ref(historyState.value.isOnline)
 const selectedDateIsToday = computed(() => (
   historyState.value.selectedDate === new Date().toISOString().slice(0, 10)
@@ -320,11 +322,14 @@ function fmtCurrency(value: unknown, currency = currentBillingSummary.value.curr
 
 function dayButtonClass(day: DayWindowItem): string {
   const isActive = day.date === historyState.value.selectedDate
+  const isSelectable = day.is_selectable !== false
 
   return cn(
-    buttonVariants({ variant: isActive ? 'default' : 'outline', size: 'default' }),
+    buttonVariants({ variant: isActive && isSelectable ? 'default' : 'outline', size: 'default' }),
     'h-auto w-full select-none flex-col items-start gap-1 rounded-xl px-3 py-2.5 text-left outline-none ring-0 focus:outline-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/25 focus-visible:ring-offset-0',
-    isActive
+    !isSelectable
+      ? 'cursor-not-allowed border-border/30 text-muted-foreground/45 opacity-55 hover:border-border/30 hover:bg-background hover:text-muted-foreground/45'
+      : isActive
       ? 'hover:bg-primary hover:text-primary-foreground'
       : 'text-foreground hover:border-border/50 hover:bg-background hover:text-foreground',
   )
@@ -377,7 +382,7 @@ async function updateHistory(
       pickerDate.value = payload.daySelector?.anchor_date ?? payload.daySelector?.window_end ?? pickerDate.value
     }
 
-    liveLastSeen.value = payload.lastSeen
+    liveLastSeen.value = historyLastSeenLabel(payload)
     liveOnline.value = payload.isOnline
 
     if (mode === 'replace') {
@@ -401,8 +406,10 @@ function applyAnchorDate(selectedDate?: string): void {
   void updateHistory(date, date)
 }
 
-function selectDay(date: string): void {
-  void updateHistory(date, historyState.value.daySelector.anchor_date)
+function selectDay(day: DayWindowItem): void {
+  if (day.is_selectable === false) return
+
+  void updateHistory(day.date, day.date)
 }
 
 function socketBarWidth(energyKwh: number): number {
@@ -418,7 +425,27 @@ function lastSeenLabel(updatedAt: string | null): string {
   if (diffSeconds < 5) return 'just now'
   if (diffSeconds < 60) return `${diffSeconds} sec ago`
   if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)} min ago`
-  return `${Math.floor(diffSeconds / 3600)} h ago`
+  if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)} h ago`
+  if (diffSeconds < 604800) return `${Math.floor(diffSeconds / 86400)} d ago`
+  if (diffSeconds < 2629800) return pluralAge(Math.floor(diffSeconds / 604800), 'week')
+  if (diffSeconds < 31557600) return pluralAge(Math.floor(diffSeconds / 2629800), 'month')
+  return pluralAge(Math.floor(diffSeconds / 31557600), 'year')
+}
+
+function pluralAge(value: number, unit: string): string {
+  return `${value} ${unit}${value === 1 ? '' : 's'} ago`
+}
+
+function latestUpdatedAt(latest: Record<string, unknown> | null | undefined): string | null {
+  const updatedAt = latest?.updated_at
+
+  return typeof updatedAt === 'string' && updatedAt.length > 0 ? updatedAt : null
+}
+
+function historyLastSeenLabel(state: HistoryPageProps): string {
+  const updatedAt = latestUpdatedAt(state.latest)
+
+  return updatedAt ? lastSeenLabel(updatedAt) : state.lastSeen
 }
 
 function isDeviceOnline(updatedAt: string | null): boolean {
@@ -639,7 +666,7 @@ onUnmounted(() => {
             v-model="pickerDate"
             :min="historyState.daySelector.min_date"
             :max="historyState.daySelector.max_date"
-            placeholder="Selecteaza anchor day"
+            placeholder="Selecteaza ziua"
             class="h-10"
             @change="applyAnchorDate"
           />
@@ -651,8 +678,8 @@ onUnmounted(() => {
             :key="day.date"
             type="button"
             :class="dayButtonClass(day)"
-            :disabled="isLoading"
-            @click="selectDay(day.date)"
+            :disabled="isLoading || day.is_selectable === false"
+            @click="selectDay(day)"
           >
             <span class="text-[11px] uppercase tracking-[0.14em] opacity-85">
               {{ day.day_short }}

@@ -82,6 +82,7 @@ function handleSelect(value: DateValue | undefined): void {
     <PopoverContent class="w-auto p-0" align="start">
       <Calendar
         mode="single"
+        :week-starts-on="1"
         :model-value="calendarValue"
         :min-value="minValue"
         :max-value="maxValue"

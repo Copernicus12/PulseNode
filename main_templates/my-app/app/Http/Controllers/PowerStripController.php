@@ -179,57 +179,52 @@ class PowerStripController extends Controller
         $user = $request->user();
 
         $updatedAt = $latest['updated_at'] ?? null;
-        $lastSeen = $updatedAt ? Carbon::parse($updatedAt)->diffForHumans() : 'Never';
+        $lastSeen = $this->telemetryAgeLabel($updatedAt);
         $isOnline = $systemStatus !== 'offline';
         $today = now()->startOfDay();
         $oldestReadingDate = EnergyReading::oldestDate();
         $oldestDate = $oldestReadingDate ? Carbon::parse($oldestReadingDate)->startOfDay() : $today->copy();
         $retentionStart = $today->copy()->subYears(5);
         $minSelectableDate = $oldestDate->lt($retentionStart) ? $oldestDate->copy() : $retentionStart;
-        $anchorDate = $today->copy();
-        $anchorDateInput = (string) $request->string('anchor_date', $today->toDateString());
+        $selectedDateInput = (string) $request->string(
+            'date',
+            (string) $request->string('anchor_date', $today->toDateString()),
+        );
 
         try {
-            $anchorDate = Carbon::parse($anchorDateInput)->startOfDay();
+            $selectedDate = Carbon::parse($selectedDateInput)->startOfDay();
         } catch (\Throwable) {
-            $anchorDate = $today->copy();
+            $selectedDate = $today->copy();
         }
 
-        if ($anchorDate->isAfter($today)) {
-            $anchorDate = $today->copy();
+        if ($selectedDate->isAfter($today)) {
+            $selectedDate = $today->copy();
         }
 
-        if ($anchorDate->isBefore($minSelectableDate)) {
-            $anchorDate = $minSelectableDate->copy();
+        if ($selectedDate->isBefore($minSelectableDate)) {
+            $selectedDate = $minSelectableDate->copy();
         }
 
-        $windowEnd = $anchorDate->copy();
-        $windowStart = $windowEnd->copy()->subDays(6);
+        $windowStart = $selectedDate->copy()->subDays(3);
+        $windowEnd = $selectedDate->copy()->addDays(3);
 
-        $dayWindow = collect(range(0, 6))->map(function (int $offset) use ($windowStart, $today): array {
+        $dayWindow = collect(range(0, 6))->map(function (int $offset) use ($windowStart, $today, $minSelectableDate): array {
             $date = $windowStart->copy()->addDays($offset);
             $dateKey = $date->toDateString();
             $details = EnergyReading::dayDetails($dateKey);
+            $isSelectable = $date->greaterThanOrEqualTo($minSelectableDate) && $date->lessThanOrEqualTo($today);
 
             return [
                 'date' => $dateKey,
                 'day_short' => strtoupper(substr($date->format('D'), 0, 3)),
                 'is_today' => $date->isSameDay($today),
+                'is_future' => $date->isAfter($today),
+                'is_selectable' => $isSelectable,
                 'total' => round((float) ($details['total_kwh'] ?? 0), 4),
             ];
         });
 
-        $selectedDate = (string) $request->string('date', $windowEnd->toDateString());
-
-        try {
-            $selectedDate = Carbon::parse($selectedDate)->toDateString();
-        } catch (\Throwable) {
-            $selectedDate = $windowEnd->toDateString();
-        }
-
-        if (Carbon::parse($selectedDate)->isAfter($today) || Carbon::parse($selectedDate)->isBefore($windowStart) || Carbon::parse($selectedDate)->isAfter($windowEnd)) {
-            $selectedDate = $windowEnd->toDateString();
-        }
+        $selectedDate = $selectedDate->toDateString();
 
         $selectedDay = EnergyReading::dayDetails($selectedDate);
         $billingProfiles = BillingTariffProfile::query()
@@ -244,7 +239,7 @@ class PowerStripController extends Controller
         $totalWarnings = (int) (($selectedDay['warnings']['high'] ?? 0) + ($selectedDay['warnings']['overload'] ?? 0));
         $topSocket = collect($selectedDay['socket_stats'] ?? [])->sortByDesc('energy_kwh')->first();
         $daySelector = [
-            'anchor_date' => $windowEnd->toDateString(),
+            'anchor_date' => $selectedDate,
             'min_date' => $minSelectableDate->toDateString(),
             'max_date' => $today->toDateString(),
             'window_start' => $windowStart->toDateString(),
@@ -324,6 +319,55 @@ class PowerStripController extends Controller
         $systemStatus = $this->deriveSystemStatus($latest, $connectionHealth);
 
         return [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus];
+    }
+
+    private function telemetryAgeLabel(?string $updatedAt): string
+    {
+        if (! $updatedAt) {
+            return 'Never';
+        }
+
+        try {
+            $diffSeconds = max(0, Carbon::parse($updatedAt)->diffInSeconds(now()));
+        } catch (\Throwable) {
+            return 'Unknown';
+        }
+
+        if ($diffSeconds < 5) {
+            return 'just now';
+        }
+
+        if ($diffSeconds < 60) {
+            return floor($diffSeconds).' sec ago';
+        }
+
+        if ($diffSeconds < 3600) {
+            return floor($diffSeconds / 60).' min ago';
+        }
+
+        if ($diffSeconds < 86400) {
+            return floor($diffSeconds / 3600).' h ago';
+        }
+
+        if ($diffSeconds < 604800) {
+            return floor($diffSeconds / 86400).' d ago';
+        }
+
+        if ($diffSeconds < 2629800) {
+            $weeks = (int) floor($diffSeconds / 604800);
+
+            return $weeks.' week'.($weeks === 1 ? '' : 's').' ago';
+        }
+
+        if ($diffSeconds < 31557600) {
+            $months = (int) floor($diffSeconds / 2629800);
+
+            return $months.' month'.($months === 1 ? '' : 's').' ago';
+        }
+
+        $years = (int) floor($diffSeconds / 31557600);
+
+        return $years.' year'.($years === 1 ? '' : 's').' ago';
     }
 
     private function buildDevicesPageData(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth, string $section, int $recentDetectionsLimit): array
