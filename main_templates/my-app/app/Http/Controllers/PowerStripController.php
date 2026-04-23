@@ -14,11 +14,14 @@ use App\Support\DeviceProfiler;
 use App\Support\EnergyBillingCalculator;
 use App\Support\Esp32ConnectionHealth;
 use App\Support\Esp32StateStore;
+use App\Support\NotificationCenter;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
@@ -44,9 +47,17 @@ class PowerStripController extends Controller
         ));
     }
 
-    public function devices(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth): View
+    public function devices(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth, Request $request): View|Response
     {
-        return view('devices.index', $this->buildDevicesPageData($store, $profiler, $connectionHealth, 'overview', 6));
+        $pageData = $this->buildDevicesPageData($store, $profiler, $connectionHealth, 'overview', 6);
+
+        if ($request->ajax()) {
+            return response()->view('devices.partials.recent-events', [
+                'recentDetections' => $pageData['recentDetections'],
+            ]);
+        }
+
+        return view('devices.index', $pageData);
     }
 
     public function deviceProfiles(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth): View
@@ -59,12 +70,12 @@ class PowerStripController extends Controller
         return view('devices.index', $this->buildDevicesPageData($store, $profiler, $connectionHealth, 'plans', 6));
     }
 
-    public function deviceActivity(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth): View
+    public function deviceActivity(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth): RedirectResponse
     {
-        return view('devices.index', $this->buildDevicesPageData($store, $profiler, $connectionHealth, 'activity', 20));
+        return redirect()->route('devices.index');
     }
 
-    public function storeDeviceProfile(StoreDeviceProfileRequest $request, DeviceProfiler $profiler): RedirectResponse
+    public function storeDeviceProfile(StoreDeviceProfileRequest $request, DeviceProfiler $profiler, NotificationCenter $notifications): RedirectResponse
     {
         $data = $request->validated();
         $redirectRoute = $this->devicesRedirectRoute($request, 'devices.index');
@@ -78,21 +89,34 @@ class PowerStripController extends Controller
         }
 
         DeviceProfile::query()->create($profiler->profilePayloadFromSignature($signature, $data));
+        $notifications->deviceProfileCreated((string) $data['name'], (int) $data['socket_index'], $redirectRoute);
 
         return redirect()
             ->route($redirectRoute)
-            ->with('devices_success', 'Profile "'.$data['name'].'" trained from socket '.$data['socket_index'].'.');
+            ->with('devices_notification', [
+                'level' => 'success',
+                'title' => 'Device profile created',
+                'message' => 'Profile "'.$data['name'].'" was trained from socket '.$data['socket_index'].'.',
+                'detail' => 'Saved fingerprints are now available for matching.',
+            ]);
     }
 
-    public function destroyDeviceProfile(Request $request, DeviceProfile $profile): RedirectResponse
+    public function destroyDeviceProfile(Request $request, DeviceProfile $profile, NotificationCenter $notifications): RedirectResponse
     {
         $redirectRoute = $this->devicesRedirectRoute($request, 'devices.index');
         $name = $profile->name;
         $profile->delete();
 
+        $notifications->deviceProfileDeleted($name, $redirectRoute);
+
         return redirect()
             ->route($redirectRoute)
-            ->with('devices_success', 'Profile "'.$name.'" deleted.');
+            ->with('devices_notification', [
+                'level' => 'success',
+                'title' => 'Device profile deleted',
+                'message' => 'Profile "'.$name.'" was permanently deleted.',
+                'detail' => 'The signature, category, and matching history were removed.',
+            ]);
     }
 
     public function storeDetectionPlan(StoreDetectionPlanRequest $request): RedirectResponse
@@ -373,16 +397,20 @@ class PowerStripController extends Controller
 
     private function buildDevicesPageData(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth, string $section, int $recentDetectionsLimit): array
     {
-        $recentDetections = collect();
+        $recentDetectionsPage = max(3, (int) request()->integer('events_per_page', $recentDetectionsLimit));
+        $recentDetections = new LengthAwarePaginator([], 0, $recentDetectionsPage, 1, [
+            'path' => request()->url(),
+            'pageName' => 'events_page',
+        ]);
 
         try {
             $recentDetections = DeviceDetection::query()
                 ->with(['profile', 'plan'])
                 ->latest('detected_at')
-                ->limit($recentDetectionsLimit)
-                ->get();
+                ->paginate($recentDetectionsPage, ['*'], 'events_page')
+                ->withQueryString();
         } catch (\Throwable) {
-            $recentDetections = collect();
+            $recentDetections = $recentDetections->appends(request()->query());
         }
 
         return [
@@ -399,6 +427,7 @@ class PowerStripController extends Controller
 
         $updatedAt = $latest['updated_at'] ?? null;
         $lastSeen = $this->telemetryAgeLabel($updatedAt);
+        $relayCommandGuard = $connectionHealth->relayCommandAvailability($latest);
         $profiles = collect();
         $detectionPlans = collect();
 
@@ -445,20 +474,12 @@ class PowerStripController extends Controller
         })->values();
 
         $profileCategories = ['Computer', 'Display', 'Accessory', 'Appliance', 'Network', 'Lighting', 'Custom'];
-        $recordedEvents = 0;
-
-        try {
-            $recordedEvents = (int) DeviceDetection::query()->count();
-        } catch (\Throwable) {
-            $recordedEvents = 0;
-        }
         $detectionStats = [
             'trained_profiles' => $profiles->count(),
             'matched_now' => $detections->where('state', 'matched')->count(),
             'unknown_now' => $detections->where('state', 'unknown')->count(),
             'active_signatures' => $detections->filter(fn (array $detection): bool => ! empty($detection['signature']))->count(),
             'active_plans' => $detectionPlans->where('is_active', true)->count(),
-            'recorded_events' => $recordedEvents,
         ];
         $profileBreakdown = $profiles
             ->groupBy(fn (DeviceProfile $profile): string => $profile->category ?: 'Custom')
@@ -486,13 +507,6 @@ class PowerStripController extends Controller
                 'href' => route('devices.plans.index'),
                 'badge' => $detectionStats['active_plans'].' active',
             ],
-            [
-                'key' => 'activity',
-                'title' => 'Activity',
-                'description' => 'Detection timeline',
-                'href' => route('devices.activity.index'),
-                'badge' => $recordedEvents.' logged',
-            ],
         ];
 
         return compact(
@@ -504,6 +518,7 @@ class PowerStripController extends Controller
             'totalEnergy',
             'systemStatus',
             'lastSeen',
+            'relayCommandGuard',
             'profiles',
             'profileCategories',
             'profileBreakdown',
@@ -524,10 +539,6 @@ class PowerStripController extends Controller
                 'label' => 'Plans',
                 'description' => 'Detection strategies, scope assignment, and active matching rules.',
             ],
-            'activity' => [
-                'label' => 'Activity',
-                'description' => 'Recent recognitions, confidence levels, and current socket status.',
-            ],
             default => [
                 'label' => 'Overview',
                 'description' => 'Live signatures, current matches, and quick profile training.',
@@ -540,8 +551,7 @@ class PowerStripController extends Controller
         return match ((string) $request->string('redirect_route')) {
             'devices.index',
             'devices.profiles.index',
-            'devices.plans.index',
-            'devices.activity.index' => (string) $request->string('redirect_route'),
+            'devices.plans.index' => (string) $request->string('redirect_route'),
             default => $fallback,
         };
     }

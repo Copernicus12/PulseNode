@@ -21,12 +21,6 @@
             'route' => 'devices.plans.index',
             'label' => 'my devices plans',
         ],
-        [
-            'title' => 'Activity',
-            'href' => route('devices.activity.index'),
-            'route' => 'devices.activity.index',
-            'label' => 'my devices activity',
-        ],
     ];
 @endphp
 

@@ -22,6 +22,13 @@ type RelayCommandNotification = {
     detail: string | null;
 };
 
+type AppToastNotification = {
+    level?: 'success' | 'info' | 'warning' | 'error';
+    title?: string;
+    message?: string;
+    detail?: string | null;
+};
+
 const toastId = 'relay-command-guard-toast';
 const guard = ref<RelayCommandGuard>(normalizeGuard(props.initialGuard));
 const offset = ref<{ top: number; right: number }>({
@@ -32,14 +39,17 @@ const offset = ref<{ top: number; right: number }>({
 const toasterOptions = computed(() => ({
     duration: 5000,
     closeButton: false,
-    class: 'w-[20rem] rounded-2xl border border-red-500/55 bg-[rgba(44,10,10,0.98)] shadow-2xl shadow-red-950/30 backdrop-blur-md',
-    descriptionClass: 'text-[11px] leading-4 text-red-100/78',
+    class: 'w-[20rem] rounded-2xl border border-border/50 bg-[rgba(20,20,22,0.98)] shadow-2xl shadow-black/30 backdrop-blur-md',
+    descriptionClass: 'text-[11px] leading-4 text-muted-foreground',
     classes: {
-        title: 'text-xs font-semibold text-red-50',
-        description: 'text-[11px] leading-4 text-red-100/78',
+        title: 'text-xs font-semibold text-foreground',
+        description: 'text-[11px] leading-4 text-muted-foreground',
         actionButton:
-            '!h-7 !rounded-lg !border !border-red-400/45 !bg-red-500/18 !px-2.5 !text-[11px] !font-medium !text-red-50 hover:!bg-red-500/28',
-        warning: 'border-red-500/55 bg-[rgba(44,10,10,0.98)] text-red-50',
+            '!h-7 !rounded-lg !border !border-border/40 !bg-background/60 !px-2.5 !text-[11px] !font-medium !text-foreground hover:!bg-background',
+        warning: 'border-amber-500/40 bg-[rgba(30,22,10,0.98)] text-amber-50',
+        success: 'border-emerald-500/40 bg-[rgba(14,28,18,0.98)] text-emerald-50',
+        info: 'border-sky-500/40 bg-[rgba(12,20,30,0.98)] text-sky-50',
+        error: 'border-red-500/40 bg-[rgba(34,16,16,0.98)] text-red-50',
     },
 }));
 
@@ -110,6 +120,28 @@ function showNotification(notification: RelayCommandNotification): void {
     });
 }
 
+function showAppNotification(notification: AppToastNotification): void {
+    const level = notification.level || 'info';
+    const title = notification.title || notification.message || 'Notification';
+    const description =
+        notification.title && notification.message
+            ? notification.message
+            : notification.detail ?? undefined;
+
+    const toastFn =
+        level === 'success'
+            ? toast.success
+            : level === 'error'
+                ? toast.error
+                : level === 'warning'
+                    ? toast.warning
+                    : toast.info;
+
+    toastFn(title, {
+        description,
+    });
+}
+
 function handleGuardEvent(event: Event): void {
     const customEvent = event as CustomEvent<Partial<RelayCommandGuard>>;
     guard.value = normalizeGuard(customEvent.detail);
@@ -135,6 +167,11 @@ function handleNotificationEvent(event: Event): void {
     });
 }
 
+function handleAppToastEvent(event: Event): void {
+    const customEvent = event as CustomEvent<AppToastNotification>;
+    showAppNotification(customEvent.detail || {});
+}
+
 onMounted(() => {
     updateOffset();
     window.addEventListener(
@@ -144,6 +181,10 @@ onMounted(() => {
     window.addEventListener(
         'pulsenode:relay-guard-notification',
         handleNotificationEvent as EventListener,
+    );
+    window.addEventListener(
+        'pulsenode:app-toast',
+        handleAppToastEvent as EventListener,
     );
     window.addEventListener('pulsenode:latest', updateOffset as EventListener);
     window.addEventListener('resize', updateOffset);
@@ -158,6 +199,10 @@ onBeforeUnmount(() => {
     window.removeEventListener(
         'pulsenode:relay-guard-notification',
         handleNotificationEvent as EventListener,
+    );
+    window.removeEventListener(
+        'pulsenode:app-toast',
+        handleAppToastEvent as EventListener,
     );
     window.removeEventListener(
         'pulsenode:latest',

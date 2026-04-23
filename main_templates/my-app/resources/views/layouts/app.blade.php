@@ -762,10 +762,10 @@
                     description: 'Detection plans control sensitivity using sample window and threshold, helping classify spike patterns per socket.'
                 },
                 {
-                    path: '{{ route('devices.activity.index', [], false) }}',
-                    selector: '#devices-activity-log',
-                    title: 'My devices: activity',
-                    description: 'Use this timeline to inspect recent detections, confidence levels and live classifier behavior.'
+                    path: '{{ route('devices.index', [], false) }}',
+                    selector: '#devices-recent-events',
+                    title: 'Recent detection events',
+                    description: 'Use this section to inspect recent detections, confidence levels and live classifier behavior.'
                 },
                 {
                     path: '{{ route('history.index', [], false) }}',

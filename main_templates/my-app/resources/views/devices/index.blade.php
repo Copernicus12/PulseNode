@@ -2,6 +2,10 @@
 
 @section('title', 'My Devices')
 
+@push('head')
+    @vite('resources/js/relay-command-toast.ts')
+@endpush
+
 @section('content')
 @php
     $detectionStateClasses = [
@@ -43,6 +47,8 @@
 @endphp
 
 <div class="mx-auto max-w-[1360px] space-y-5 lg:space-y-6">
+    @include('layouts._relay-command-alert', ['relayCommandGuard' => $relayCommandGuard])
+
     @if(session('devices_success'))
         <div class="rounded-2xl bg-emerald-500/12 px-4 py-3 text-sm text-emerald-300 ring-1 ring-emerald-500/25">
             {{ session('devices_success') }}
@@ -184,31 +190,9 @@
                 </div>
             </div>
 
-            <section class="light-outline-strong rounded-3xl bg-card p-5 sm:p-6">
-                <h3 class="text-lg font-bold">Latest Events</h3>
-                <p class="mt-1 text-sm text-muted-foreground">Last {{ $recentDetections->count() }} recognitions.</p>
-
-                <div class="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-                    @forelse($recentDetections as $event)
-                        <div class="rounded-2xl bg-background p-3 ring-1 ring-border/30">
-                            <div class="flex items-start justify-between gap-2">
-                                <div>
-                                    <p class="text-sm font-semibold">{{ $event->predicted_label }}</p>
-                                    <p class="text-xs text-muted-foreground">Socket {{ $event->socket_index }} · {{ $event->detected_at?->diffForHumans() }}</p>
-                                </div>
-                                <span class="inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium {{ $detectionStateClasses[$event->status] ?? 'bg-muted text-muted-foreground ring-1 ring-border/40' }}">{{ ucfirst($event->status) }}</span>
-                            </div>
-                            <p class="mt-2 text-xs text-muted-foreground">Confidence {{ $event->confidence }}% · {{ $event->plan?->name ?? 'Default plan' }}</p>
-                        </div>
-                    @empty
-                        <div class="rounded-2xl bg-background p-4 text-sm text-muted-foreground ring-1 ring-border/30 md:col-span-2 xl:col-span-3">
-                            No detection events recorded yet.
-                        </div>
-                    @endforelse
-                </div>
-            </section>
+            @include('devices.partials.recent-events', ['recentDetections' => $recentDetections])
         </section>
-
+        
         <div id="socket-details-modal" data-modal class="fixed inset-0 z-[80] hidden items-center justify-center bg-black/70 p-4 backdrop-blur-md">
             <div class="relative w-full max-w-3xl overflow-hidden rounded-[2rem] border border-border/50 bg-card shadow-2xl shadow-black/30">
                 <div class="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-emerald-400/70 to-transparent"></div>
@@ -405,12 +389,15 @@
                                     <td class="px-3 py-2.5 tabular-nums text-muted-foreground">{{ number_format($profile->expected_power_min, 1) }} - {{ number_format($profile->expected_power_max, 1) }} W</td>
                                     <td class="px-3 py-2.5 text-muted-foreground">{{ $profile->last_trained_at?->diffForHumans() ?? '-' }}</td>
                                     <td class="px-3 py-2.5">
-                                        <form method="POST" action="{{ route('devices.profiles.destroy', $profile) }}" onsubmit="return confirm('Delete this profile?')">
-                                            @csrf
-                                            @method('DELETE')
-                                            <input type="hidden" name="redirect_route" value="{{ $currentDevicesRoute }}">
-                                            <button type="submit" class="rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/25">Delete</button>
-                                        </form>
+                                        <button
+                                            type="button"
+                                            data-modal-open="delete-profile-modal"
+                                            data-profile-name="{{ $profile->name }}"
+                                            data-profile-delete-url="{{ route('devices.profiles.destroy', $profile) }}"
+                                            class="rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-300 transition hover:bg-red-500/25"
+                                        >
+                                            Delete
+                                        </button>
                                     </td>
                                 </tr>
                             @empty
@@ -420,6 +407,41 @@
                             @endforelse
                         </tbody>
                     </table>
+                </div>
+
+                <div id="delete-profile-modal" data-modal class="fixed inset-0 z-[80] hidden items-center justify-center bg-black/70 p-4 backdrop-blur-md">
+                    <div class="relative w-full max-w-xl overflow-hidden rounded-[2rem] border border-red-500/20 bg-card shadow-2xl shadow-black/30">
+                        <div class="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-red-400/80 to-transparent"></div>
+                        <div class="p-6 sm:p-7">
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-[0.24em] text-muted-foreground">Delete profile</p>
+                                    <h4 class="mt-1 text-2xl font-semibold tracking-tight">Delete device profile?</h4>
+                                    <p class="mt-2 text-sm text-muted-foreground">This action permanently removes the selected profile and cannot be undone.</p>
+                                </div>
+                                <button type="button" data-modal-close class="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-background text-muted-foreground ring-1 ring-border/40 transition hover:text-foreground">
+                                    <span class="sr-only">Close</span>
+                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                </button>
+                            </div>
+
+                            <div class="mt-6 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-100/90 ring-1 ring-red-500/20">
+                                <p class="font-medium">You are about to delete <span id="delete-profile-modal-name" class="font-semibold text-white">this profile</span>.</p>
+                                <p class="mt-1 text-red-100/80">The saved signature, category, and matching history for this profile will be removed permanently.</p>
+                            </div>
+
+                            <form id="delete-profile-modal-form" method="POST" action="{{ route('devices.index') }}" class="mt-6">
+                                @csrf
+                                @method('DELETE')
+                                <input type="hidden" name="redirect_route" value="{{ $currentDevicesRoute }}">
+
+                                <div class="flex flex-wrap justify-end gap-2">
+                                    <button type="button" data-modal-close data-modal-initial-focus class="rounded-xl bg-background px-3.5 py-2.5 text-sm text-muted-foreground ring-1 ring-border/40 transition hover:text-foreground">Cancel</button>
+                                    <button type="submit" class="rounded-xl bg-red-500 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-red-400">Delete profile</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -581,85 +603,6 @@
         </div>
     @endif
 
-    @if($deviceSection === 'activity')
-        <section id="devices-activity-log" class="space-y-4">
-            <div class="light-outline-strong rounded-3xl bg-card p-5 sm:p-6">
-                <h3 class="text-lg font-bold">Current Socket Status</h3>
-                <p class="mt-1 text-sm text-muted-foreground">Live snapshot for each socket before drilling into event history.</p>
-
-                <div class="mt-4 overflow-x-auto pb-1">
-                    <div class="mx-auto flex w-max gap-3">
-                    @foreach($socketCards as $socket)
-                        @php $detection = $socket['detection']; @endphp
-                        <article class="w-[300px] shrink-0 rounded-2xl bg-background p-4 ring-1 ring-border/30">
-                            <div class="flex items-start justify-between gap-2">
-                                <div>
-                                    <p class="text-xs uppercase tracking-[0.14em] text-muted-foreground">Socket {{ $socket['index'] }}</p>
-                                    <p class="mt-1 text-sm font-semibold" id="devices-detection-label-{{ $socket['index'] }}">{{ $detection['label'] }}</p>
-                                    <p class="text-xs text-muted-foreground" id="devices-detection-category-{{ $socket['index'] }}">{{ $detection['category'] }}</p>
-                                </div>
-                                <span id="devices-state-badge-{{ $socket['index'] }}" class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium {{ $socketStatusClasses[$socket['status']] ?? 'bg-muted text-muted-foreground ring-1 ring-border/40' }}">{{ $socketStatusLabels[$socket['status']] ?? ucfirst(str_replace('_', ' ', $socket['status'])) }}</span>
-                            </div>
-                            <p class="mt-2 text-xs text-muted-foreground">
-                                <span id="devices-socket-power-{{ $socket['index'] }}">{{ number_format($socket['power_w'], 1) }}</span> W
-                                |
-                                <span id="devices-socket-current-{{ $socket['index'] }}">{{ number_format($socket['current'], 3) }}</span> A
-                            </p>
-                            <div class="mt-3 flex items-center justify-between text-xs">
-                                <span class="text-muted-foreground">Confidence</span>
-                                <span class="font-medium text-foreground" id="devices-confidence-text-{{ $socket['index'] }}">{{ $detection['confidence'] }}%</span>
-                            </div>
-                            <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-card ring-1 ring-border/20">
-                                <div id="devices-confidence-bar-{{ $socket['index'] }}" class="h-full rounded-full {{ $detection['state'] === 'matched' ? 'bg-emerald-400' : ($detection['state'] === 'unknown' ? 'bg-amber-400' : 'bg-muted-foreground/40') }}" style="width: {{ $detection['confidence'] }}%"></div>
-                            </div>
-                            <p class="mt-2.5 text-xs text-muted-foreground" id="devices-detection-reason-{{ $socket['index'] }}">{{ $detection['reason'] }}</p>
-                        </article>
-                    @endforeach
-                    </div>
-                </div>
-            </div>
-
-            <div class="light-outline-strong rounded-3xl bg-card p-5 sm:p-6">
-                <h3 class="text-lg font-bold">Recent Detection Events</h3>
-                <p class="mt-1 text-sm text-muted-foreground">Latest recognition updates saved by the detection engine.</p>
-
-                <div class="mt-4 overflow-x-auto rounded-2xl bg-background ring-1 ring-border/30">
-                    <table class="w-full min-w-[760px] text-sm">
-                        <thead>
-                            <tr class="border-b border-border/30 text-left text-xs text-muted-foreground">
-                                <th class="px-3 py-2.5 font-medium">Time</th>
-                                <th class="px-3 py-2.5 font-medium">Socket</th>
-                                <th class="px-3 py-2.5 font-medium">Label</th>
-                                <th class="px-3 py-2.5 font-medium">Category</th>
-                                <th class="px-3 py-2.5 font-medium">Confidence</th>
-                                <th class="px-3 py-2.5 font-medium">Plan</th>
-                                <th class="px-3 py-2.5 font-medium">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($recentDetections as $event)
-                                <tr class="border-b border-border/20">
-                                    <td class="px-3 py-2.5 text-muted-foreground">{{ $event->detected_at?->diffForHumans() }}</td>
-                                    <td class="px-3 py-2.5">{{ $event->socket_index }}</td>
-                                    <td class="px-3 py-2.5 font-medium">{{ $event->predicted_label }}</td>
-                                    <td class="px-3 py-2.5 text-muted-foreground">{{ $event->predicted_category ?? '-' }}</td>
-                                    <td class="px-3 py-2.5 tabular-nums">{{ $event->confidence }}%</td>
-                                    <td class="px-3 py-2.5 text-muted-foreground">{{ $event->plan?->name ?? 'Default' }}</td>
-                                    <td class="px-3 py-2.5">
-                                        <span class="inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium {{ $detectionStateClasses[$event->status] ?? 'bg-muted text-muted-foreground ring-1 ring-border/40' }}">{{ $event->status }}</span>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="7" class="px-3 py-4 text-sm text-muted-foreground">No detection events recorded yet.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </section>
-    @endif
 </div>
 
 <script>
@@ -1038,6 +981,21 @@
                 refreshSocketDetailsModal(window.__pulsenodeActiveSocketDetailsIndex);
             }
 
+            if (modalId === 'delete-profile-modal') {
+                var deleteProfileForm = document.getElementById('delete-profile-modal-form');
+                var deleteProfileName = document.getElementById('delete-profile-modal-name');
+                var deleteProfileAction = button.getAttribute('data-profile-delete-url') || '';
+                var deleteProfileLabel = button.getAttribute('data-profile-name') || 'this profile';
+
+                if (deleteProfileForm && deleteProfileAction) {
+                    deleteProfileForm.setAttribute('action', deleteProfileAction);
+                }
+
+                if (deleteProfileName) {
+                    deleteProfileName.textContent = deleteProfileLabel;
+                }
+            }
+
             openModal(modal);
         });
     });
@@ -1069,6 +1027,98 @@
             if (isOpen(modal)) closeModal(modal);
         });
     });
+})();
+
+(function () {
+    function recentEventsSection() {
+        return document.getElementById('devices-recent-events');
+    }
+
+    function loadRecentEvents(url, pushState) {
+        if (!url) return;
+
+        var section = recentEventsSection();
+        if (section) {
+            section.setAttribute('aria-busy', 'true');
+        }
+
+        fetch(url, {
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'text/html,application/xhtml+xml',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        })
+            .then(function (response) {
+                if (!response.ok) {
+                    throw new Error('recent events fetch failed');
+                }
+                return response.text();
+            })
+            .then(function (html) {
+                var template = document.createElement('template');
+                template.innerHTML = html.trim();
+                var nextSection = template.content.firstElementChild;
+                var currentSection = recentEventsSection();
+
+                if (currentSection && nextSection) {
+                    currentSection.replaceWith(nextSection);
+                }
+
+                if (pushState) {
+                    window.history.pushState({ recentEventsUrl: url }, '', url);
+                }
+            })
+            .catch(function () {})
+            .finally(function () {
+                var currentSection = recentEventsSection();
+                if (currentSection) {
+                    currentSection.removeAttribute('aria-busy');
+                }
+            });
+    }
+
+    document.addEventListener('click', function (event) {
+        var link = event.target.closest('#devices-recent-events nav[aria-label="Recent detection events pagination"] a');
+        if (!link) return;
+
+        var href = link.getAttribute('href');
+        if (!href || href === '#') return;
+
+        event.preventDefault();
+        loadRecentEvents(href, true);
+    });
+
+    window.addEventListener('popstate', function () {
+        if (recentEventsSection()) {
+            loadRecentEvents(window.location.href, false);
+        }
+    });
+})();
+
+(function () {
+    var flash = @json(session('devices_notification'));
+
+    if (!flash || typeof flash !== 'object') return;
+
+    var emit = function () {
+        window.dispatchEvent(new CustomEvent('pulsenode:app-toast', {
+            detail: {
+                level: typeof flash.level === 'string' ? flash.level : 'success',
+                title: typeof flash.title === 'string' ? flash.title : 'Notification',
+                message: typeof flash.message === 'string' ? flash.message : '',
+                detail: typeof flash.detail === 'string' ? flash.detail : null,
+            },
+        }));
+    };
+
+    if (document.readyState === 'complete') {
+        window.setTimeout(emit, 0);
+    } else {
+        window.addEventListener('load', function () {
+            window.setTimeout(emit, 0);
+        }, { once: true });
+    }
 })();
 </script>
 @endsection

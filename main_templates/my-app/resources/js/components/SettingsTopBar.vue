@@ -199,12 +199,6 @@ const baseSearchResults = computed<SearchResult[]>(() => {
             href: toUrl(devices.plans.index()),
         },
         {
-            label: 'Go Device Activity',
-            keywords: 'go device activity',
-            kind: 'href',
-            href: toUrl(devices.activity.index()),
-        },
-        {
             label: 'Open Notifications Panel',
             keywords: 'open notifications panel alerts',
             kind: 'panel',

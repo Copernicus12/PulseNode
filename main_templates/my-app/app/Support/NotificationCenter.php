@@ -53,6 +53,35 @@ class NotificationCenter
         ]);
     }
 
+    public function deviceProfileCreated(string $profileName, int $socketIndex, string $actionRoute = 'devices.index'): void
+    {
+        $this->store([
+            'type' => 'device_profile_created',
+            'level' => 'success',
+            'title' => 'Device profile created',
+            'message' => 'Profile "'.$profileName.'" was trained from socket '.$socketIndex.'.',
+            'action_url' => $this->routePath($actionRoute),
+            'meta' => [
+                'profile_name' => $profileName,
+                'socket_index' => $socketIndex,
+            ],
+        ]);
+    }
+
+    public function deviceProfileDeleted(string $profileName, string $actionRoute = 'devices.index'): void
+    {
+        $this->store([
+            'type' => 'device_profile_deleted',
+            'level' => 'success',
+            'title' => 'Device profile deleted',
+            'message' => 'Profile "'.$profileName.'" was permanently deleted.',
+            'action_url' => $this->routePath($actionRoute),
+            'meta' => [
+                'profile_name' => $profileName,
+            ],
+        ]);
+    }
+
     public function mqttRestarted(): void
     {
         $this->store([
