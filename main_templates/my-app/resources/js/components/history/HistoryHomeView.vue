@@ -286,6 +286,7 @@ watch(detailOpen, (isOpen) => {
 
 let liveRefreshTimeout: number | null = null
 let liveRefreshInterval: number | null = null
+let historyRequestInFlight = false
 
 function number(value: unknown): number {
   const parsed = Number(value)
@@ -354,6 +355,7 @@ async function updateHistory(
     preservePicker = false,
   } = options
 
+  if (historyRequestInFlight) return
   if (isLoading.value && !silent) return
 
   const url = detailUrl(date, anchorDate)
@@ -361,6 +363,8 @@ async function updateHistory(
   if (!silent) {
     isLoading.value = true
   }
+
+  historyRequestInFlight = true
 
   try {
     const response = await fetch(url, {
@@ -393,6 +397,8 @@ async function updateHistory(
   } catch (error) {
     console.error('Unable to update history view', error)
   } finally {
+    historyRequestInFlight = false
+
     if (!silent) {
       isLoading.value = false
     }
@@ -522,7 +528,7 @@ const popStateHandler = () => {
 onMounted(() => {
   window.addEventListener('pulsenode:latest', liveHandler)
   window.addEventListener('popstate', popStateHandler)
-  liveRefreshInterval = window.setInterval(refreshTodayHistory, 20000)
+  liveRefreshInterval = window.setInterval(refreshTodayHistory, 30000)
 })
 
 onUnmounted(() => {

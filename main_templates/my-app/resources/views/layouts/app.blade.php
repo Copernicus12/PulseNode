@@ -1382,6 +1382,8 @@
             var power = document.getElementById('live-telemetry-power');
             var current = document.getElementById('live-telemetry-current');
             var hasTelemetryWidget = !!(dot && power && current);
+            var latestUrl = new URL('/api/latest', window.location.origin).toString();
+            var inFlight = false;
 
             function asNumber(v) {
                 var n = Number(v);
@@ -1417,7 +1419,17 @@
             }
 
             function pollLatest() {
-                fetch('/api/latest', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                if (inFlight || document.visibilityState === 'hidden') {
+                    return;
+                }
+
+                inFlight = true;
+
+                fetch(latestUrl, {
+                    credentials: 'same-origin',
+                    mode: 'same-origin',
+                    headers: { 'Accept': 'application/json' }
+                })
                     .then(function (r) {
                         if (!r.ok) throw new Error('latest fetch failed');
                         return r.json();
@@ -1428,11 +1440,14 @@
                     })
                     .catch(function () {
                         setOnline(false);
+                    })
+                    .finally(function () {
+                        inFlight = false;
                     });
             }
 
             pollLatest();
-            setInterval(pollLatest, 2000);
+            setInterval(pollLatest, 5000);
         })();
         </script>
     </body>

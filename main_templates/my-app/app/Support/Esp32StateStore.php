@@ -2,24 +2,36 @@
 
 namespace App\Support;
 
+use Illuminate\Support\Facades\Cache;
 use MongoDB\BSON\UTCDateTime;
-use MongoDB\Client;
 use MongoDB\Model\BSONArray;
 use MongoDB\Model\BSONDocument;
 use Throwable;
 
 class Esp32StateStore
 {
+    private const LATEST_CACHE_KEY = 'esp32.state.latest';
+
     public function latest(): array
     {
         $defaults = $this->defaults();
+
+        $cached = Cache::get(self::LATEST_CACHE_KEY);
+        if (is_array($cached)) {
+            return $this->normalize(array_merge($defaults, $cached));
+        }
+
         $collection = $this->collection();
 
         if ($collection === null) {
             return $defaults;
         }
 
-        $doc = $collection->findOne([], ['sort' => ['received_at' => -1]]);
+        try {
+            $doc = $collection->findOne([], ['sort' => ['received_at' => -1]]);
+        } catch (Throwable) {
+            return $defaults;
+        }
 
         if ($doc === null) {
             return $defaults;
@@ -44,7 +56,10 @@ class Esp32StateStore
             $payload['updated_at'] = $updatedAt;
         }
 
-        return $this->normalize(array_merge($defaults, $payload));
+        $state = $this->normalize(array_merge($defaults, $payload));
+        Cache::forever(self::LATEST_CACHE_KEY, $state);
+
+        return $state;
     }
 
     public function updateTelemetry(array $payload): array
@@ -71,20 +86,7 @@ class Esp32StateStore
 
     private function collection(): ?\MongoDB\Collection
     {
-        $uri = (string) config('esp32.mongodb.uri', '');
-        if ($uri === '') {
-            return null;
-        }
-
-        try {
-            $client = new Client($uri);
-
-            return $client
-                ->selectDatabase((string) config('esp32.mongodb.database', 'espData'))
-                ->selectCollection((string) config('esp32.mongodb.collection', 'readings'));
-        } catch (Throwable) {
-            return null;
-        }
+        return MongoConnection::selectCollection((string) config('esp32.mongodb.collection', 'readings'));
     }
 
     private function defaults(): array
@@ -112,13 +114,19 @@ class Esp32StateStore
         $collection = $this->collection();
 
         if ($collection !== null) {
-            $collection->insertOne([
-                'topic' => config('esp32.mqtt.data_topic', 'razvy_esp32_2026/data'),
-                'source' => $source,
-                'received_at' => new UTCDateTime(),
-                'payload' => $state,
-            ]);
+            try {
+                $collection->insertOne([
+                    'topic' => config('esp32.mqtt.data_topic', 'razvy_esp32_2026/data'),
+                    'source' => $source,
+                    'received_at' => new UTCDateTime(),
+                    'payload' => $state,
+                ]);
+            } catch (Throwable) {
+                // Keep serving the latest cached value even when Mongo is temporarily unreachable.
+            }
         }
+
+        Cache::forever(self::LATEST_CACHE_KEY, $state);
 
         return $state;
     }

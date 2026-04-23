@@ -90,6 +90,8 @@ const notificationsSeenKey = 'pulsenode.notifications.last_seen_id';
 
 let telemetryTimer: number | undefined;
 let notificationsTimer: number | undefined;
+let telemetryInFlight = false;
+let notificationsInFlight = false;
 
 const baseSearchResults = computed<SearchResult[]>(() => {
     const items: SearchResult[] = [
@@ -276,6 +278,12 @@ function normalize(value: string | undefined | null) {
 }
 
 function fetchTelemetry() {
+    if (telemetryInFlight || document.visibilityState === 'hidden') {
+        return Promise.resolve();
+    }
+
+    telemetryInFlight = true;
+
     return fetch(toUrl(apiLatest()), {
         headers: {
             Accept: 'application/json',
@@ -304,10 +312,19 @@ function fetchTelemetry() {
         })
         .catch(() => {
             telemetry.value.online = false;
+        })
+        .finally(() => {
+            telemetryInFlight = false;
         });
 }
 
 function fetchNotifications() {
+    if (notificationsInFlight || document.visibilityState === 'hidden') {
+        return Promise.resolve();
+    }
+
+    notificationsInFlight = true;
+
     return fetch(
         toUrl(
             notificationsLatest({
@@ -333,6 +350,9 @@ function fetchNotifications() {
             if (!notifications.value.length) {
                 notifications.value = [];
             }
+        })
+        .finally(() => {
+            notificationsInFlight = false;
         });
 }
 
@@ -580,11 +600,11 @@ onMounted(() => {
 
     telemetryTimer = window.setInterval(() => {
         void fetchTelemetry();
-    }, 2000);
+    }, 5000);
 
     notificationsTimer = window.setInterval(() => {
         void fetchNotifications();
-    }, 5000);
+    }, 15000);
 
     document.addEventListener('click', handleDocumentClick);
     document.addEventListener('keydown', handleGlobalKeydown);

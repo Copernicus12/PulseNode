@@ -4,16 +4,18 @@ namespace App\Support;
 
 use Carbon\Carbon;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use MongoDB\BSON\ObjectId;
 use MongoDB\BSON\UTCDateTime;
-use MongoDB\Client;
 use MongoDB\Model\BSONArray;
 use MongoDB\Model\BSONDocument;
 use Throwable;
 
 class AppNotificationStore
 {
+    private const LATEST_CACHE_KEY_PREFIX = 'esp32.notifications.latest.';
+
     public function store(array $payload, int $suppressForSeconds = 0): ?array
     {
         $collection = $this->collection();
@@ -52,12 +54,21 @@ class AppNotificationStore
 
         $result = $collection->insertOne($document);
         $document['_id'] = $result->getInsertedId();
+        $this->flushLatestCache();
 
         return $this->normalizeDocument($document);
     }
 
     public function latest(int $limit = 10): array
     {
+        $limit = max(1, $limit);
+        $cacheKey = self::LATEST_CACHE_KEY_PREFIX.$limit;
+
+        $cached = Cache::get($cacheKey);
+        if (is_array($cached)) {
+            return $cached;
+        }
+
         $collection = $this->collection();
 
         if ($collection === null) {
@@ -76,6 +87,8 @@ class AppNotificationStore
                 $items[] = $this->toFeedItem($normalized);
             }
         }
+
+        Cache::put($cacheKey, $items, now()->addSeconds(2));
 
         return $items;
     }
@@ -165,19 +178,13 @@ class AppNotificationStore
 
     private function collection(): ?\MongoDB\Collection
     {
-        $uri = (string) config('esp32.mongodb.uri', '');
-        if ($uri === '') {
-            return null;
-        }
+        return MongoConnection::selectCollection((string) config('esp32.mongodb.notifications_collection', 'notifications'));
+    }
 
-        try {
-            $client = new Client($uri);
-
-            return $client
-                ->selectDatabase((string) config('esp32.mongodb.database', 'espData'))
-                ->selectCollection((string) config('esp32.mongodb.notifications_collection', 'notifications'));
-        } catch (Throwable) {
-            return null;
+    private function flushLatestCache(): void
+    {
+        foreach ([1, 2, 3, 5, 10] as $limit) {
+            Cache::forget(self::LATEST_CACHE_KEY_PREFIX.$limit);
         }
     }
 

@@ -2,14 +2,14 @@
 
 namespace App\Models;
 
+use App\Support\MongoConnection;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 use MongoDB\BSON\UTCDateTime;
-use MongoDB\Client;
 use MongoDB\Model\BSONArray;
 use MongoDB\Model\BSONDocument;
-use Throwable;
 
 class EnergyReading extends Model
 {
@@ -57,74 +57,80 @@ class EnergyReading extends Model
 
     public static function historyPayload(): array
     {
-        $week = self::weeklyData();
-        $today = collect($week)->firstWhere('is_today', true);
+        return Cache::remember('energy.history_payload', now()->addSeconds(20), function (): array {
+            $week = self::weeklyData();
+            $today = collect($week)->firstWhere('is_today', true);
 
-        return [
-            'week' => $week,
-            'today_progress_kwh' => round((float) ($today['total'] ?? 0), 4),
-        ];
+            return [
+                'week' => $week,
+                'today_progress_kwh' => round((float) ($today['total'] ?? 0), 4),
+            ];
+        });
     }
 
     public static function dayDetails(string $date): array
     {
         $day = Carbon::parse($date)->startOfDay();
         $dayKey = $day->toDateString();
-        $samples = self::mongoSamplesForDate($dayKey);
+        $ttl = $day->isToday() ? now()->addSeconds(20) : now()->addHours(12);
 
-        $socket1 = (float) $samples->sum('energy_socket_1');
-        $socket2 = (float) $samples->sum('energy_socket_2');
-        $socket3 = (float) $samples->sum('energy_socket_3');
-        $total = $socket1 + $socket2 + $socket3;
+        return Cache::remember("energy.day_details.{$dayKey}", $ttl, function () use ($day, $dayKey): array {
+            $samples = self::mongoSamplesForDate($dayKey);
 
-        $sampleMinutes = (float) config('esp32.analytics.sample_minutes', 0.1667);
-        $avgVoltage = max(1.0, (float) ($samples->avg('voltage') ?? 230));
+            $socket1 = (float) $samples->sum('energy_socket_1');
+            $socket2 = (float) $samples->sum('energy_socket_2');
+            $socket3 = (float) $samples->sum('energy_socket_3');
+            $total = $socket1 + $socket2 + $socket3;
 
-        $socketStats = [
-            [
-                'name' => 'Socket 1',
-                'energy_kwh' => round($socket1, 4),
-                'percentage' => $total > 0 ? round(($socket1 / $total) * 100, 1) : 0,
-                'avg_power_w' => round((float) ($samples->avg('power_socket_1') ?? 0), 1),
-                'peak_power_w' => round((float) ($samples->max('power_socket_1') ?? 0), 1),
-                'active_minutes' => round((float) $samples->where('current_1', '>', 0.05)->count() * $sampleMinutes, 1),
-            ],
-            [
-                'name' => 'Socket 2',
-                'energy_kwh' => round($socket2, 4),
-                'percentage' => $total > 0 ? round(($socket2 / $total) * 100, 1) : 0,
-                'avg_power_w' => round((float) ($samples->avg('power_socket_2') ?? 0), 1),
-                'peak_power_w' => round((float) ($samples->max('power_socket_2') ?? 0), 1),
-                'active_minutes' => round((float) $samples->where('current_2', '>', 0.05)->count() * $sampleMinutes, 1),
-            ],
-            [
-                'name' => 'Socket 3',
-                'energy_kwh' => round($socket3, 4),
-                'percentage' => $total > 0 ? round(($socket3 / $total) * 100, 1) : 0,
-                'avg_power_w' => round((float) ($samples->avg('power_socket_3') ?? 0), 1),
-                'peak_power_w' => round((float) ($samples->max('power_socket_3') ?? 0), 1),
-                'active_minutes' => round((float) $samples->where('current_3', '>', 0.05)->count() * $sampleMinutes, 1),
-            ],
-        ];
+            $sampleMinutes = (float) config('esp32.analytics.sample_minutes', 0.1667);
+            $avgVoltage = max(1.0, (float) ($samples->avg('voltage') ?? 230));
 
-        $hourly = self::buildHourlyBreakdown($samples);
+            $socketStats = [
+                [
+                    'name' => 'Socket 1',
+                    'energy_kwh' => round($socket1, 4),
+                    'percentage' => $total > 0 ? round(($socket1 / $total) * 100, 1) : 0,
+                    'avg_power_w' => round((float) ($samples->avg('power_socket_1') ?? 0), 1),
+                    'peak_power_w' => round((float) ($samples->max('power_socket_1') ?? 0), 1),
+                    'active_minutes' => round((float) $samples->where('current_1', '>', 0.05)->count() * $sampleMinutes, 1),
+                ],
+                [
+                    'name' => 'Socket 2',
+                    'energy_kwh' => round($socket2, 4),
+                    'percentage' => $total > 0 ? round(($socket2 / $total) * 100, 1) : 0,
+                    'avg_power_w' => round((float) ($samples->avg('power_socket_2') ?? 0), 1),
+                    'peak_power_w' => round((float) ($samples->max('power_socket_2') ?? 0), 1),
+                    'active_minutes' => round((float) $samples->where('current_2', '>', 0.05)->count() * $sampleMinutes, 1),
+                ],
+                [
+                    'name' => 'Socket 3',
+                    'energy_kwh' => round($socket3, 4),
+                    'percentage' => $total > 0 ? round(($socket3 / $total) * 100, 1) : 0,
+                    'avg_power_w' => round((float) ($samples->avg('power_socket_3') ?? 0), 1),
+                    'peak_power_w' => round((float) ($samples->max('power_socket_3') ?? 0), 1),
+                    'active_minutes' => round((float) $samples->where('current_3', '>', 0.05)->count() * $sampleMinutes, 1),
+                ],
+            ];
 
-        return [
-            'date' => $dayKey,
-            'day_short' => strtoupper(substr($day->format('D'), 0, 3)),
-            'is_today' => $day->isToday(),
-            'total_kwh' => round($total, 4),
-            'from_time' => '00:00',
-            'to_time' => $day->isToday() ? now()->format('H:i:s') : '23:59:59',
-            'avg_voltage' => round($avgVoltage, 1),
-            'socket_stats' => $socketStats,
-            'warnings' => [
-                'high' => $samples->where('warning_level', 'high')->count(),
-                'overload' => $samples->where('warning_level', 'overload')->count(),
-            ],
-            'intervals' => self::buildIntervals($samples, $sampleMinutes),
-            'hourly' => $hourly,
-        ];
+            $hourly = self::buildHourlyBreakdown($samples);
+
+            return [
+                'date' => $dayKey,
+                'day_short' => strtoupper(substr($day->format('D'), 0, 3)),
+                'is_today' => $day->isToday(),
+                'total_kwh' => round($total, 4),
+                'from_time' => '00:00',
+                'to_time' => $day->isToday() ? now()->format('H:i:s') : '23:59:59',
+                'avg_voltage' => round($avgVoltage, 1),
+                'socket_stats' => $socketStats,
+                'warnings' => [
+                    'high' => $samples->where('warning_level', 'high')->count(),
+                    'overload' => $samples->where('warning_level', 'overload')->count(),
+                ],
+                'intervals' => self::buildIntervals($samples, $sampleMinutes),
+                'hourly' => $hourly,
+            ];
+        });
     }
 
     public static function recentSamples(int $limit = 180): Collection
@@ -164,20 +170,7 @@ class EnergyReading extends Model
 
     private static function mongoCollection(): ?\MongoDB\Collection
     {
-        $uri = (string) config('esp32.mongodb.uri', '');
-        if ($uri === '') {
-            return null;
-        }
-
-        try {
-            $client = new Client($uri);
-
-            return $client
-                ->selectDatabase((string) config('esp32.mongodb.database', 'espData'))
-                ->selectCollection((string) config('esp32.mongodb.collection', 'readings'));
-        } catch (Throwable) {
-            return null;
-        }
+        return MongoConnection::selectCollection((string) config('esp32.mongodb.collection', 'readings'));
     }
 
     private static function mongoSamplesForDate(string $date): Collection
@@ -287,21 +280,27 @@ class EnergyReading extends Model
 
     private static function dailyEnergyStats(string $date): array
     {
-        $samples = self::mongoSamplesForDate($date);
-        if ($samples->isEmpty()) {
-            return ['socket_1' => 0.0, 'socket_2' => 0.0, 'socket_3' => 0.0, 'total' => 0.0];
-        }
+        $day = Carbon::parse($date)->startOfDay();
+        $dayKey = $day->toDateString();
+        $ttl = $day->isToday() ? now()->addSeconds(20) : now()->addHours(12);
 
-        $s1 = (float) $samples->sum('energy_socket_1');
-        $s2 = (float) $samples->sum('energy_socket_2');
-        $s3 = (float) $samples->sum('energy_socket_3');
+        return Cache::remember("energy.daily_stats.{$dayKey}", $ttl, function () use ($dayKey): array {
+            $samples = self::mongoSamplesForDate($dayKey);
+            if ($samples->isEmpty()) {
+                return ['socket_1' => 0.0, 'socket_2' => 0.0, 'socket_3' => 0.0, 'total' => 0.0];
+            }
 
-        return [
-            'socket_1' => $s1,
-            'socket_2' => $s2,
-            'socket_3' => $s3,
-            'total' => $s1 + $s2 + $s3,
-        ];
+            $s1 = (float) $samples->sum('energy_socket_1');
+            $s2 = (float) $samples->sum('energy_socket_2');
+            $s3 = (float) $samples->sum('energy_socket_3');
+
+            return [
+                'socket_1' => $s1,
+                'socket_2' => $s2,
+                'socket_3' => $s3,
+                'total' => $s1 + $s2 + $s3,
+            ];
+        });
     }
 
     /**

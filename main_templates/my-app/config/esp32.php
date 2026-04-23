@@ -22,6 +22,9 @@ return [
         'collection' => env('MONGODB_COLLECTION', 'readings'),
         'notifications_collection' => env('MONGODB_NOTIFICATIONS_COLLECTION', 'notifications'),
         'billing_invoices_bucket' => env('MONGODB_BILLING_INVOICES_BUCKET', 'billing_invoices'),
+        'server_selection_timeout_ms' => (int) env('MONGODB_SERVER_SELECTION_TIMEOUT_MS', 1500),
+        'connect_timeout_ms' => (int) env('MONGODB_CONNECT_TIMEOUT_MS', 1500),
+        'socket_timeout_ms' => (int) env('MONGODB_SOCKET_TIMEOUT_MS', 3000),
     ],
 
     'connection' => [
