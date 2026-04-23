@@ -179,7 +179,7 @@ const handleLogout = () => {
                     </summary>
 
                     <div class="space-y-1 px-2 pb-2">
-                        <a
+                        <Link
                             v-for="item in devicesNavItems"
                             :key="item.title"
                             :href="toUrl(item.href)"
@@ -191,7 +191,7 @@ const handleLogout = () => {
                             class="flex items-center rounded-xl px-3 py-2 text-[13px] transition lg:px-3.5 lg:py-2.5"
                         >
                             {{ item.title }}
-                        </a>
+                        </Link>
                     </div>
                 </details>
 

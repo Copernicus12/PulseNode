@@ -40,8 +40,14 @@ class MqttService
             if (!$this->client->isConnected()) {
                 $this->connect();
             }
-            
-            $this->client->publish($topic, json_encode($message));
+
+            if (is_string($message)) {
+                $payload = $message;
+            } else {
+                $payload = json_encode($message);
+            }
+
+            $this->client->publish($topic, $payload);
             return true;
         } catch (\Exception $e) {
             Log::error('MQTT Publish failed: ' . $e->getMessage());

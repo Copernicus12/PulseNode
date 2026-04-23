@@ -29,14 +29,25 @@ class MqttListener extends Command
     public function handle()
     {
         $this->info('Starting MQTT listener...');
-        
+
+        $host = (string) config('esp32.mqtt.host', 'broker.hivemq.com');
+        $port = (int) config('esp32.mqtt.port', 1883);
+        $username = config('esp32.mqtt.username');
+        $password = config('esp32.mqtt.password');
+
         $client = new MqttClient(
-            config('esp32.mqtt.host'),
-            config('esp32.mqtt.port')
+            $host,
+            $port,
+            'laravel-mqtt-listener-'.bin2hex(random_bytes(4))
         );
-        
-        // For public broker, we don't need credentials
+
         $connectionSettings = new ConnectionSettings();
+        if (is_string($username) && $username !== '') {
+            $connectionSettings = $connectionSettings->setUsername($username);
+        }
+        if (is_string($password) && $password !== '') {
+            $connectionSettings = $connectionSettings->setPassword($password);
+        }
         
         try {
             $client->connect($connectionSettings, true);

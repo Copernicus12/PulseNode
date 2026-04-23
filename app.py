@@ -5,6 +5,7 @@ import json
 import threading
 import time
 import os
+import ssl
 from datetime import datetime, timezone
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
@@ -45,17 +46,63 @@ MQTT_TOPIC_CMD  = "razvy_esp32_2026/cmd"
 MONGO_URI = os.getenv("MONGO_URI") or os.getenv("MONGODB_URI")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME") or os.getenv("MONGODB_DATABASE", "espData")
 MONGO_COLLECTION = os.getenv("MONGO_COLLECTION") or os.getenv("MONGODB_COLLECTION", "readings")
+MONGO_TLS_CA_FILE = os.getenv("MONGO_TLS_CA_FILE")
 
 mongo_client = None
 mongo_collection = None
+mongo_ready = False
+mongo_lock = threading.Lock()
+
+
+def build_mongo_kwargs():
+    kwargs = {
+        "server_api": ServerApi("1"),
+        "serverSelectionTimeoutMS": 5000,
+        "connectTimeoutMS": 5000,
+        "socketTimeoutMS": 5000,
+    }
+
+    tls_options = {
+        "tls": True,
+    }
+
+    if MONGO_TLS_CA_FILE:
+        tls_options["tlsCAFile"] = MONGO_TLS_CA_FILE
+    else:
+        try:
+            import certifi
+
+            tls_options["tlsCAFile"] = certifi.where()
+        except Exception:
+            # Fall back to the platform trust store if certifi is unavailable.
+            pass
+
+    kwargs.update(tls_options)
+    return kwargs
 
 
 def init_mongo():
-    global mongo_client, mongo_collection
+    global mongo_client, mongo_collection, mongo_ready
     if not MONGO_URI:
-        raise RuntimeError("Mongo URI missing. Set MONGO_URI or MONGODB_URI in environment.")
-    mongo_client = MongoClient(MONGO_URI, server_api=ServerApi("1"))
-    mongo_collection = mongo_client[MONGO_DB_NAME][MONGO_COLLECTION]
+        mongo_ready = False
+        mongo_client = None
+        mongo_collection = None
+        print("MongoDB disabled: set MONGO_URI or MONGODB_URI to enable persistence.")
+        return False
+
+    try:
+        mongo_client = MongoClient(MONGO_URI, **build_mongo_kwargs())
+        mongo_collection = mongo_client[MONGO_DB_NAME][MONGO_COLLECTION]
+        mongo_client.admin.command("ping")
+        mongo_ready = True
+        print("MongoDB connection is ready.")
+        return True
+    except Exception as e:
+        mongo_ready = False
+        mongo_client = None
+        mongo_collection = None
+        print(f"MongoDB connection failed: {e}")
+        return False
 
 
 init_mongo()
@@ -83,12 +130,13 @@ def on_message(client, userdata, msg):
             "received_at": datetime.now(timezone.utc),
             "payload": payload,
         }
-        try:
-            mongo_collection.insert_one(document)
-        except Exception:
-            # Recreate Mongo client on transient failures and retry once.
-            init_mongo()
-            mongo_collection.insert_one(document)
+        if mongo_ready and mongo_collection is not None:
+            try:
+                mongo_collection.insert_one(document)
+            except Exception as e:
+                print(f"[mongo] insert failed: {e}")
+                with mongo_lock:
+                    init_mongo()
     except Exception as e:
         print(f"[on_message] failed to process message: {e}")
 
@@ -105,7 +153,7 @@ def on_disconnect(client, userdata, reason_code, properties=None):
     print(f"[mqtt] disconnected, rc={reason_code}")
 
 def mqtt_thread():
-    c = mqtt.Client(protocol=mqtt.MQTTv311)
+    c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, protocol=mqtt.MQTTv311)
     c.on_message = on_message
     c.on_connect = on_connect
     c.on_disconnect = on_disconnect
@@ -120,6 +168,17 @@ def mqtt_thread():
             time.sleep(3)
 
 threading.Thread(target=mqtt_thread, daemon=True).start()
+
+
+def mongo_retry_thread():
+    while True:
+        if not mongo_ready:
+            with mongo_lock:
+                init_mongo()
+        time.sleep(30)
+
+
+threading.Thread(target=mongo_retry_thread, daemon=True).start()
 
 @app.route("/")
 def index():
@@ -136,10 +195,9 @@ def api_relay(state):
     return jsonify({"status": "ok", "sent": payload})
 
 if __name__ == "__main__":
-    try:
-        mongo_client.admin.command("ping")
+    if mongo_ready:
         print("MongoDB connection is ready.")
-    except Exception as e:
-        print(f"MongoDB connection failed: {e}")
+    else:
+        print("MongoDB unavailable; running without persistence.")
 
     app.run(host="0.0.0.0", port=5001)

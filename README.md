@@ -99,3 +99,26 @@ This repository contains two parts:
 - `requirements.txt` is only for the Python part of the repo.
 - Laravel dependencies stay in `composer.json` and `package.json` inside `main_templates/my-app`.
 - The invoice archive uses MongoDB GridFS bucket `billing_invoices` by default.
+
+## ESP32 Provisioning
+
+The ESP32 sketch lives in `cod_esp_32.ino` and now uses BLE provisioning for Wi-Fi setup on ESP32-S3.
+
+- Bluetooth Classic is not used on ESP32-S3; provisioning is done over BLE.
+- Up to 5 Wi-Fi profiles are stored in NVS and the active profile is remembered.
+- On boot, the sketch tries the active profile first and then the other saved profiles.
+- If you move the extender to a different place, you can switch the active profile from BLE without reflashing.
+
+BLE command format:
+
+- `HELP`
+- `LIST`
+- `STATUS`
+- `SAVE|slot|name|ssid|password|priority|enabled`
+- `USE|slot`
+- `CONNECT|slot`
+- `DEL|slot`
+- `ENABLE|slot|0|1`
+- `AUTO`
+
+Use `|` as the separator and avoid `|` inside values.

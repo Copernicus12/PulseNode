@@ -15,6 +15,7 @@ Fiecare priză are telemetrie separată (curent, putere estimată), iar aplicaț
 - Senzori curent: ACS712 (1 per priză).
 - Număr prize monitorizate: 3.
 - Comunicare: MQTT + ingest HTTP către backend.
+- Provisioning Wi-Fi pe ESP32: BLE GATT, cu profiluri multiple salvate în NVS și profil activ selectabil.
 
 ## Arhitectură software (stare curentă)
 - Backend: Laravel 12.
@@ -64,6 +65,12 @@ Fiecare priză are telemetrie separată (curent, putere estimată), iar aplicaț
 - Politica de guard și notițele sunt persistate în `localStorage`, iar acțiunile folosesc funcțiile JS existente (`saveGuardPolicy`, `simulateGuard`).
 - În layout există quick actions suplimentare: navigare rapidă, `Turn all on/off`, `Open raw payload`, `Restart MQTT listener`.
 - `vite.config.ts` include explicit plugin-urile Vue + Wayfinder și entrypoint-ul nou pentru Safety Guard.
+
+## Actualizări ESP32 (23 aprilie 2026)
+- Sketch-ul `cod_esp_32.ino` a fost mutat pe provisioning BLE pentru ESP32-S3.
+- Wi-Fi credentials sunt salvate ca profiluri multiple în NVS.
+- La pornire, firmware-ul încearcă profilul activ și apoi celelalte profile salvate.
+- Provisioning-ul BLE expune comenzi text: `HELP`, `LIST`, `SAVE`, `USE`, `CONNECT`, `DEL`, `ENABLE`, `AUTO`.
 
 ## Update major pe History (12 martie 2026)
 - Selectorul vechi pe săptămâna calendaristică a fost înlocuit cu `Day selector` bazat pe `anchor_date`.

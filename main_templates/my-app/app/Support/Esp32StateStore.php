@@ -74,7 +74,7 @@ class Esp32StateStore
     {
         $latest = $this->latest();
         $state = $this->normalize(array_merge($latest, $payload));
-        $state['updated_at'] = $latest['updated_at'] ?? null;
+        $state['updated_at'] = now()->toIso8601String();
 
         return $this->persist($state, 'command');
     }
