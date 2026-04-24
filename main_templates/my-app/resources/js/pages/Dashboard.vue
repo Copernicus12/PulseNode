@@ -583,7 +583,7 @@
     </AppLayout>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import AppLayout from '@/layouts/AppLayout.vue'
 import axios from 'axios'

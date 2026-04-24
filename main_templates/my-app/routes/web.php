@@ -9,13 +9,33 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
 
-Route::get('/', function () {
+Route::get('/', function (\App\Support\Esp32StateStore $store, \App\Support\Esp32ConnectionHealth $health) {
     if (auth()->check()) {
         return redirect()->route('dashboard');
     }
 
+    $latest = $store->latest();
+    $isOnline = $health->isOnline($latest);
+
     return Inertia::render('Welcome', [
         'canRegister' => Features::enabled(Features::registration()),
+        'telemetry' => [
+            'voltage' => round((float) ($latest['voltage'] ?? 0), 1),
+            'power' => max(0.0, round((float) ($latest['power'] ?? 0), 1)),
+            'energy_total' => round((float) ($latest['energy'] ?? 0), 2),
+            'active_relays' => count(array_filter([
+                $latest['relay_1'] ?? false,
+                $latest['relay_2'] ?? false,
+                $latest['relay_3'] ?? false,
+            ])),
+        ],
+        'energyUsage' => \App\Models\EnergyReading::historyPayload(),
+        'isOnline' => $isOnline,
+        'stats' => [
+            'users' => \App\Models\MongoUser::count(),
+            'devices' => \App\Models\DeviceProfile::count(),
+            'detections' => \App\Models\DeviceDetection::count(),
+        ]
     ]);
 })->name('home');
 

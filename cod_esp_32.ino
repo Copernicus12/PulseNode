@@ -71,9 +71,9 @@ struct WifiScanMatch {
 // =====================================================
 // HARDWARE - ESP32-S3
 // =====================================================
-#define ACS1_PIN    4
-#define ACS2_PIN    5
-#define ACS3_PIN    6
+#define ACS1_PIN    6
+#define ACS2_PIN    4
+#define ACS3_PIN    5
 
 #define VOLTAGE_PIN 7
 
