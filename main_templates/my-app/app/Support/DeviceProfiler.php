@@ -32,7 +32,7 @@ class DeviceProfiler
             return null;
         }
 
-        $powers = $active->map(fn (object $sample): float => (float) $sample->{$powerColumn});
+        $powers = $active->map(fn (object $sample): float => max(0.0, (float) $sample->{$powerColumn}));
         $currents = $active->map(fn (object $sample): float => (float) $sample->{$currentColumn});
 
         $avgPower = round((float) $powers->avg(), 2);
@@ -283,10 +283,10 @@ class DeviceProfiler
             'name' => $attributes['name'],
             'category' => $attributes['category'],
             'notes' => $attributes['notes'] ?? null,
-            'expected_power_min' => max(0, round($signature['avg_power_w'] * 0.7, 2)),
-            'expected_power_max' => round(max($signature['peak_power_w'], $signature['avg_power_w'] * 1.3), 2),
-            'avg_power_w' => $signature['avg_power_w'],
-            'peak_power_w' => $signature['peak_power_w'],
+            'expected_power_min' => max(0, round(max(0.0, $signature['avg_power_w']) * 0.7, 2)),
+            'expected_power_max' => round(max(max(0.0, $signature['peak_power_w']), max(0.0, $signature['avg_power_w']) * 1.3), 2),
+            'avg_power_w' => max(0.0, $signature['avg_power_w']),
+            'peak_power_w' => max(0.0, $signature['peak_power_w']),
             'avg_current_a' => $signature['avg_current_a'],
             'variability_pct' => $signature['variability_pct'],
             'startup_ratio' => $signature['startup_ratio'],

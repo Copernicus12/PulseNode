@@ -27,6 +27,8 @@ use Illuminate\View\View;
 
 class PowerStripController extends Controller
 {
+    private const CURRENT_DISPLAY_THRESHOLD_A = 0.05;
+
     /**
      * Main power-strip monitoring dashboard.
      */
@@ -308,8 +310,8 @@ class PowerStripController extends Controller
                 'label' => 'Socket 1',
                 'is_on' => (bool) ($latest['relay_1'] ?? false),
                 'voltage' => round((float) ($latest['voltage'] ?? 0), 1),
-                'current' => round((float) ($latest['current_1'] ?? 0), 3),
-                'power_w' => round((float) ($latest['power_1'] ?? 0), 1),
+                'current' => $this->displayCurrent((float) ($latest['current_1'] ?? 0)),
+                'power_w' => max(0.0, round((float) ($latest['power_1'] ?? 0), 1)),
                 'energy_kwh' => round((float) ($latest['energy'] ?? 0), 3),
                 'status' => $this->deriveSocketStatus($latest, 1, $connectionHealth),
                 'updated_at' => $latest['updated_at'] ?? null,
@@ -319,8 +321,8 @@ class PowerStripController extends Controller
                 'label' => 'Socket 2',
                 'is_on' => (bool) ($latest['relay_2'] ?? false),
                 'voltage' => round((float) ($latest['voltage'] ?? 0), 1),
-                'current' => round((float) ($latest['current_2'] ?? 0), 3),
-                'power_w' => round((float) ($latest['power_2'] ?? 0), 1),
+                'current' => $this->displayCurrent((float) ($latest['current_2'] ?? 0)),
+                'power_w' => max(0.0, round((float) ($latest['power_2'] ?? 0), 1)),
                 'energy_kwh' => round((float) ($latest['energy'] ?? 0), 3),
                 'status' => $this->deriveSocketStatus($latest, 2, $connectionHealth),
                 'updated_at' => $latest['updated_at'] ?? null,
@@ -330,8 +332,8 @@ class PowerStripController extends Controller
                 'label' => 'Socket 3',
                 'is_on' => (bool) ($latest['relay_3'] ?? false),
                 'voltage' => round((float) ($latest['voltage'] ?? 0), 1),
-                'current' => round((float) ($latest['current_3'] ?? 0), 3),
-                'power_w' => round((float) ($latest['power_3'] ?? 0), 1),
+                'current' => $this->displayCurrent((float) ($latest['current_3'] ?? 0)),
+                'power_w' => max(0.0, round((float) ($latest['power_3'] ?? 0), 1)),
                 'energy_kwh' => round((float) ($latest['energy'] ?? 0), 3),
                 'status' => $this->deriveSocketStatus($latest, 3, $connectionHealth),
                 'updated_at' => $latest['updated_at'] ?? null,
@@ -339,7 +341,7 @@ class PowerStripController extends Controller
         ];
 
         $activeSockets = collect($sockets)->where('is_on', true)->count();
-        $totalPower = collect($sockets)->sum('power_w');
+        $totalPower = max(0.0, (float) collect($sockets)->sum('power_w'));
         $totalEnergy = collect($sockets)->sum('energy_kwh');
         $systemStatus = $this->deriveSystemStatus($latest, $connectionHealth);
 
@@ -567,7 +569,7 @@ class PowerStripController extends Controller
             return 'off';
         }
 
-        $power = (float) ($latest["power_{$index}"] ?? 0);
+        $power = max(0.0, (float) ($latest["power_{$index}"] ?? 0));
         if ($power <= 0.1) {
             return 'idle';
         }
@@ -588,7 +590,7 @@ class PowerStripController extends Controller
             return 'offline';
         }
 
-        $power = (float) ($latest['power'] ?? 0);
+        $power = max(0.0, (float) ($latest['power'] ?? 0));
         if ($power > 2500) {
             return 'warning';
         }
@@ -608,5 +610,14 @@ class PowerStripController extends Controller
             })
             ->where('is_active', true)
             ->update(['is_active' => false]);
+    }
+
+    private function displayCurrent(float $current): float
+    {
+        if (abs($current) < self::CURRENT_DISPLAY_THRESHOLD_A) {
+            return 0.0;
+        }
+
+        return round($current, 3);
     }
 }

@@ -371,13 +371,18 @@ function resolveSocketStatus(isOn, powerW) {
     return { label: 'Normal', dotClass: 'bg-emerald-500' };
 }
 
+function displayCurrent(value) {
+    var current = asNumber(value);
+    return Math.abs(current) < 0.05 ? 0 : current;
+}
+
 function setPowerStripSocketLoad(idx, active, currentValue) {
     var load = document.getElementById('socket-load-' + idx);
     var knob = document.getElementById('socket-load-knob-' + idx);
     var icon = document.getElementById('socket-load-icon-' + idx);
     if (!load) return;
 
-    var pct = active ? Math.max(15, Math.min(95, (currentValue / 5) * 100)) : 0;
+    var pct = active ? Math.max(15, Math.min(95, (Math.abs(currentValue) / 5) * 100)) : 0;
     load.style.width = 'max(2.75rem, ' + pct + '%)';
     load.classList.toggle('bg-primary/15', !!active);
 
@@ -615,7 +620,7 @@ function applyLatestMetrics(d) {
     powerStripLiveIsOnline = true;
 
     var el = function(id) { return document.getElementById(id); };
-    if (el('total-power')) el('total-power').innerHTML = parseFloat(d.power || 0).toFixed(1) + powerStripUnit('W');
+    if (el('total-power')) el('total-power').innerHTML = Math.max(0, parseFloat(d.power || 0)).toFixed(1) + powerStripUnit('W');
     if (el('total-energy')) el('total-energy').innerHTML = parseFloat(d.energy || 0).toFixed(3) + powerStripUnit('kWh');
     if (el('active-sockets')) {
         var count = 0;
@@ -630,8 +635,8 @@ function applyLatestMetrics(d) {
         relayState[idx] = relayOn;
         setSocketToggleState(idx, relayOn, false);
 
-        var current = asNumber(d['current_' + idx]);
-        var power = d['power_' + idx] !== undefined ? asNumber(d['power_' + idx]) : voltage * current;
+        var current = displayCurrent(d['current_' + idx]);
+        var power = d['power_' + idx] !== undefined ? Math.max(0, asNumber(d['power_' + idx])) : Math.max(0, voltage * current);
         var status = resolveSocketStatus(relayOn, power);
 
         var currentEl = el('socket-current-' + idx);
@@ -658,7 +663,7 @@ function applyLatestMetrics(d) {
         var updatedEl = el('socket-updated-' + idx);
         if (updatedEl) updatedEl.textContent = formatUpdatedLabel(d.updated_at);
 
-        setPowerStripSocketLoad(idx, relayOn && current > 0.01, current);
+        setPowerStripSocketLoad(idx, relayOn && Math.abs(current) >= 0.05, current);
     });
 }
 

@@ -297,6 +297,10 @@ function fmt(value: unknown, digits = 1): string {
   return number(value).toFixed(digits)
 }
 
+function fmtPower(value: unknown, digits = 1): string {
+  return Math.max(0, number(value)).toFixed(digits)
+}
+
 function fmtEnergy(value: unknown): string {
   const kwh = number(value)
   if (kwh >= 0.01) {
@@ -747,7 +751,7 @@ onUnmounted(() => {
                   {{ fmtEnergy(hour.energy_kwh) }}
                 </p>
                 <p class="mt-1 text-xs text-muted-foreground">
-                  Avg {{ fmt(hour.avg_power_w, 1) }} W · Peak {{ fmt(hour.peak_power_w, 1) }} W
+                  Avg {{ fmtPower(hour.avg_power_w, 1) }} W · Peak {{ fmtPower(hour.peak_power_w, 1) }} W
                 </p>
                 <p class="mt-3 text-xs font-medium text-primary">
                   Open details
@@ -809,7 +813,7 @@ onUnmounted(() => {
                     {{ socket.name }}
                   </p>
                   <p class="text-xs text-muted-foreground">
-                    Avg {{ fmt(socket.avg_power_w, 1) }} W · Peak {{ fmt(socket.peak_power_w, 1) }} W
+                    Avg {{ fmtPower(socket.avg_power_w, 1) }} W · Peak {{ fmtPower(socket.peak_power_w, 1) }} W
                   </p>
                 </div>
                 <p class="text-sm font-semibold tabular-nums">
@@ -1024,7 +1028,7 @@ onUnmounted(() => {
                 Avg / Peak
               </p>
               <p class="mt-1 text-base font-semibold tabular-nums">
-                {{ fmt(selectedMinute?.avg_power_w ?? selectedHour.avg_power_w, 1) }} / {{ fmt(selectedMinute?.peak_power_w ?? selectedHour.peak_power_w, 1) }} W
+                {{ fmtPower(selectedMinute?.avg_power_w ?? selectedHour.avg_power_w, 1) }} / {{ fmtPower(selectedMinute?.peak_power_w ?? selectedHour.peak_power_w, 1) }} W
               </p>
             </div>
           </div>
@@ -1066,7 +1070,7 @@ onUnmounted(() => {
                   {{ fmtEnergy(minute.energy_kwh) }}
                 </p>
                 <p class="mt-1 text-[11px] text-muted-foreground">
-                  Avg {{ fmt(minute.avg_power_w, 1) }} W · Peak {{ fmt(minute.peak_power_w, 1) }} W
+                  Avg {{ fmtPower(minute.avg_power_w, 1) }} W · Peak {{ fmtPower(minute.peak_power_w, 1) }} W
                 </p>
                 <p class="mt-2 text-xs font-medium text-primary">
                   {{ minute.seconds?.length ?? 0 }} second samples
@@ -1147,7 +1151,7 @@ onUnmounted(() => {
                   {{ fmtEnergy(second.energy_kwh) }}
                 </p>
                 <p class="mt-1 text-[11px] text-muted-foreground">
-                  Avg {{ fmt(second.avg_power_w, 1) }} W · Peak {{ fmt(second.peak_power_w, 1) }} W
+                  Avg {{ fmtPower(second.avg_power_w, 1) }} W · Peak {{ fmtPower(second.peak_power_w, 1) }} W
                 </p>
               </div>
             </div>

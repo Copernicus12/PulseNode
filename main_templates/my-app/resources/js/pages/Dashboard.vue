@@ -601,11 +601,19 @@ const rawData = ref({})
 const lastUpdate = ref('Never')
 const updateInterval = ref(null)
 const isConnected = ref(false)
+const CURRENT_DISPLAY_THRESHOLD_A = 0.05
+
+function displayCurrent(value: unknown): number {
+    const current = Number(value ?? 0)
+    return Number.isFinite(current) && Math.abs(current) >= CURRENT_DISPLAY_THRESHOLD_A
+        ? current
+        : 0
+}
 
 // Computed values
 const voltage = computed(() => rawData.value.voltage?.toFixed(2) || '0.00')
-const current = computed(() => rawData.value.current?.toFixed(2) || '0.00')
-const power = computed(() => rawData.value.power?.toFixed(2) || '0.00')
+const current = computed(() => displayCurrent(rawData.value.current).toFixed(2))
+const power = computed(() => Math.max(0, Number(rawData.value.power ?? 0)).toFixed(2))
 const relayState = computed(() => ({
     1: Boolean(rawData.value.relay_1),
     2: Boolean(rawData.value.relay_2),

@@ -133,17 +133,22 @@ class Esp32StateStore
 
     private function normalize(array $payload): array
     {
+        $power = max(0.0, (float) ($payload['power'] ?? 0));
+        $power1 = max(0.0, (float) ($payload['power_1'] ?? 0));
+        $power2 = max(0.0, (float) ($payload['power_2'] ?? 0));
+        $power3 = max(0.0, (float) ($payload['power_3'] ?? 0));
+
         return [
             'voltage' => (float) ($payload['voltage'] ?? 0),
             'current' => (float) ($payload['current'] ?? 0),
             'current_1' => (float) ($payload['current_1'] ?? 0),
             'current_2' => (float) ($payload['current_2'] ?? 0),
             'current_3' => (float) ($payload['current_3'] ?? 0),
-            'power' => (float) ($payload['power'] ?? 0),
-            'power_1' => (float) ($payload['power_1'] ?? 0),
-            'power_2' => (float) ($payload['power_2'] ?? 0),
-            'power_3' => (float) ($payload['power_3'] ?? 0),
-            'energy' => (float) ($payload['energy'] ?? 0),
+            'power' => $power,
+            'power_1' => $power1,
+            'power_2' => $power2,
+            'power_3' => $power3,
+            'energy' => max(0.0, (float) ($payload['energy'] ?? 0)),
             'relay_1' => (bool) ($payload['relay_1'] ?? false),
             'relay_2' => (bool) ($payload['relay_2'] ?? false),
             'relay_3' => (bool) ($payload['relay_3'] ?? false),

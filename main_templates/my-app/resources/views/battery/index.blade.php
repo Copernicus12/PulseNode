@@ -272,7 +272,7 @@
         if (syncEl) syncEl.textContent = lastSeenLabel(data.updated_at);
 
         var drawEl = document.getElementById('battery-live-draw');
-        if (drawEl) drawEl.textContent = asNumber(data.power).toFixed(1);
+        if (drawEl) drawEl.textContent = Math.max(0, asNumber(data.power)).toFixed(1);
     });
 })();
 </script>

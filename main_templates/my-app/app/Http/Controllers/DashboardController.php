@@ -14,6 +14,8 @@ use Throwable;
 
 class DashboardController extends Controller
 {
+    private const CURRENT_DISPLAY_THRESHOLD_A = 0.05;
+
     public function __invoke(
         Request $request,
         Esp32StateStore $store,
@@ -38,17 +40,17 @@ class DashboardController extends Controller
 
         // ── Key metrics ───────────────────────────────────────────────
         $voltage  = round((float) $latest['voltage'], 1);
-        $current  = round((float) $latest['current'], 3);
-        $power    = round((float) $latest['power'], 1);
+        $power    = max(0.0, round((float) $latest['power'], 1));
         $energy   = round((float) $latest['energy'], 4);
 
         // Per-socket currents
-        $current1 = round((float) ($latest['current_1'] ?? 0), 3);
-        $current2 = round((float) ($latest['current_2'] ?? 0), 3);
-        $current3 = round((float) ($latest['current_3'] ?? 0), 3);
-        $power1 = round((float) ($latest['power_1'] ?? 0), 1);
-        $power2 = round((float) ($latest['power_2'] ?? 0), 1);
-        $power3 = round((float) ($latest['power_3'] ?? 0), 1);
+        $current1 = $this->displayCurrent((float) ($latest['current_1'] ?? 0));
+        $current2 = $this->displayCurrent((float) ($latest['current_2'] ?? 0));
+        $current3 = $this->displayCurrent((float) ($latest['current_3'] ?? 0));
+        $current = round($current1 + $current2 + $current3, 3);
+        $power1 = max(0.0, round((float) ($latest['power_1'] ?? 0), 1));
+        $power2 = max(0.0, round((float) ($latest['power_2'] ?? 0), 1));
+        $power3 = max(0.0, round((float) ($latest['power_3'] ?? 0), 1));
 
         // ── Relay states ──────────────────────────────────────────────
         $relays = [
@@ -124,5 +126,14 @@ class DashboardController extends Controller
             'energyUsage',
             'dashboardBilling',
         ));
+    }
+
+    private function displayCurrent(float $current): float
+    {
+        if (abs($current) < self::CURRENT_DISPLAY_THRESHOLD_A) {
+            return 0.0;
+        }
+
+        return round($current, 3);
     }
 }

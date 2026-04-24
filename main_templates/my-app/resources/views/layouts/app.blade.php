@@ -1390,6 +1390,11 @@
                 return Number.isFinite(n) ? n : 0;
             }
 
+            function displayCurrent(v) {
+                var current = asNumber(v);
+                return Math.abs(current) < 0.05 ? 0 : current;
+            }
+
             function isOnline(updatedAt) {
                 if (!updatedAt) return false;
                 var t = Date.parse(updatedAt);
@@ -1404,8 +1409,8 @@
             }
 
             function applyLatest(data) {
-                var p = asNumber(data && data.power);
-                var c = asNumber(data && data.current);
+                var p = Math.max(0, asNumber(data && data.power));
+                var c = displayCurrent(data && data.current);
                 if (hasTelemetryWidget) {
                     power.textContent = p.toFixed(1) + 'W';
                     current.textContent = c.toFixed(3) + 'A';

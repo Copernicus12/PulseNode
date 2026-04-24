@@ -152,7 +152,7 @@
                         @endif
                     </span>
                 </div>
-                @php $hasLoad1 = $isOnline && $on1 && ((float) $s1['current'] > 0.01); $pct1 = $hasLoad1 ? max(15, min(95, ($s1['current'] / max(5, $current ?: 1)) * 100)) : 0; @endphp
+                @php $hasLoad1 = $isOnline && $on1 && (abs((float) $s1['current']) >= 0.05); $pct1 = $hasLoad1 ? max(15, min(95, (abs((float) $s1['current']) / max(5, $current ?: 1)) * 100)) : 0; @endphp
                 <div class="mt-5 h-11 w-full rounded-full bg-muted">
                     <div id="dash-socket-load-1" class="flex h-full items-center rounded-full px-1.5 transition-all duration-700 {{ $hasLoad1 ? 'bg-primary/15' : '' }}" style="width: max(2.75rem, {{ $pct1 }}%)">
                         <span class="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow transition-colors duration-700 {{ $on1 ? 'bg-primary/30 ring-1 ring-primary/20' : 'bg-muted-foreground/20' }}">
@@ -188,7 +188,7 @@
                         @endif
                     </span>
                 </div>
-                @php $hasLoad2 = $isOnline && $on2 && ((float) $s2['current'] > 0.01); $pct2 = $hasLoad2 ? max(15, min(95, ($s2['current'] / max(5, $current ?: 1)) * 100)) : 0; @endphp
+                @php $hasLoad2 = $isOnline && $on2 && (abs((float) $s2['current']) >= 0.05); $pct2 = $hasLoad2 ? max(15, min(95, (abs((float) $s2['current']) / max(5, $current ?: 1)) * 100)) : 0; @endphp
                 <div class="mt-5 h-11 w-full rounded-full bg-muted">
                     <div id="dash-socket-load-2" class="flex h-full items-center rounded-full px-1.5 transition-all duration-700 {{ $hasLoad2 ? 'bg-primary/15' : '' }}" style="width: max(2.75rem, {{ $pct2 }}%)">
                         <span class="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow transition-colors duration-700 {{ $on2 ? 'bg-primary/30 ring-1 ring-primary/20' : 'bg-muted-foreground/20' }}">
@@ -224,7 +224,7 @@
                         @endif
                     </span>
                 </div>
-                @php $hasLoad3 = $isOnline && $on3 && ((float) $s3['current'] > 0.01); $pct3 = $hasLoad3 ? max(15, min(95, ($s3['current'] / max(5, $current ?: 1)) * 100)) : 0; @endphp
+                @php $hasLoad3 = $isOnline && $on3 && (abs((float) $s3['current']) >= 0.05); $pct3 = $hasLoad3 ? max(15, min(95, (abs((float) $s3['current']) / max(5, $current ?: 1)) * 100)) : 0; @endphp
                 <div class="mt-5 h-11 w-full rounded-full bg-muted">
                     <div id="dash-socket-load-3" class="flex h-full items-center rounded-full px-1.5 transition-all duration-700 {{ $hasLoad3 ? 'bg-primary/15' : '' }}" style="width: max(2.75rem, {{ $pct3 }}%)">
                         <span class="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full shadow transition-colors duration-700 {{ $on3 ? 'bg-primary/30 ring-1 ring-primary/20' : 'bg-muted-foreground/20' }}">
@@ -409,6 +409,12 @@ function dashboardUnit(unit) {
     return ' <span class="text-sm font-normal text-muted-foreground">' + unit + '</span>';
 }
 
+function displayCurrent(value) {
+    var current = Number(value ?? 0);
+    if (!Number.isFinite(current)) current = 0;
+    return Math.abs(current) < 0.05 ? 0 : current;
+}
+
 function setDashboardSocketLoad(idx, active, currentValue, totalCurrent) {
     var load = document.getElementById('dash-socket-load-' + idx);
     if (!load) return;
@@ -417,7 +423,7 @@ function setDashboardSocketLoad(idx, active, currentValue, totalCurrent) {
 
     var pct = 0;
     if (active) {
-        pct = Math.max(15, Math.min(95, (currentValue / Math.max(5, totalCurrent || 1)) * 100));
+        pct = Math.max(15, Math.min(95, (Math.abs(currentValue) / Math.max(5, Math.abs(totalCurrent) || 1)) * 100));
     }
 
     load.style.width = 'max(2.75rem, ' + pct + '%)';
@@ -842,21 +848,22 @@ function applyLatestDashboard(d) {
 
     var el = function(id) { return document.getElementById(id); };
     if (el('dash-voltage')) el('dash-voltage').innerHTML = parseFloat(d.voltage || 0).toFixed(1) + dashboardUnit('V');
-    if (el('dash-current')) el('dash-current').innerHTML = parseFloat(d.current || 0).toFixed(3) + dashboardUnit('A');
-    if (el('dash-power')) el('dash-power').innerHTML = parseFloat(d.power || 0).toFixed(1) + dashboardUnit('W');
+    if (el('dash-current')) el('dash-current').innerHTML = displayCurrent(d.current).toFixed(3) + dashboardUnit('A');
+    if (el('dash-power')) el('dash-power').innerHTML = Math.max(0, parseFloat(d.power || 0)).toFixed(1) + dashboardUnit('W');
     if (el('dash-energy')) el('dash-energy').innerHTML = parseFloat(d.energy || 0).toFixed(4) + dashboardUnit('kWh');
     if (el('dash-energy-total')) el('dash-energy-total').innerHTML = parseFloat(d.energy || 0).toFixed(4) + dashboardUnit('kWh');
     applyDashboardBilling(dashboardBillingState);
 
-    var totalCurrent = parseFloat(d.current || 0);
+    var totalCurrent = 0;
 
     [1, 2, 3].forEach(function(idx) {
         var relayOn = Boolean(d['relay_' + idx]);
         dashboardRelayState[idx] = relayOn;
         setDashboardToggleState(idx, relayOn, false);
 
-        var current = parseFloat(d['current_' + idx] || 0);
-        var power = parseFloat(d['power_' + idx] || 0);
+        var current = displayCurrent(d['current_' + idx]);
+        var power = Math.max(0, parseFloat(d['power_' + idx] || 0));
+        totalCurrent += current;
 
         var currentEl = el('dash-socket-current-' + idx);
         if (currentEl) currentEl.textContent = current.toFixed(3) + ' A';
@@ -864,7 +871,7 @@ function applyLatestDashboard(d) {
         var powerEl = el('dash-socket-power-' + idx);
         if (powerEl) powerEl.innerHTML = power.toFixed(1) + dashboardUnit('W');
 
-        setDashboardSocketLoad(idx, relayOn && current > 0.01, current, totalCurrent);
+        setDashboardSocketLoad(idx, relayOn && Math.abs(current) >= 0.05, current, totalCurrent);
     });
 }
 

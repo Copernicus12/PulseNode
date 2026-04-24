@@ -10,6 +10,8 @@
     $energyKwh = $socket['energy_kwh'];
     $status    = $socket['status'];
     $updatedAt = $socket['updated_at'];
+    $currentThreshold = 0.05;
+    $displayCurrent = abs((float) $current) < $currentThreshold ? 0.0 : round((float) $current, 3);
 
     $gpioMap   = [1 => 15, 2 => 16, 3 => 17];
     $gpio      = $gpioMap[$idx] ?? '—';
@@ -17,8 +19,8 @@
     $timeAgo = $updatedAt ? \Carbon\Carbon::parse($updatedAt)->diffForHumans() : 'No data';
 
     $maxCurrent = 5;
-    $hasLoad = $isOnline && $isOn && ((float) $current > 0.01);
-    $pct = $hasLoad ? max(15, min(95, ($current / $maxCurrent) * 100)) : 0;
+    $hasLoad = $isOnline && $isOn && (abs((float) $displayCurrent) >= $currentThreshold);
+    $pct = $hasLoad ? max(15, min(95, (abs($displayCurrent) / $maxCurrent) * 100)) : 0;
 
     $statusDot = match($status) {
         'normal'    => 'bg-emerald-500',
@@ -70,7 +72,7 @@
     {{-- Values --}}
     <div class="mt-6 flex items-baseline justify-between">
         <span id="socket-current-{{ $idx }}" class="text-sm text-muted-foreground">
-            {{ $isOnline ? number_format($current, 3) . ' A' : 'Unavailable' }}
+            {{ $isOnline ? number_format($displayCurrent, 3) . ' A' : 'Unavailable' }}
         </span>
         <span id="socket-power-{{ $idx }}" class="text-2xl font-bold tabular-nums">
             @if($isOnline)

@@ -1133,6 +1133,10 @@ Measurements measurePower() {
       if (m.activePowerW[i] > 0.0f) m.activePowerW[i] = 0.0f;
     }
 
+    if (m.activePowerW[i] < 0.0f) {
+      m.activePowerW[i] = 0.0f;
+    }
+
     m.apparentPowerVA[i] = m.voltageRMS * m.currentRMS[i];
 
     if (m.apparentPowerVA[i] > 0.5f) {
@@ -1385,25 +1389,12 @@ void publishMQTT() {
     meas.currentRMS[2]
   };
   float publishPower[NUM_CHANNELS] = {
-    meas.activePowerW[0],
-    meas.activePowerW[1],
-    meas.activePowerW[2]
+    meas.activePowerW[0] < 0.0f ? 0.0f : meas.activePowerW[0],
+    meas.activePowerW[1] < 0.0f ? 0.0f : meas.activePowerW[1],
+    meas.activePowerW[2] < 0.0f ? 0.0f : meas.activePowerW[2]
   };
   float totalCurrent = meas.totalCurrentRMS;
-  float totalPower = meas.totalActivePowerW;
-
-  for (int i = 0; i < NUM_CHANNELS; i++) {
-    if (publishPower[i] == 0.0f) {
-      publishCurrent[i] = 0.0f;
-    }
-  }
-
-  totalCurrent = publishCurrent[0] + publishCurrent[1] + publishCurrent[2];
-  totalPower = publishPower[0] + publishPower[1] + publishPower[2];
-
-  if (totalPower == 0.0f) {
-    totalCurrent = 0.0f;
-  }
+  float totalPower = publishPower[0] + publishPower[1] + publishPower[2];
 
   char payload[384];
   snprintf(payload, sizeof(payload),

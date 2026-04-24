@@ -93,6 +93,15 @@ let notificationsTimer: number | undefined;
 let telemetryInFlight = false;
 let notificationsInFlight = false;
 
+const CURRENT_DISPLAY_THRESHOLD_A = 0.05;
+
+function displayCurrent(value: unknown): number {
+    const current = Number(value ?? 0);
+    return Number.isFinite(current) && Math.abs(current) >= CURRENT_DISPLAY_THRESHOLD_A
+        ? current
+        : 0;
+}
+
 const baseSearchResults = computed<SearchResult[]>(() => {
     const items: SearchResult[] = [
         {
@@ -294,8 +303,8 @@ function fetchTelemetry() {
         .then((payload: LatestPayload | null) => {
             if (!payload) return;
 
-            const power = Number(payload.power ?? 0);
-            const current = Number(payload.current ?? 0);
+            const power = Math.max(0, Number(payload.power ?? 0));
+            const current = displayCurrent(payload.current);
             const updatedAt = payload.updated_at
                 ? Date.parse(payload.updated_at)
                 : 0;

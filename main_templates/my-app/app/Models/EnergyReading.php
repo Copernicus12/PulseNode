@@ -365,10 +365,14 @@ class EnergyReading extends Model
      */
     private static function summarizeSamples(Collection $samples): array
     {
+        $powerSamples = $samples->map(function ($sample): float {
+            return max(0.0, (float) ($sample->power ?? 0));
+        });
+
         return [
             'energy_kwh' => round((float) $samples->sum('delta_energy'), 6),
-            'avg_power_w' => round((float) ($samples->avg('power') ?? 0), 1),
-            'peak_power_w' => round((float) ($samples->max('power') ?? 0), 1),
+            'avg_power_w' => round((float) ($powerSamples->avg() ?? 0), 1),
+            'peak_power_w' => round((float) ($powerSamples->max() ?? 0), 1),
             'warnings' => self::warningCounters($samples),
         ];
     }
@@ -393,7 +397,8 @@ class EnergyReading extends Model
         $active = null;
 
         foreach ($samples as $sample) {
-            $isActive = (float) $sample->power >= 50;
+            $power = max(0.0, (float) $sample->power);
+            $isActive = $power >= 50;
 
             if ($isActive && $active === null) {
                 $active = [
@@ -409,7 +414,7 @@ class EnergyReading extends Model
                 $active['end'] = $sample->sampled_at;
                 $active['energy_kwh'] += (float) $sample->delta_energy;
                 $active['samples']++;
-                $active['sum_power'] += (float) $sample->power;
+                $active['sum_power'] += $power;
             }
 
             if (! $isActive && $active !== null) {

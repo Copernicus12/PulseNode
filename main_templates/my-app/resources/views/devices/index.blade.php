@@ -135,7 +135,7 @@
                             </div>
 
                             <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                <p><span id="devices-socket-power-{{ $socket['index'] }}">{{ number_format($socket['power_w'], 1) }}</span> W</p>
+                                <p><span id="devices-socket-power-{{ $socket['index'] }}">{{ number_format(max(0, $socket['power_w']), 1) }}</span> W</p>
                                 <p><span id="devices-socket-current-{{ $socket['index'] }}">{{ number_format($socket['current'], 3) }}</span> A</p>
                             </div>
 
@@ -164,8 +164,8 @@
                                     data-plan-meta="{{ $plan ? ucfirst($plan->strategy).' | '.$scopeLabel($plan->socket_scope).' | threshold '.$plan->match_threshold.'%' : '' }}"
                                     data-plan-empty="No active plan. Default balanced detection is used."
                                     data-signature-available="{{ $signature ? '1' : '0' }}"
-                                    data-signature-avg="{{ $signature ? number_format($signature['avg_power_w'], 1).' W' : '' }}"
-                                    data-signature-peak="{{ $signature ? number_format($signature['peak_power_w'], 1).' W' : '' }}"
+                                    data-signature-avg="{{ $signature ? number_format(max(0, $signature['avg_power_w']), 1).' W' : '' }}"
+                                    data-signature-peak="{{ $signature ? number_format(max(0, $signature['peak_power_w']), 1).' W' : '' }}"
                                     data-signature-variability="{{ $signature ? number_format($signature['variability_pct'], 1).'%' : '' }}"
                                     data-signature-startup="{{ $signature ? number_format($signature['startup_ratio'], 2).'x' : '' }}"
                                     data-signature-samples="{{ $signature ? (string) $signature['sample_count'] : '' }}"
@@ -385,8 +385,8 @@
                                     <td class="px-3 py-2.5 font-medium">{{ $profile->name }}</td>
                                     <td class="px-3 py-2.5 text-muted-foreground">{{ $profile->category }}</td>
                                     <td class="px-3 py-2.5 text-muted-foreground">Socket {{ $profile->trained_from_socket ?? 'n/a' }}</td>
-                                    <td class="px-3 py-2.5 tabular-nums">{{ number_format($profile->avg_power_w, 1) }} / {{ number_format($profile->peak_power_w, 1) }} W</td>
-                                    <td class="px-3 py-2.5 tabular-nums text-muted-foreground">{{ number_format($profile->expected_power_min, 1) }} - {{ number_format($profile->expected_power_max, 1) }} W</td>
+                                    <td class="px-3 py-2.5 tabular-nums">{{ number_format(max(0, $profile->avg_power_w), 1) }} / {{ number_format(max(0, $profile->peak_power_w), 1) }} W</td>
+                                    <td class="px-3 py-2.5 tabular-nums text-muted-foreground">{{ number_format(max(0, $profile->expected_power_min), 1) }} - {{ number_format(max(0, $profile->expected_power_max), 1) }} W</td>
                                     <td class="px-3 py-2.5 text-muted-foreground">{{ $profile->last_trained_at?->diffForHumans() ?? '-' }}</td>
                                     <td class="px-3 py-2.5">
                                         <button
@@ -615,6 +615,11 @@
         return Number.isFinite(n) ? n : 0;
     }
 
+    function displayCurrent(v) {
+        var current = asNumber(v);
+        return Math.abs(current) < 0.05 ? 0 : current;
+    }
+
     function stateBadgeClass(state) {
         if (state === 'matched') {
             return 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30';
@@ -791,10 +796,10 @@
         var voltage = asNumber(data.voltage || 230);
 
         [1, 2, 3].forEach(function (socketIndex) {
-            var current = asNumber(data['current_' + socketIndex]);
+            var current = displayCurrent(data['current_' + socketIndex]);
             var powerKey = 'power_' + socketIndex;
             var hasPowerReading = Object.prototype.hasOwnProperty.call(data, powerKey);
-            var power = hasPowerReading ? asNumber(data[powerKey]) : voltage * current;
+            var power = hasPowerReading ? Math.max(0, asNumber(data[powerKey])) : Math.max(0, voltage * current);
             var relayOn = Boolean(data['relay_' + socketIndex]);
 
             var currentEl = document.getElementById('devices-socket-current-' + socketIndex);
