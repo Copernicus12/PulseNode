@@ -5,7 +5,17 @@ import laravel from 'laravel-vite-plugin';
 import os from 'node:os';
 import { defineConfig } from 'vite';
 
-function resolveDevHost() {
+function resolveDevBindHost() {
+    const envBindHost = process.env.DEV_BIND_HOST;
+
+    if (envBindHost) {
+        return envBindHost;
+    }
+
+    return '127.0.0.1';
+}
+
+function resolveDevPublicHost() {
     const envHost = process.env.DEV_HOST;
 
     if (envHost) {
@@ -33,14 +43,15 @@ function resolveDevHost() {
     return '127.0.0.1';
 }
 
-const devHost = resolveDevHost();
+const devBindHost = resolveDevBindHost();
+const devPublicHost = resolveDevPublicHost();
 
 export default defineConfig({
     server: {
-        host: devHost,
+        host: devBindHost,
         cors: true,
         hmr: {
-            host: devHost,
+            host: devPublicHost,
         },
     },
     plugins: [

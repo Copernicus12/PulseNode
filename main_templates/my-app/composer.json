@@ -52,12 +52,12 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "sh -lc 'export DEV_HOST=${DEV_HOST:-$(node scripts/dev-host.mjs)}; export APP_URL=http://$DEV_HOST:8000; npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve --host=$DEV_HOST --port=8000\" \"php artisan queue:listen --tries=1 --timeout=0\" \"php artisan pail --timeout=0\" \"npm run dev\" --names=server,queue,logs,vite --kill-others'"
+            "sh -lc 'export DEV_HOST=${DEV_HOST:-$(node scripts/dev-host.mjs)}; export DEV_BIND_HOST=${DEV_BIND_HOST:-$(node scripts/dev-bind-host.mjs)}; export APP_URL=http://$DEV_HOST:8000; npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve --host=$DEV_BIND_HOST --port=8000\" \"php artisan queue:listen --tries=1 --timeout=0\" \"php artisan pail --timeout=0\" \"npm run dev\" --names=server,queue,logs,vite --kill-others'"
         ],
         "dev:ssr": [
             "npm run build:ssr",
             "Composer\\Config::disableProcessTimeout",
-            "sh -lc 'export DEV_HOST=$(node scripts/dev-host.mjs); export APP_URL=http://$DEV_HOST:8000; npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve --host=$DEV_HOST --port=8000\" \"php artisan queue:listen --tries=1\" \"php artisan pail --timeout=0\" \"php artisan inertia:start-ssr\" --names=server,queue,logs,ssr --kill-others'"
+            "sh -lc 'export DEV_HOST=$(node scripts/dev-host.mjs); export DEV_BIND_HOST=${DEV_BIND_HOST:-$(node scripts/dev-bind-host.mjs)}; export APP_URL=http://$DEV_HOST:8000; npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve --host=$DEV_BIND_HOST --port=8000\" \"php artisan queue:listen --tries=1\" \"php artisan pail --timeout=0\" \"php artisan inertia:start-ssr\" --names=server,queue,logs,ssr --kill-others'"
         ],
         "lint": [
             "pint --parallel"

@@ -47,11 +47,13 @@ MONGO_URI = os.getenv("MONGO_URI") or os.getenv("MONGODB_URI")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME") or os.getenv("MONGODB_DATABASE", "espData")
 MONGO_COLLECTION = os.getenv("MONGO_COLLECTION") or os.getenv("MONGODB_COLLECTION", "readings")
 MONGO_TLS_CA_FILE = os.getenv("MONGO_TLS_CA_FILE")
+MONGO_RETRY_INTERVAL = int(os.getenv("MONGO_RETRY_INTERVAL", "30"))
 
 mongo_client = None
 mongo_collection = None
 mongo_ready = False
 mongo_lock = threading.Lock()
+mongo_last_log = None
 
 
 def build_mongo_kwargs():
@@ -81,13 +83,20 @@ def build_mongo_kwargs():
     return kwargs
 
 
+def log_mongo_once(message):
+    global mongo_last_log
+    if mongo_last_log != message:
+        mongo_last_log = message
+        print(message)
+
+
 def init_mongo():
     global mongo_client, mongo_collection, mongo_ready
     if not MONGO_URI:
         mongo_ready = False
         mongo_client = None
         mongo_collection = None
-        print("MongoDB disabled: set MONGO_URI or MONGODB_URI to enable persistence.")
+        log_mongo_once("[mongo] persistence disabled; set MONGO_URI or MONGODB_URI to enable it.")
         return False
 
     try:
@@ -95,13 +104,13 @@ def init_mongo():
         mongo_collection = mongo_client[MONGO_DB_NAME][MONGO_COLLECTION]
         mongo_client.admin.command("ping")
         mongo_ready = True
-        print("MongoDB connection is ready.")
+        log_mongo_once("[mongo] connection is ready.")
         return True
     except Exception as e:
         mongo_ready = False
         mongo_client = None
         mongo_collection = None
-        print(f"MongoDB connection failed: {e}")
+        log_mongo_once(f"[mongo] connection failed: {e}")
         return False
 
 
@@ -171,11 +180,14 @@ threading.Thread(target=mqtt_thread, daemon=True).start()
 
 
 def mongo_retry_thread():
+    if not MONGO_URI:
+        return
+
     while True:
         if not mongo_ready:
             with mongo_lock:
                 init_mongo()
-        time.sleep(30)
+        time.sleep(MONGO_RETRY_INTERVAL)
 
 
 threading.Thread(target=mongo_retry_thread, daemon=True).start()
@@ -195,9 +207,4 @@ def api_relay(state):
     return jsonify({"status": "ok", "sent": payload})
 
 if __name__ == "__main__":
-    if mongo_ready:
-        print("MongoDB connection is ready.")
-    else:
-        print("MongoDB unavailable; running without persistence.")
-
     app.run(host="0.0.0.0", port=5001)
