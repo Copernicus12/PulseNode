@@ -1122,19 +1122,7 @@
             window.addEventListener('resize', scheduleSpotlightRefresh);
             window.addEventListener('scroll', scheduleSpotlightRefresh, true);
 
-            var restored = readState();
-            var wasRedirecting = false;
-            try {
-                wasRedirecting = window.localStorage.getItem(REDIRECT_KEY) === '1';
-                if (wasRedirecting) {
-                    window.localStorage.removeItem(REDIRECT_KEY);
-                }
-            } catch (_) {}
-
-            if (restored && (wasRedirecting || normalizePath((tourSteps[restored.index] || {}).path) === normalizePath(CURRENT_PATH))) {
-                state = restored;
-                startTourFrom(state.index);
-            }
+            // Keep the guide manual-only so it never opens automatically on public visits.
         })();
         </script>
         @if($accountAdminSummary)

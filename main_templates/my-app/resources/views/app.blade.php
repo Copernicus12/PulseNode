@@ -59,6 +59,7 @@
     <body class="font-sans antialiased">
         @inertia
 
+        @auth
         <div id="global-tour-overlay" class="fixed inset-0 z-[120] hidden">
             <div id="global-tour-backdrop" class="absolute inset-0 bg-transparent backdrop-blur-[3px]" style="clip-path: inset(0 0 0 0);"></div>
             <div id="global-tour-spotlight" class="pointer-events-none absolute hidden rounded-[28px] border border-zinc-100/75 shadow-[0_0_0_9999px_rgba(0,0,0,0.16)] transition-all duration-300 ease-out"></div>
@@ -115,6 +116,7 @@
                 </div>
             </div>
         </div>
+        @endauth
 
         <script>
         (function () {
@@ -307,17 +309,8 @@
             window.addEventListener('resize', scheduleSpotlightRefresh);
             window.addEventListener('scroll', scheduleSpotlightRefresh, true);
 
-            var restored = readState();
-            var wasRedirecting = false;
-            try {
-                wasRedirecting = window.localStorage.getItem(REDIRECT_KEY) === '1';
-                if (wasRedirecting) window.localStorage.removeItem(REDIRECT_KEY);
-            } catch (_) {}
-
-            if (restored && (wasRedirecting || normalizePath((tourSteps[restored.index] || {}).path) === normalizePath(CURRENT_PATH))) {
-                state = restored;
-                startTourFrom(state.index);
-            }
+            // Keep the guide manual-only so the public pages do not reopen the
+            // walkthrough unexpectedly when a browser restores local state.
         })();
         </script>
     </body>
