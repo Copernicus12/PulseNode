@@ -9,15 +9,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table): void {
-            $table->decimal('electricity_price_per_wh', 12, 6)
-                ->default(0)
-                ->after('blocked_at');
-            $table->string('billing_currency', 3)
-                ->default('RON')
-                ->after('electricity_price_per_wh');
-            $table->decimal('billing_monthly_base_fee', 10, 2)
-                ->default(0)
-                ->after('billing_currency');
+            $table->decimal('electricity_price_per_wh', 12, 6)->default(0);
+            $table->string('billing_currency', 3)->default('RON');
+            $table->decimal('billing_monthly_base_fee', 10, 2)->default(0);
         });
     }
 

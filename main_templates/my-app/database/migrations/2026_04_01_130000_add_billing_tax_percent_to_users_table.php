@@ -10,9 +10,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table): void {
-            $table->decimal('billing_tax_percent', 5, 2)
-                ->default(21)
-                ->after('billing_currency');
+            $table->decimal('billing_tax_percent', 5, 2)->default(21);
         });
 
         DB::table('users')->update([

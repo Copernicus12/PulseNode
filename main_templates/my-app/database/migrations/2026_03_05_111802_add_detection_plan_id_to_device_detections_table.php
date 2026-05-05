@@ -11,7 +11,6 @@ return new class extends Migration
         Schema::table('device_detections', function (Blueprint $table): void {
             $table->foreignId('detection_plan_id')
                 ->nullable()
-                ->after('device_profile_id')
                 ->constrained('detection_plans')
                 ->nullOnDelete();
         });

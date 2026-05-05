@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table): void {
-            $table->string('single_device_session_token', 64)->nullable()->after('remember_token');
+            $table->string('single_device_session_token', 64)->nullable();
         });
     }
 

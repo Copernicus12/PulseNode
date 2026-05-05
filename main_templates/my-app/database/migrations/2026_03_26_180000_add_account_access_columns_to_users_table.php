@@ -10,10 +10,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table): void {
-            $table->string('role')->default('moderator')->after('password');
-            $table->timestamp('guest_expires_at')->nullable()->after('role');
-            $table->boolean('is_blocked')->default(false)->after('guest_expires_at');
-            $table->timestamp('blocked_at')->nullable()->after('is_blocked');
+            $table->string('role')->default('moderator');
+            $table->timestamp('guest_expires_at')->nullable();
+            $table->boolean('is_blocked')->default(false);
+            $table->timestamp('blocked_at')->nullable();
         });
 
         DB::table('users')->update([
