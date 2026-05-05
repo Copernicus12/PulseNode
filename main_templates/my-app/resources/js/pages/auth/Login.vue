@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { onMounted } from 'vue';
 import { Form, Head, Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import { toast } from 'vue-sonner';
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
 import InputError from '@/components/InputError.vue';
 import TextLink from '@/components/TextLink.vue';
@@ -9,19 +12,94 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { Toaster } from '@/components/ui/sonner';
 import { register } from '@/routes';
 import { store } from '@/routes/login';
 import { request } from '@/routes/password';
 
-defineProps<{
+const props = defineProps<{
     status?: string;
+    sessionReplaced: boolean;
     canResetPassword: boolean;
     canRegister: boolean;
 }>();
+
+const querySessionReplaced =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).has('session_replaced');
+
+const sessionReplacedNotice = computed(
+    () => props.sessionReplaced || querySessionReplaced,
+);
+
+const statusMessage = computed(() =>
+    props.status ??
+    (sessionReplacedNotice.value
+        ? 'Your account was signed in on another device. Please sign in again.'
+        : undefined),
+);
+
+const toastId = 'login-status-toast';
+
+function showStatusToast(): void {
+    if (!statusMessage.value) {
+        return;
+    }
+
+    const isSessionReplacement = sessionReplacedNotice.value;
+
+    const toastFn = isSessionReplacement ? toast.warning : toast.info;
+
+    toastFn(
+        isSessionReplacement ? 'Session replaced' : 'Notice',
+        {
+            id: toastId,
+            description: statusMessage.value,
+            duration: 6000,
+            action: isSessionReplacement
+                ? {
+                      label: 'Continue',
+                      onClick: () => {
+                          window.requestAnimationFrame(() => {
+                              const email = document.getElementById(
+                                  'email',
+                              ) as HTMLInputElement | null;
+                              email?.focus();
+                          });
+                      },
+                  }
+                : undefined,
+        },
+    );
+}
+
+onMounted(() => {
+    showStatusToast();
+});
 </script>
 
 <template>
     <Head title="Log in" />
+
+    <Toaster
+        position="top-right"
+        :expand="false"
+        :visible-toasts="1"
+        :toast-options="{
+            class: 'w-[22rem] rounded-2xl border border-border/50 bg-[rgba(20,20,22,0.98)] shadow-2xl shadow-black/30 backdrop-blur-md',
+            descriptionClass: 'text-[12px] leading-5 text-muted-foreground',
+            classes: {
+                title: 'text-sm font-semibold text-foreground',
+                description: 'text-[12px] leading-5 text-muted-foreground',
+                warning:
+                    'border-amber-500/40 bg-[rgba(30,22,10,0.98)] text-amber-50',
+                info: 'border-sky-500/40 bg-[rgba(12,20,30,0.98)] text-sky-50',
+                success:
+                    'border-emerald-500/40 bg-[rgba(14,28,18,0.98)] text-emerald-50',
+                error: 'border-red-500/40 bg-[rgba(34,16,16,0.98)] text-red-50',
+            },
+        }"
+    />
 
     <div class="relative min-h-screen overflow-hidden bg-gradient-to-br from-gray-50 via-gray-100 to-gray-200 text-slate-800 dark:from-[#232323] dark:via-[#1f1f1f] dark:to-[#171717] dark:text-slate-200 selection:bg-emerald-500/30">
         <div class="absolute inset-0 w-full overflow-hidden">
@@ -80,10 +158,6 @@ defineProps<{
                         <div class="mb-6">
                             <h2 class="text-2xl sm:text-3xl font-semibold text-slate-900 dark:text-white">Log in</h2>
                             <p class="mt-2 text-sm text-slate-600 dark:text-slate-400">Use your account credentials to access the dashboard.</p>
-                        </div>
-
-                        <div v-if="status" class="mb-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                            {{ status }}
                         </div>
 
                         <Form

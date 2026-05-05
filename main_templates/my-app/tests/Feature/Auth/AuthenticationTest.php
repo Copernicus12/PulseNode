@@ -5,6 +5,7 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\RateLimiter;
+use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Fortify\Features;
 use Tests\TestCase;
 
@@ -30,6 +31,11 @@ class AuthenticationTest extends TestCase
 
         $this->assertAuthenticated();
         $response->assertRedirect(route('dashboard', absolute: false));
+        $this->assertNotNull($user->fresh()->single_device_session_token);
+        $this->assertSame(
+            session('single_device_session_token'),
+            $user->fresh()->single_device_session_token
+        );
     }
 
     public function test_users_with_two_factor_enabled_are_redirected_to_two_factor_challenge()
@@ -81,6 +87,32 @@ class AuthenticationTest extends TestCase
 
         $this->assertGuest();
         $response->assertRedirect(route('home'));
+    }
+
+    public function test_users_with_a_stale_session_token_are_logged_out()
+    {
+        $user = User::factory()->create([
+            'single_device_session_token' => 'stale-session-token',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('dashboard'));
+
+        $response->assertRedirect(route('login'));
+        $response->assertSessionHas('status', 'Your account was signed in on another device. Please sign in again.');
+        $response->assertSessionHas('session_replaced', true);
+        $this->assertGuest();
+    }
+
+    public function test_login_screen_shows_session_replaced_notice_from_query_param(): void
+    {
+        $response = $this->get(route('login', ['session_replaced' => 1]));
+
+        $response->assertOk();
+        $response->assertInertia(fn (Assert $page) => $page
+            ->component('auth/Login')
+            ->where('sessionReplaced', true)
+            ->where('status', 'Your account was signed in on another device. Please sign in again.')
+        );
     }
 
     public function test_users_are_rate_limited()

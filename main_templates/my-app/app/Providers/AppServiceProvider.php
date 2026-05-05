@@ -2,12 +2,15 @@
 
 namespace App\Providers;
 
+use App\Console\Commands\MqttListener;
+use App\Listeners\SyncSingleDeviceSession;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Events\Login;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
-use App\Console\Commands\MqttListener;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -27,6 +30,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->configureAuthListeners();
     }
 
     protected function configureDefaults(): void
@@ -46,5 +50,10 @@ class AppServiceProvider extends ServiceProvider
                 ->uncompromised()
             : null
         );
+    }
+
+    protected function configureAuthListeners(): void
+    {
+        Event::listen(Login::class, SyncSingleDeviceSession::class);
     }
 }

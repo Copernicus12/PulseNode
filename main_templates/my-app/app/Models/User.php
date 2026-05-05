@@ -14,7 +14,9 @@ class User extends Authenticatable
     use HasFactory, Notifiable, TwoFactorAuthenticatable;
 
     public const ROLE_ADMIN = 'admin';
+
     public const ROLE_MODERATOR = 'moderator';
+
     public const ROLE_GUEST = 'guest';
 
     /**
@@ -46,6 +48,7 @@ class User extends Authenticatable
         'two_factor_secret',
         'two_factor_recovery_codes',
         'remember_token',
+        'single_device_session_token',
     ];
 
     /**
