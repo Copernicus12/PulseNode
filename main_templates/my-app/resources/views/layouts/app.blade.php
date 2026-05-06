@@ -1090,6 +1090,37 @@
                 startFollowLoop();
             }
 
+            function resumeTourIfNeeded() {
+                var redirecting = false;
+                try {
+                    redirecting = window.localStorage.getItem(REDIRECT_KEY) === '1';
+                } catch (_) {}
+
+                if (!redirecting) {
+                    return;
+                }
+
+                var savedState = readState();
+                if (!savedState) {
+                    clearState();
+                    return;
+                }
+
+                state.active = savedState.active;
+                state.index = savedState.index;
+                persistState();
+
+                window.setTimeout(function () {
+                    if (!state.active) return;
+                    renderStep();
+                    startFollowLoop();
+
+                    try {
+                        window.localStorage.removeItem(REDIRECT_KEY);
+                    } catch (_) {}
+                }, 0);
+            }
+
             window.startGlobalFeatureTour = function () {
                 startTourFrom(0);
             };
@@ -1121,6 +1152,8 @@
 
             window.addEventListener('resize', scheduleSpotlightRefresh);
             window.addEventListener('scroll', scheduleSpotlightRefresh, true);
+
+            resumeTourIfNeeded();
 
             // Keep the guide manual-only so it never opens automatically on public visits.
         })();

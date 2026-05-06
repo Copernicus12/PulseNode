@@ -293,6 +293,27 @@
             function prevStep() { if (state.index <= 0) { renderStep(); return; } state.index -= 1; renderStep(); }
             function startTourFrom(index) { state.active = true; state.index = Math.min(Math.max(0, Number(index || 0)), tourSteps.length - 1); renderStep(); startFollowLoop(); }
 
+            function resumeTourIfNeeded() {
+                var redirecting = false;
+                try { redirecting = window.localStorage.getItem(REDIRECT_KEY) === '1'; } catch (_) {}
+                if (!redirecting) return;
+
+                var savedState = readState();
+                if (!savedState) { clearState(); return; }
+
+                state.active = savedState.active;
+                state.index = savedState.index;
+                persistState();
+
+                window.setTimeout(function () {
+                    if (!state.active) return;
+                    renderStep();
+                    startFollowLoop();
+
+                    try { window.localStorage.removeItem(REDIRECT_KEY); } catch (_) {}
+                }, 0);
+            }
+
             window.startGlobalFeatureTour = function () { startTourFrom(0); };
             backBtn.addEventListener('click', prevStep);
             nextBtn.addEventListener('click', nextStep);
@@ -308,6 +329,7 @@
 
             window.addEventListener('resize', scheduleSpotlightRefresh);
             window.addEventListener('scroll', scheduleSpotlightRefresh, true);
+            resumeTourIfNeeded();
 
             // Keep the guide manual-only so the public pages do not reopen the
             // walkthrough unexpectedly when a browser restores local state.
