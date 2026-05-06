@@ -85,7 +85,7 @@
         <svg class="h-4 w-4 transition group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     </summary>
 
-    <div class="space-y-1 px-2 pb-2 transition lg:absolute lg:left-[calc(100%+0.65rem)] lg:top-0 lg:z-40 lg:w-56 lg:rounded-2xl lg:bg-card lg:p-2 lg:ring-1 lg:ring-border/40 lg:shadow-2xl lg:shadow-black/40 lg:opacity-0 lg:translate-x-2 lg:pointer-events-none lg:group-hover:opacity-100 lg:group-hover:translate-x-0 lg:group-hover:pointer-events-auto lg:group-focus-within:opacity-100 lg:group-focus-within:translate-x-0 lg:group-focus-within:pointer-events-auto lg:light-outline-strong">
+    <div class="space-y-1 px-2 pb-2 transition lg:absolute lg:left-full lg:top-0 lg:z-40 lg:w-56 lg:rounded-2xl lg:bg-card lg:p-2 lg:ring-1 lg:ring-border/40 lg:shadow-2xl lg:shadow-black/40 lg:opacity-0 lg:translate-x-2 lg:pointer-events-none lg:group-hover:opacity-100 lg:group-hover:translate-x-0 lg:group-hover:pointer-events-auto lg:group-focus-within:opacity-100 lg:group-focus-within:translate-x-0 lg:group-focus-within:pointer-events-auto lg:light-outline-strong lg:before:absolute lg:before:-left-4 lg:before:top-0 lg:before:h-full lg:before:w-4 lg:before:content-['']">
         <div class="mb-1 hidden px-2 py-1 text-[11px] uppercase tracking-[0.12em] text-muted-foreground lg:block">
             My Devices
         </div>
