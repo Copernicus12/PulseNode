@@ -15,7 +15,9 @@ case "$1" in
         php artisan config:clear
         php artisan route:clear
         php artisan view:clear
-        php artisan migrate --force
+        if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
+            php artisan migrate --force
+        fi
         exec php artisan serve --host=0.0.0.0 --port=8080
         ;;
     mqtt)
