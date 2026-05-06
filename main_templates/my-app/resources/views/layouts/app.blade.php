@@ -1473,7 +1473,7 @@
             }
 
             pollLatest();
-            setInterval(pollLatest, 5000);
+            setInterval(pollLatest, 1000);
         })();
         </script>
     </body>

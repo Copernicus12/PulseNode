@@ -115,8 +115,8 @@ const float POWER_ZERO_THRESHOLD_W = 1.0f;
 // TIMPI
 // =====================================================
 const unsigned long SAMPLE_WINDOW_MS    = 1000;
-const unsigned long MEASURE_INTERVAL_MS = 1200;
-const unsigned long MQTT_INTERVAL_MS    = 5000;
+const unsigned long MEASURE_INTERVAL_MS = 1000;
+const unsigned long MQTT_INTERVAL_MS    = 2000;
 const unsigned long AUTO_RECALIBRATE_AFTER_RELAY_MS = 900;
 
 // =====================================================
@@ -156,6 +156,10 @@ SensorChannel channels[NUM_CHANNELS] = {
 VoltageChannel zmpt = {VOLTAGE_PIN, 2048.0f};
 
 Measurements meas;
+Measurements smoothedMeas;
+bool smoothedMeasInitialized = false;
+
+const float TELEMETRY_EMA_ALPHA = 0.45f;
 
 // =====================================================
 // STARE
@@ -221,6 +225,32 @@ float sanitizePower(float power) {
     return 0.0f;
   }
   return power;
+}
+
+Measurements smoothMeasurements(const Measurements& raw) {
+  if (!smoothedMeasInitialized) {
+    smoothedMeas = raw;
+    smoothedMeasInitialized = true;
+    return smoothedMeas;
+  }
+
+  auto smoothValue = [](float previous, float next) -> float {
+    return previous + (TELEMETRY_EMA_ALPHA * (next - previous));
+  };
+
+  smoothedMeas.voltageRMS = smoothValue(smoothedMeas.voltageRMS, raw.voltageRMS);
+  smoothedMeas.totalActivePowerW = smoothValue(smoothedMeas.totalActivePowerW, raw.totalActivePowerW);
+  smoothedMeas.totalApparentPowerVA = smoothValue(smoothedMeas.totalApparentPowerVA, raw.totalApparentPowerVA);
+  smoothedMeas.totalCurrentRMS = smoothValue(smoothedMeas.totalCurrentRMS, raw.totalCurrentRMS);
+
+  for (int i = 0; i < NUM_CHANNELS; i++) {
+    smoothedMeas.currentRMS[i] = smoothValue(smoothedMeas.currentRMS[i], raw.currentRMS[i]);
+    smoothedMeas.activePowerW[i] = smoothValue(smoothedMeas.activePowerW[i], raw.activePowerW[i]);
+    smoothedMeas.apparentPowerVA[i] = smoothValue(smoothedMeas.apparentPowerVA[i], raw.apparentPowerVA[i]);
+    smoothedMeas.powerFactor[i] = smoothValue(smoothedMeas.powerFactor[i], raw.powerFactor[i]);
+  }
+
+  return smoothedMeas;
 }
 
 const char* wifiStatusToString(wl_status_t status) {
@@ -1379,27 +1409,27 @@ bool ensureMqttConnected() {
   return false;
 }
 
-void publishMQTT() {
+void publishMQTT(const Measurements& publishSource) {
   if (!ensureMqttConnected()) return;
   client.loop();
 
   float publishCurrent[NUM_CHANNELS] = {
-    meas.currentRMS[0],
-    meas.currentRMS[1],
-    meas.currentRMS[2]
+    publishSource.currentRMS[0],
+    publishSource.currentRMS[1],
+    publishSource.currentRMS[2]
   };
   float publishPower[NUM_CHANNELS] = {
-    meas.activePowerW[0] < 0.0f ? 0.0f : meas.activePowerW[0],
-    meas.activePowerW[1] < 0.0f ? 0.0f : meas.activePowerW[1],
-    meas.activePowerW[2] < 0.0f ? 0.0f : meas.activePowerW[2]
+    publishSource.activePowerW[0] < 0.0f ? 0.0f : publishSource.activePowerW[0],
+    publishSource.activePowerW[1] < 0.0f ? 0.0f : publishSource.activePowerW[1],
+    publishSource.activePowerW[2] < 0.0f ? 0.0f : publishSource.activePowerW[2]
   };
-  float totalCurrent = meas.totalCurrentRMS;
+  float totalCurrent = publishSource.totalCurrentRMS;
   float totalPower = publishPower[0] + publishPower[1] + publishPower[2];
 
   char payload[384];
   snprintf(payload, sizeof(payload),
            "{\"voltage\":%.1f,\"current\":%.3f,\"current_1\":%.3f,\"current_2\":%.3f,\"current_3\":%.3f,\"power\":%.1f,\"power_1\":%.1f,\"power_2\":%.1f,\"power_3\":%.1f,\"energy\":%.5f,\"relay_1\":%s,\"relay_2\":%s,\"relay_3\":%s}",
-           meas.voltageRMS,
+           publishSource.voltageRMS,
            totalCurrent,
            publishCurrent[0],
            publishCurrent[1],
@@ -1514,6 +1544,7 @@ void loop() {
 
   if (now - lastMeasureMs >= MEASURE_INTERVAL_MS) {
     meas = measurePower();
+    Measurements publishMeas = smoothMeasurements(meas);
 
     float deltaHours = (now - lastEnergyMs) / 3600000.0f;
     lastEnergyMs = now;
@@ -1542,7 +1573,7 @@ void loop() {
   }
 
   if (now - lastMqttMs >= MQTT_INTERVAL_MS) {
-    publishMQTT();
+    publishMQTT(publishMeas);
     lastMqttMs = now;
   }
 }

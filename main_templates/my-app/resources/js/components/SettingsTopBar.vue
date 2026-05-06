@@ -609,7 +609,7 @@ onMounted(() => {
 
     telemetryTimer = window.setInterval(() => {
         void fetchTelemetry();
-    }, 5000);
+    }, 1000);
 
     notificationsTimer = window.setInterval(() => {
         void fetchNotifications();

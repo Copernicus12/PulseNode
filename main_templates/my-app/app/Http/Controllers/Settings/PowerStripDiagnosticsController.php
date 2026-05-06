@@ -20,8 +20,8 @@ class PowerStripDiagnosticsController extends Controller
                     'mqtt_enabled' => (bool) config('esp32.mqtt.enabled', true),
                     'command_topic' => (string) config('esp32.mqtt.command_topic', 'razvy_esp32_2026/cmd'),
                     'telemetry_topic' => (string) config('esp32.mqtt.data_topic', 'razvy_esp32_2026/data'),
-                    'publish_interval_seconds' => 10,
-                    'dashboard_poll_seconds' => 5,
+                    'publish_interval_seconds' => 2,
+                    'dashboard_poll_seconds' => 1,
                 ],
                 'hardware' => [
                     'device_type' => 'ESP32-S3 N16R8 DevKit',
