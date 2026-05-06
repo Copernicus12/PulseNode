@@ -21,6 +21,12 @@
             'route' => 'devices.plans.index',
             'label' => 'my devices plans',
         ],
+        [
+            'title' => 'Schedules',
+            'href' => route('devices.schedules.index'),
+            'route' => 'devices.schedules.index',
+            'label' => 'my devices schedules',
+        ],
     ];
 @endphp
 

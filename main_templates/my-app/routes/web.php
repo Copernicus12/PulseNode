@@ -59,6 +59,7 @@ Route::prefix('devices')->middleware(['auth'])->name('devices.')->group(function
     Route::get('/', [PowerStripController::class, 'devices'])->name('index');
     Route::get('profiles', [PowerStripController::class, 'deviceProfiles'])->name('profiles.index');
     Route::get('plans', [PowerStripController::class, 'devicePlans'])->name('plans.index');
+    Route::get('schedules', [PowerStripController::class, 'deviceSchedules'])->name('schedules.index');
     Route::get('activity', [PowerStripController::class, 'deviceActivity'])->name('activity.index');
 
     Route::post('profiles', [PowerStripController::class, 'storeDeviceProfile'])->name('profiles.store');
@@ -66,6 +67,9 @@ Route::prefix('devices')->middleware(['auth'])->name('devices.')->group(function
     Route::post('plans', [PowerStripController::class, 'storeDetectionPlan'])->name('plans.store');
     Route::post('plans/{plan}/activate', [PowerStripController::class, 'activateDetectionPlan'])->name('plans.activate');
     Route::delete('plans/{plan}', [PowerStripController::class, 'destroyDetectionPlan'])->name('plans.destroy');
+    Route::post('schedules', [PowerStripController::class, 'storeSocketSchedule'])->name('schedules.store');
+    Route::post('schedules/{schedule}/toggle', [PowerStripController::class, 'toggleSocketSchedule'])->name('schedules.toggle');
+    Route::delete('schedules/{schedule}', [PowerStripController::class, 'destroySocketSchedule'])->name('schedules.destroy');
 });
 Route::get('history', [PowerStripController::class, 'history'])
     ->middleware(['auth'])->name('history.index');

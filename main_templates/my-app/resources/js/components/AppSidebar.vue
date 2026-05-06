@@ -52,6 +52,10 @@ const devicesNavItems: NavItem[] = [
         title: 'Plans',
         href: devices.plans.index(),
     },
+    {
+        title: 'Schedules',
+        href: '/devices/schedules',
+    },
 ];
 
 const devicesGroupActive = computed(() =>

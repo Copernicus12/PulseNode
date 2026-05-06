@@ -9,6 +9,8 @@ use App\Models\DetectionPlan;
 use App\Models\DeviceDetection;
 use App\Models\DeviceProfile;
 use App\Models\EnergyReading;
+use App\Models\SocketSchedule;
+use App\Http\Requests\Devices\StoreSocketScheduleRequest;
 use App\Support\BatteryInsights;
 use App\Support\DeviceProfiler;
 use App\Support\EnergyBillingCalculator;
@@ -70,6 +72,56 @@ class PowerStripController extends Controller
     public function devicePlans(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth): View
     {
         return view('devices.index', $this->buildDevicesPageData($store, $profiler, $connectionHealth, 'plans', 6));
+    }
+
+    public function deviceSchedules(Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth, Request $request): View
+    {
+        return view('devices.schedules', $this->buildSchedulesPageData($store, $connectionHealth, $request));
+    }
+
+    public function storeSocketSchedule(StoreSocketScheduleRequest $request): RedirectResponse
+    {
+        $data = $request->validated();
+        $redirectRoute = $this->devicesRedirectRoute($request, 'devices.schedules.index');
+        $redirectPage = max(1, (int) $request->integer('redirect_page', 1));
+
+        $schedule = SocketSchedule::query()->create([
+            'name' => $data['name'],
+            'socket_index' => (int) $data['socket_index'],
+            'action' => $data['action'],
+            'days_of_week' => array_values($data['days_of_week']),
+            'start_time' => $data['start_time'],
+            'end_time' => $data['end_time'],
+            'is_active' => (bool) ($data['is_active'] ?? false),
+            'notes' => $data['notes'] ?? null,
+        ]);
+
+        return redirect()
+            ->to($this->routeWithPage($redirectRoute, $redirectPage))
+            ->with('devices_success', 'Schedule "'.$schedule->name.'" created.');
+    }
+
+    public function toggleSocketSchedule(Request $request, SocketSchedule $schedule): RedirectResponse
+    {
+        $redirectRoute = $this->devicesRedirectRoute($request, 'devices.schedules.index');
+        $redirectPage = max(1, (int) $request->integer('redirect_page', 1));
+        $schedule->update(['is_active' => ! (bool) $schedule->is_active]);
+
+        return redirect()
+            ->to($this->routeWithPage($redirectRoute, $redirectPage))
+            ->with('devices_success', 'Schedule "'.$schedule->name.'" updated.');
+    }
+
+    public function destroySocketSchedule(Request $request, SocketSchedule $schedule): RedirectResponse
+    {
+        $redirectRoute = $this->devicesRedirectRoute($request, 'devices.schedules.index');
+        $redirectPage = max(1, (int) $request->integer('redirect_page', 1));
+        $name = $schedule->name;
+        $schedule->delete();
+
+        return redirect()
+            ->to($this->routeWithPage($redirectRoute, $redirectPage))
+            ->with('devices_success', 'Schedule "'.$name.'" removed.');
     }
 
     public function deviceActivity(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth): RedirectResponse
@@ -530,6 +582,141 @@ class PowerStripController extends Controller
         );
     }
 
+    private function buildSchedulesPageData(Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth, Request $request): array
+    {
+        [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus] = $this->buildStripViewModel($store->latest(), $connectionHealth);
+
+        $updatedAt = $latest['updated_at'] ?? null;
+        $lastSeen = $this->telemetryAgeLabel($updatedAt);
+        $isOnline = $systemStatus !== 'offline';
+        $schedules = collect();
+
+        try {
+            $schedules = SocketSchedule::query()
+                ->get()
+                ->sortBy([
+                    ['socket_index', 'asc'],
+                    ['start_time', 'asc'],
+                    ['end_time', 'asc'],
+                    ['name', 'asc'],
+                ])
+                ->values();
+        } catch (\Throwable) {
+            $schedules = collect();
+        }
+
+        $socketOverview = collect([1, 2, 3])->map(function (int $socketIndex) use ($sockets, $latest, $connectionHealth, $schedules): array {
+            $socket = collect($sockets)->firstWhere('index', $socketIndex) ?? [];
+            $socketSchedules = $schedules->where('socket_index', $socketIndex)->values();
+            $nextSchedule = $socketSchedules->firstWhere('is_active', true) ?? $socketSchedules->first();
+            $isOn = (bool) ($socket['is_on'] ?? false);
+
+            return [
+                'index' => $socketIndex,
+                'label' => (string) ($socket['label'] ?? ('Socket '.$socketIndex)),
+                'power' => round(max(0.0, (float) ($socket['power'] ?? 0)), 1),
+                'current' => $this->displayCurrent((float) ($socket['current'] ?? 0)),
+                'status' => $this->deriveSocketStatus($latest, $socketIndex, $connectionHealth),
+                'state_label' => $isOn ? 'Live' : 'Idle',
+                'status_label' => $nextSchedule ? 'Next: '.$nextSchedule->name : 'No schedule yet',
+                'schedule_count' => $socketSchedules->count(),
+                'next_schedule' => $nextSchedule,
+            ];
+        })->values();
+
+        $dayLabels = [
+            'mon' => 'Mon',
+            'tue' => 'Tue',
+            'wed' => 'Wed',
+            'thu' => 'Thu',
+            'fri' => 'Fri',
+            'sat' => 'Sat',
+            'sun' => 'Sun',
+        ];
+
+        $scheduleEntries = $schedules->map(function (SocketSchedule $schedule) use ($dayLabels): array {
+            $days = collect($schedule->days_of_week ?? [])
+                ->map(fn ($day) => $dayLabels[$day] ?? strtoupper(substr((string) $day, 0, 3)))
+                ->values()
+                ->all();
+
+            return [
+                'id' => (string) $schedule->getKey(),
+                'name' => $schedule->name,
+                'socket_index' => (int) $schedule->socket_index,
+                'socket_label' => $schedule->socket_index ? 'Socket '.$schedule->socket_index : 'All sockets',
+                'action' => $schedule->action,
+                'start_time' => $schedule->start_time,
+                'end_time' => $schedule->end_time,
+                'days' => $days,
+                'is_active' => (bool) $schedule->is_active,
+                'notes' => $schedule->notes,
+            ];
+        })->values();
+
+        $perPage = 5;
+        $totalSchedules = $scheduleEntries->count();
+        $lastPage = max(1, (int) ceil(max(1, $totalSchedules) / $perPage));
+        $currentPage = min(max(1, (int) $request->integer('page', 1)), $lastPage);
+        $currentItems = $scheduleEntries->forPage($currentPage, $perPage)->values();
+        $scheduleEntriesPage = new LengthAwarePaginator(
+            $currentItems,
+            $totalSchedules,
+            $perPage,
+            $currentPage,
+            [
+                'path' => $request->url(),
+                'query' => $request->query(),
+            ]
+        );
+
+        $scheduleStats = [
+            'active_rules' => $schedules->where('is_active', true)->count(),
+            'scheduled_windows' => $schedules->count(),
+            'coverage' => $schedules->pluck('socket_index')->unique()->count().' sockets',
+            'next_trigger' => $scheduleEntries->first()
+                ? $scheduleEntries->first()['start_time'].' · '.$scheduleEntries->first()['name']
+                : 'No triggers yet',
+        ];
+
+        $upcomingTriggers = $scheduleEntries->take(4)->map(function (array $entry): array {
+            return [
+                'time' => $entry['start_time'],
+                'title' => $entry['name'],
+                'detail' => $entry['socket_label'].' · '.implode(' · ', array_filter([
+                    implode(', ', $entry['days']),
+                    ucfirst($entry['action']),
+                ])),
+            ];
+        })->values();
+
+        return compact(
+            'latest',
+            'sockets',
+            'activeSockets',
+            'totalPower',
+            'totalEnergy',
+            'systemStatus',
+            'lastSeen',
+            'isOnline',
+            'scheduleStats',
+            'socketOverview',
+            'scheduleEntriesPage',
+            'upcomingTriggers',
+        );
+    }
+
+    private function routeWithPage(string $routeName, int $page): string
+    {
+        $url = route($routeName);
+
+        if ($page <= 1) {
+            return $url;
+        }
+
+        return $url.'?page='.$page;
+    }
+
     private function deviceSectionMeta(string $section): array
     {
         return match ($section) {
@@ -540,6 +727,10 @@ class PowerStripController extends Controller
             'plans' => [
                 'label' => 'Plans',
                 'description' => 'Detection strategies, scope assignment, and active matching rules.',
+            ],
+            'schedules' => [
+                'label' => 'Schedules',
+                'description' => 'Time-based socket rules, weekly windows, and quick automation templates.',
             ],
             default => [
                 'label' => 'Overview',
@@ -553,7 +744,8 @@ class PowerStripController extends Controller
         return match ((string) $request->string('redirect_route')) {
             'devices.index',
             'devices.profiles.index',
-            'devices.plans.index' => (string) $request->string('redirect_route'),
+            'devices.plans.index',
+            'devices.schedules.index' => (string) $request->string('redirect_route'),
             default => $fallback,
         };
     }
