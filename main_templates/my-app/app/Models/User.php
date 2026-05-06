@@ -35,6 +35,7 @@ class User extends Authenticatable
         'electricity_price_per_wh',
         'billing_currency',
         'billing_tax_percent',
+        'billing_price_includes_tax',
         'billing_monthly_base_fee',
     ];
 
@@ -67,6 +68,7 @@ class User extends Authenticatable
             'is_blocked' => 'boolean',
             'electricity_price_per_wh' => 'decimal:6',
             'billing_tax_percent' => 'decimal:2',
+            'billing_price_includes_tax' => 'boolean',
             'billing_monthly_base_fee' => 'decimal:2',
         ];
     }

@@ -41,6 +41,7 @@ import {
     FieldLegend,
 } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Select,
     SelectContent,
@@ -60,6 +61,7 @@ type BillingProfile = {
     electricity_price_per_kwh: string;
     billing_currency: CurrencyCode;
     billing_tax_percent: string;
+    billing_price_includes_tax: boolean;
     created_at: string;
 };
 
@@ -68,6 +70,7 @@ type Props = {
         electricity_price_per_kwh: string;
         billing_currency: CurrencyCode;
         billing_tax_percent: string;
+        billing_price_includes_tax: boolean;
     };
     billingProfiles: BillingProfile[];
 };
@@ -123,6 +126,8 @@ const form = useForm({
         props.billingSettings.electricity_price_per_kwh || '0.8',
     billing_currency: props.billingSettings.billing_currency || 'RON',
     billing_tax_percent: props.billingSettings.billing_tax_percent || '21',
+    billing_price_includes_tax:
+        props.billingSettings.billing_price_includes_tax ?? false,
 });
 const profileDialogOpen = ref(false);
 const profileName = ref('');
@@ -132,6 +137,8 @@ const profileForm = useForm({
         props.billingSettings.electricity_price_per_kwh || '0.8',
     billing_currency: props.billingSettings.billing_currency || 'RON',
     billing_tax_percent: props.billingSettings.billing_tax_percent || '21',
+    billing_price_includes_tax:
+        props.billingSettings.billing_price_includes_tax ?? false,
 });
 const profiles = computed(() => props.billingProfiles ?? []);
 
@@ -144,25 +151,50 @@ const currentCurrency = computed(
 const currentProfileMatch = computed(() =>
     profiles.value.find(
         (profile) =>
-            profile.electricity_price_per_kwh ===
-                form.electricity_price_per_kwh &&
+            Math.abs(
+                Number(profile.electricity_price_per_kwh || 0) -
+                    Number(form.electricity_price_per_kwh || 0),
+            ) < 0.000001 &&
             profile.billing_currency === form.billing_currency &&
-            profile.billing_tax_percent === form.billing_tax_percent,
+            profile.billing_tax_percent === form.billing_tax_percent &&
+            profile.billing_price_includes_tax ===
+                form.billing_price_includes_tax,
     ),
 );
 
-const pricePerKwh = computed(() => Number(form.electricity_price_per_kwh || 0));
+const enteredPricePerKwh = computed(() =>
+    Number(form.electricity_price_per_kwh || 0),
+);
 const taxPercent = computed(() => Number(form.billing_tax_percent || 21));
-const pricePerWh = computed(() => pricePerKwh.value / 1000);
+const vatMultiplier = computed(() => 1 + taxPercent.value / 100);
+const pricePerKwhNet = computed(() =>
+    form.billing_price_includes_tax && vatMultiplier.value > 0
+        ? enteredPricePerKwh.value / vatMultiplier.value
+        : enteredPricePerKwh.value,
+);
+const pricePerKwhGross = computed(() =>
+    form.billing_price_includes_tax
+        ? enteredPricePerKwh.value
+        : enteredPricePerKwh.value * vatMultiplier.value,
+);
+const pricePerWh = computed(() => pricePerKwhNet.value / 1000);
 const estimatedMonthlyConsumptionKwh = computed(() => 180);
 const estimatedEnergyOnlyCost = computed(
-    () => pricePerKwh.value * estimatedMonthlyConsumptionKwh.value,
+    () => pricePerKwhNet.value * estimatedMonthlyConsumptionKwh.value,
 );
 const estimatedTaxAmount = computed(
     () => estimatedEnergyOnlyCost.value * (taxPercent.value / 100),
 );
 const estimatedMonthlyTotal = computed(
     () => estimatedEnergyOnlyCost.value + estimatedTaxAmount.value,
+);
+const billingPriceModeLabel = computed(() =>
+    form.billing_price_includes_tax ? 'Gross input' : 'Net input',
+);
+const billingPriceModeDescription = computed(() =>
+    form.billing_price_includes_tax
+        ? 'The entered amount includes VAT, so we back-calculate the net price used in billing.'
+        : 'The entered amount excludes VAT, so we add VAT to preview the final price.',
 );
 
 function formatCurrency(value: number) {
@@ -201,6 +233,7 @@ function saveCurrentAsProfile() {
     profileForm.electricity_price_per_kwh = form.electricity_price_per_kwh;
     profileForm.billing_currency = form.billing_currency;
     profileForm.billing_tax_percent = form.billing_tax_percent;
+    profileForm.billing_price_includes_tax = form.billing_price_includes_tax;
 
     profileForm
         .transform((data) => ({
@@ -221,6 +254,7 @@ function applyProfile(profile: BillingProfile) {
     form.electricity_price_per_kwh = profile.electricity_price_per_kwh;
     form.billing_currency = profile.billing_currency;
     form.billing_tax_percent = profile.billing_tax_percent;
+    form.billing_price_includes_tax = profile.billing_price_includes_tax;
     submit(true);
 }
 
@@ -264,7 +298,7 @@ function deleteProfile(id: string) {
                                 Active tariff
                             </p>
                             <p class="text-xl font-semibold">
-                                {{ formatCurrency(pricePerKwh) }}
+                                {{ formatCurrency(pricePerKwhGross) }}
                             </p>
                             <p class="text-xs text-muted-foreground">per kWh</p>
                         </div>
@@ -452,6 +486,7 @@ function deleteProfile(id: string) {
                                                                             .electricity_price_per_kwh,
                                                                     ]"
                                                                 />
+
                                                             </Field>
 
                                                             <Field>
@@ -509,6 +544,41 @@ function deleteProfile(id: string) {
                                                                 />
                                                             </Field>
                                                         </div>
+
+                                                        <label
+                                                            class="mt-4 grid w-full cursor-pointer grid-cols-[auto_1fr] gap-4 rounded-2xl border border-border/40 bg-background/60 p-4 transition hover:bg-background/80"
+                                                        >
+                                                            <Checkbox
+                                                                v-model="
+                                                                    form.billing_price_includes_tax
+                                                                "
+                                                                :class="
+                                                                    'mt-0.5 size-4 rounded-[6px] border-border data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground'
+                                                                "
+                                                            />
+                                                            <div class="space-y-1">
+                                                                <p
+                                                                    class="text-sm font-medium"
+                                                                >
+                                                                    Price
+                                                                    includes VAT
+                                                                </p>
+                                                                <p
+                                                                    class="max-w-3xl text-sm leading-6 text-muted-foreground"
+                                                                >
+                                                                    Enable this
+                                                                    if the value
+                                                                    you type
+                                                                    already has
+                                                                    tax included.
+                                                                    We will
+                                                                    auto-calculate
+                                                                    the net price
+                                                                    used in
+                                                                    billing.
+                                                                </p>
+                                                            </div>
+                                                        </label>
 
                                                         <FieldSeparator />
 
@@ -586,21 +656,116 @@ function deleteProfile(id: string) {
                                                                         {{
                                                                             form.electricity_price_per_kwh
                                                                         }}
-                                                                        {{
-                                                                            form.billing_currency
-                                                                        }}
-                                                                        /kWh ·
-                                                                        Tax
-                                                                        {{
-                                                                            taxPercent.toFixed(
-                                                                                2,
-                                                                            )
-                                                                        }}%
-                                                                    </p>
-                                                                </div>
+                                                                    {{
+                                                                        form.billing_currency
+                                                                    }}
+                                                                    /kWh ·
+                                                                    {{
+                                                                        billingPriceModeLabel
+                                                                    }}
+                                                                </p>
+                                                            </div>
                                                             </Field>
                                                         </div>
                                                     </FieldGroup>
+
+                                                    <div
+                                                        class="mt-5 rounded-2xl border border-border/40 bg-card p-4"
+                                                    >
+                                                        <div
+                                                            class="flex flex-wrap items-center justify-between gap-2"
+                                                        >
+                                                            <div>
+                                                                <p
+                                                                    class="text-sm font-semibold"
+                                                                >
+                                                                    Auto
+                                                                    calculation
+                                                                    preview
+                                                                </p>
+                                                                <p
+                                                                    class="text-sm text-muted-foreground"
+                                                                >
+                                                                    {{
+                                                                        billingPriceModeDescription
+                                                                    }}
+                                                                </p>
+                                                            </div>
+                                                            <Badge
+                                                                class="rounded-full"
+                                                            >
+                                                                {{
+                                                                    billingPriceModeLabel
+                                                                }}
+                                                            </Badge>
+                                                        </div>
+
+                                                        <div
+                                                            class="mt-4 grid gap-3 sm:grid-cols-3"
+                                                        >
+                                                            <div
+                                                                class="rounded-2xl border border-border/40 bg-background/60 p-4"
+                                                            >
+                                                                <p
+                                                                    class="text-xs tracking-[0.16em] text-muted-foreground uppercase"
+                                                                >
+                                                                    Entered
+                                                                    price
+                                                                </p>
+                                                                <p
+                                                                    class="mt-2 text-lg font-semibold"
+                                                                >
+                                                                    {{
+                                                                        formatCurrency(
+                                                                            enteredPricePerKwh,
+                                                                        )
+                                                                    }}
+                                                                    /kWh
+                                                                </p>
+                                                            </div>
+
+                                                            <div
+                                                                class="rounded-2xl border border-border/40 bg-background/60 p-4"
+                                                            >
+                                                                <p
+                                                                    class="text-xs tracking-[0.16em] text-muted-foreground uppercase"
+                                                                >
+                                                                    Net price
+                                                                </p>
+                                                                <p
+                                                                    class="mt-2 text-lg font-semibold"
+                                                                >
+                                                                    {{
+                                                                        formatCurrency(
+                                                                            pricePerKwhNet,
+                                                                        )
+                                                                    }}
+                                                                    /kWh
+                                                                </p>
+                                                            </div>
+
+                                                            <div
+                                                                class="rounded-2xl border border-border/40 bg-background/60 p-4"
+                                                            >
+                                                                <p
+                                                                    class="text-xs tracking-[0.16em] text-muted-foreground uppercase"
+                                                                >
+                                                                    Price with
+                                                                    VAT
+                                                                </p>
+                                                                <p
+                                                                    class="mt-2 text-lg font-semibold"
+                                                                >
+                                                                    {{
+                                                                        formatCurrency(
+                                                                            pricePerKwhGross,
+                                                                        )
+                                                                    }}
+                                                                    /kWh
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 </FieldSet>
                                             </div>
 
@@ -698,7 +863,11 @@ function deleteProfile(id: string) {
                                                                 {{
                                                                     profile.billing_currency
                                                                 }}
-                                                                /kWh · Tax
+                                                                /kWh · {{
+                                                                    profile.billing_price_includes_tax
+                                                                        ? 'includes VAT'
+                                                                        : 'excludes VAT'
+                                                                }} · Tax
                                                                 {{
                                                                     profile.billing_tax_percent
                                                                 }}%
@@ -905,7 +1074,7 @@ function deleteProfile(id: string) {
                                         50 kWh
                                     </p>
                                     <p class="mt-2 text-lg font-semibold">
-                                        {{ formatCurrency(pricePerKwh * 50) }}
+                                        {{ formatCurrency(pricePerKwhGross * 50) }}
                                     </p>
                                 </div>
 
@@ -918,7 +1087,7 @@ function deleteProfile(id: string) {
                                         300 kWh
                                     </p>
                                     <p class="mt-2 text-lg font-semibold">
-                                        {{ formatCurrency(pricePerKwh * 300) }}
+                                        {{ formatCurrency(pricePerKwhGross * 300) }}
                                     </p>
                                 </div>
                             </div>

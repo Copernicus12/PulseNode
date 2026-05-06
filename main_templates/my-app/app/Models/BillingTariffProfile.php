@@ -24,6 +24,7 @@ class BillingTariffProfile extends Model
         'electricity_price_per_kwh',
         'billing_currency',
         'billing_tax_percent',
+        'billing_price_includes_tax',
     ];
 
     protected function casts(): array
@@ -31,6 +32,7 @@ class BillingTariffProfile extends Model
         return [
             'electricity_price_per_kwh' => 'float',
             'billing_tax_percent' => 'float',
+            'billing_price_includes_tax' => 'boolean',
         ];
     }
 }

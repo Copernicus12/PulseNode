@@ -13,6 +13,7 @@ class ElectricityBillingUpdateRequest extends FormRequest
             'electricity_price_per_kwh' => ['required', 'numeric', 'min:0', 'max:999999.999999'],
             'billing_currency' => ['required', 'string', 'size:3', Rule::in(['RON', 'EUR', 'USD', 'GBP', 'CHF', 'HUF'])],
             'billing_tax_percent' => ['required', 'numeric', 'min:0', 'max:100'],
+            'billing_price_includes_tax' => ['required', 'boolean'],
         ];
     }
 }

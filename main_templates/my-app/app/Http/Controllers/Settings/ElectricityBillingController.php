@@ -34,12 +34,17 @@ class ElectricityBillingController extends Controller
         $user = $request->user();
         $pricePerWh = (float) ($user->electricity_price_per_wh ?? 0);
         $pricePerKwh = $pricePerWh * 1000;
+        $taxPercent = (float) ($user->billing_tax_percent ?? 21);
+        $priceIncludesTax = (bool) ($user->billing_price_includes_tax ?? false);
 
         return Inertia::render('settings/ElectricityBilling', [
             'billingSettings' => [
-                'electricity_price_per_kwh' => rtrim(rtrim(number_format($pricePerKwh, 6, '.', ''), '0'), '.'),
+                'electricity_price_per_kwh' => $this->formatTariffValue(
+                    $this->displayPricePerKwh($pricePerKwh, $priceIncludesTax, $taxPercent),
+                ),
                 'billing_currency' => $user->billing_currency ?? 'RON',
-                'billing_tax_percent' => rtrim(rtrim(number_format((float) ($user->billing_tax_percent ?? 21), 2, '.', ''), '0'), '.'),
+                'billing_tax_percent' => $this->formatTariffValue($taxPercent, 2),
+                'billing_price_includes_tax' => $priceIncludesTax,
             ],
             'billingProfiles' => BillingTariffProfile::query()
                 ->where('owner_key', $this->ownerKey($user))
@@ -48,9 +53,16 @@ class ElectricityBillingController extends Controller
                 ->map(fn (BillingTariffProfile $profile) => [
                     'id' => (string) $profile->id,
                     'name' => (string) $profile->name,
-                    'electricity_price_per_kwh' => rtrim(rtrim(number_format((float) $profile->electricity_price_per_kwh, 6, '.', ''), '0'), '.'),
+                    'electricity_price_per_kwh' => $this->formatTariffValue(
+                        $this->displayPricePerKwh(
+                            (float) $profile->electricity_price_per_kwh,
+                            (bool) ($profile->billing_price_includes_tax ?? false),
+                            (float) $profile->billing_tax_percent,
+                        ),
+                    ),
                     'billing_currency' => (string) $profile->billing_currency,
-                    'billing_tax_percent' => rtrim(rtrim(number_format((float) $profile->billing_tax_percent, 2, '.', ''), '0'), '.'),
+                    'billing_tax_percent' => $this->formatTariffValue((float) $profile->billing_tax_percent, 2),
+                    'billing_price_includes_tax' => (bool) ($profile->billing_price_includes_tax ?? false),
                     'created_at' => optional($profile->created_at)?->toISOString(),
                 ])
                 ->values()
@@ -72,10 +84,15 @@ class ElectricityBillingController extends Controller
 
     public function update(ElectricityBillingUpdateRequest $request): RedirectResponse
     {
+        $taxPercent = (float) $request->validated('billing_tax_percent');
+        $priceIncludesTax = (bool) $request->validated('billing_price_includes_tax');
+        $displayPricePerKwh = (float) $request->validated('electricity_price_per_kwh');
+
         $request->user()->forceFill([
-            'electricity_price_per_wh' => ((float) $request->validated('electricity_price_per_kwh')) / 1000,
+            'electricity_price_per_wh' => $this->netPricePerKwh($displayPricePerKwh, $priceIncludesTax, $taxPercent) / 1000,
             'billing_currency' => strtoupper($request->validated('billing_currency')),
-            'billing_tax_percent' => $request->validated('billing_tax_percent'),
+            'billing_tax_percent' => $taxPercent,
+            'billing_price_includes_tax' => $priceIncludesTax,
         ])->save();
 
         return to_route('electricity-billing.edit');
@@ -85,15 +102,19 @@ class ElectricityBillingController extends Controller
     {
         $user = $request->user();
         $data = $request->validated();
+        $taxPercent = (float) $data['billing_tax_percent'];
+        $priceIncludesTax = (bool) $data['billing_price_includes_tax'];
+        $displayPricePerKwh = (float) $data['electricity_price_per_kwh'];
 
         BillingTariffProfile::query()->create([
             'id' => (string) Str::ulid(),
             'owner_key' => $this->ownerKey($user),
             'owner_email' => (string) ($user?->email ?? ''),
             'name' => $data['name'],
-            'electricity_price_per_kwh' => (float) $data['electricity_price_per_kwh'],
+            'electricity_price_per_kwh' => $this->netPricePerKwh($displayPricePerKwh, $priceIncludesTax, $taxPercent),
             'billing_currency' => strtoupper($data['billing_currency']),
-            'billing_tax_percent' => (float) $data['billing_tax_percent'],
+            'billing_tax_percent' => $taxPercent,
+            'billing_price_includes_tax' => $priceIncludesTax,
         ]);
 
         return to_route('electricity-billing.edit');
@@ -288,6 +309,36 @@ class ElectricityBillingController extends Controller
     private function ownerKey(?Authenticatable $user): string
     {
         return (string) ($user?->getAuthIdentifier() ?? '');
+    }
+
+    private function netPricePerKwh(float $pricePerKwh, bool $includesTax, float $taxPercent): float
+    {
+        if (! $includesTax) {
+            return max(0.0, $pricePerKwh);
+        }
+
+        $multiplier = 1 + ($taxPercent / 100);
+        if ($multiplier <= 0) {
+            return max(0.0, $pricePerKwh);
+        }
+
+        return max(0.0, $pricePerKwh / $multiplier);
+    }
+
+    private function displayPricePerKwh(float $netPricePerKwh, bool $includesTax, float $taxPercent): float
+    {
+        if (! $includesTax) {
+            return max(0.0, $netPricePerKwh);
+        }
+
+        return max(0.0, $netPricePerKwh * (1 + ($taxPercent / 100)));
+    }
+
+    private function formatTariffValue(float $value, int $decimals = 6): string
+    {
+        $formatted = rtrim(rtrim(number_format($value, $decimals, '.', ''), '0'), '.');
+
+        return $formatted === '' ? '0' : $formatted;
     }
 
     private function invoiceItems(?Authenticatable $user): array

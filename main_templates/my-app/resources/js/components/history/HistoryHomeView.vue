@@ -841,7 +841,7 @@ onUnmounted(() => {
               {{ currentBillingSummary.profile_label }}
             </p>
             <p class="mt-1 text-xs text-muted-foreground">
-              {{ fmtCurrency(currentBillingSummary.price_per_kwh_with_tax) }}/kWh cu TVA
+              {{ fmtCurrency(currentBillingSummary.price_per_kwh_with_tax) }}/kWh incl. VAT
             </p>
           </div>
           <div class="rounded-2xl border border-border/40 bg-background p-4">
@@ -906,7 +906,7 @@ onUnmounted(() => {
             v-model="pickerDate"
             :min="historyState.daySelector.min_date"
             :max="historyState.daySelector.max_date"
-            placeholder="Selecteaza ziua"
+            placeholder="Select day"
             class="h-10"
             @change="applyAnchorDate"
           />
@@ -1014,7 +1014,7 @@ onUnmounted(() => {
                 {{ fmtCurrency(socketBillingMap[socket.name]?.total_cost ?? 0) }}
               </p>
               <p class="mt-1 text-[11px] text-muted-foreground">
-                Pret cu TVA pentru consumul zilei
+                Gross price for today's consumption
               </p>
               <div class="mt-3 h-2 overflow-hidden rounded-full bg-muted">
                 <div
@@ -1086,7 +1086,7 @@ onUnmounted(() => {
               {{ fmtCurrency(currentBillingSummary.price_per_kwh_with_tax) }}/kWh
             </p>
             <p class="mt-1 text-xs text-muted-foreground">
-              {{ fmtCurrency(currentBillingSummary.price_per_kwh) }} fara TVA · TVA {{ fmt(currentBillingSummary.tax_percent, 2) }}%
+              {{ fmtCurrency(currentBillingSummary.price_per_kwh) }} excl. VAT · VAT {{ fmt(currentBillingSummary.tax_percent, 2) }}%
             </p>
           </div>
 
