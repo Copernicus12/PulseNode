@@ -451,6 +451,7 @@ function socketBarWidth(energyKwh: number): number {
 }
 
 function getChartTokens(): {
+  background: string
   mutedText: string
   border: string
   chart1: string
@@ -458,6 +459,7 @@ function getChartTokens(): {
 } {
   if (typeof document === 'undefined') {
     return {
+      background: 'hsl(0 0% 100%)',
       mutedText: 'hsl(0 0% 45%)',
       border: 'hsl(0 0% 92%)',
       chart1: 'hsl(12 76% 61%)',
@@ -468,6 +470,7 @@ function getChartTokens(): {
   const styles = getComputedStyle(document.documentElement)
 
   return {
+    background: styles.getPropertyValue('--background').trim() || 'hsl(0 0% 100%)',
     mutedText: styles.getPropertyValue('--muted-foreground').trim() || 'hsl(0 0% 45%)',
     border: styles.getPropertyValue('--border').trim() || 'hsl(0 0% 92%)',
     chart1: styles.getPropertyValue('--chart-1').trim() || 'hsl(12 76% 61%)',
@@ -574,14 +577,20 @@ function buildChartOptions(
       },
       tooltip: {
         enabled: true,
-        backgroundColor: 'rgba(15, 23, 42, 0.96)',
-        borderColor: 'rgba(148, 163, 184, 0.22)',
+        backgroundColor: tokens.background,
+        borderColor: tokens.border,
         borderWidth: 1,
-        titleColor: '#ffffff',
-        bodyColor: '#e2e8f0',
+        titleColor: tokens.mutedText,
+        bodyColor: tokens.mutedText,
         padding: 12,
         cornerRadius: 12,
         displayColors: true,
+        titleFont: {
+          weight: '600',
+        },
+        bodyFont: {
+          weight: '500',
+        },
         callbacks: {
           label(context: { dataset: { label?: string }; parsed: { y?: number } }) {
             const value = Number(context.parsed.y ?? 0)
