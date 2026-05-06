@@ -1,6 +1,17 @@
 <script setup lang="ts">
 import { ChevronLeft } from 'lucide-vue-next'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import Chart from 'primevue/chart'
+import {
+  CategoryScale,
+  Chart as ChartJS,
+  Filler,
+  Legend,
+  LineElement,
+  LinearScale,
+  PointElement,
+  Tooltip,
+} from 'chart.js'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
@@ -20,17 +31,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Pagination,
-  PaginationContent,
-  PaginationEllipsis,
-  PaginationFirst,
-  PaginationItem,
-  PaginationLast,
-  PaginationNext,
-  PaginationPrevious,
-} from '@/components/ui/pagination'
 import { cn } from '@/lib/utils'
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  LineElement,
+  PointElement,
+  Tooltip,
+  Legend,
+  Filler,
+)
 
 type WarningCounters = {
   high?: number
@@ -165,12 +176,7 @@ const historyState = ref<HistoryPageProps>({
   selectedDay: { ...(props.selectedDay ?? {}) },
 })
 
-const PER_PAGE = 4
-const DETAIL_PER_PAGE = 10
-const hourlyPage = ref(1)
 const detailOpen = ref(false)
-const minutePage = ref(1)
-const secondPage = ref(1)
 const isLoading = ref(false)
 const selectedHourKey = ref<string | null>(null)
 const selectedMinuteKey = ref<string | null>(null)
@@ -208,81 +214,99 @@ const socketBillingMap = computed<Record<string, BillingSocketCost>>(() => (
 const topIntervals = computed(() => intervals.value.slice(0, 4))
 const maxSocketEnergy = computed(() => Math.max(0.001, ...socketStats.value.map((item) => number(item.energy_kwh))))
 
-const hourlyTotalPages = computed(() => Math.max(1, Math.ceil(hourlyLoad.value.length / PER_PAGE)))
-const pagedHourly = computed(() => {
-  const start = (hourlyPage.value - 1) * PER_PAGE
-  return hourlyLoad.value.slice(start, start + PER_PAGE)
-})
-const pagedStartIndex = computed(() => (hourlyLoad.value.length ? (hourlyPage.value - 1) * PER_PAGE + 1 : 0))
-const pagedEndIndex = computed(() => Math.min(hourlyPage.value * PER_PAGE, hourlyLoad.value.length))
 const selectedHour = computed<HourlyStat | null>(() => hourlyLoad.value.find((item) => item.hour === selectedHourKey.value) ?? null)
 const selectedHourMinutes = computed<MinuteStat[]>(() => selectedHour.value?.minutes ?? [])
-const minuteTotalPages = computed(() => Math.max(1, Math.ceil(selectedHourMinutes.value.length / DETAIL_PER_PAGE)))
-const pagedMinutes = computed(() => {
-  const start = (minutePage.value - 1) * DETAIL_PER_PAGE
-  return selectedHourMinutes.value.slice(start, start + DETAIL_PER_PAGE)
-})
-const minutePagedStartIndex = computed(() => (
-  selectedHourMinutes.value.length
-    ? (minutePage.value - 1) * DETAIL_PER_PAGE + 1
-    : 0
-))
-const minutePagedEndIndex = computed(() => Math.min(minutePage.value * DETAIL_PER_PAGE, selectedHourMinutes.value.length))
 const selectedMinute = computed<MinuteStat | null>(() => (
   selectedHourMinutes.value.find((item) => item.minute === selectedMinuteKey.value) ?? null
 ))
 const selectedMinuteSeconds = computed<SecondStat[]>(() => selectedMinute.value?.seconds ?? [])
-const secondTotalPages = computed(() => Math.max(1, Math.ceil(selectedMinuteSeconds.value.length / DETAIL_PER_PAGE)))
-const pagedSeconds = computed(() => {
-  const start = (secondPage.value - 1) * DETAIL_PER_PAGE
-  return selectedMinuteSeconds.value.slice(start, start + DETAIL_PER_PAGE)
-})
-const secondPagedStartIndex = computed(() => (
-  selectedMinuteSeconds.value.length
-    ? (secondPage.value - 1) * DETAIL_PER_PAGE + 1
-    : 0
-))
-const secondPagedEndIndex = computed(() => Math.min(secondPage.value * DETAIL_PER_PAGE, selectedMinuteSeconds.value.length))
+const themeRevision = ref(0)
+const hourlyChartData = computed(() => {
+  void themeRevision.value
 
-watch(hourlyLoad, () => {
-  hourlyPage.value = 1
+  return buildMixedChartData(
+    hourlyLoad.value,
+    (item) => item.hour,
+  )
 })
+const hourlyChartOptions = computed(() => {
+  void themeRevision.value
 
-watch(hourlyTotalPages, (maxPages) => {
-  if (hourlyPage.value > maxPages) {
-    hourlyPage.value = maxPages
-  }
+  return buildChartOptions((index) => {
+    const hour = hourlyLoad.value[index]
+    if (hour) openHourDetails(hour)
+  }, 'hour')
+})
+const minuteChartData = computed(() => {
+  void themeRevision.value
+
+  return buildMixedChartData(
+    selectedHourMinutes.value,
+    (item) => item.minute.slice(-2),
+  )
+})
+const minuteChartOptions = computed(() => {
+  void themeRevision.value
+
+  return buildChartOptions((index) => {
+    const minute = selectedHourMinutes.value[index]
+    if (minute) openMinuteDetails(minute)
+  }, 'minute', {
+    pointRadius: 0,
+    pointHoverRadius: 0,
+    pointHitRadius: 14,
+    animationDuration: 0,
+  })
+})
+const secondChartData = computed(() => {
+  void themeRevision.value
+
+  return buildMixedChartData(
+    selectedMinuteSeconds.value,
+    (item) => item.second.slice(-2),
+  )
+})
+const secondChartOptions = computed(() => {
+  void themeRevision.value
+
+  return buildChartOptions(() => {}, 'second', {
+    pointRadius: 0,
+    pointHoverRadius: 0,
+    pointHitRadius: 0,
+    animationDuration: 0,
+  })
 })
 
 watch(selectedHour, () => {
   selectedMinuteKey.value = null
-  minutePage.value = 1
-  secondPage.value = 1
 })
 
-watch(minuteTotalPages, (maxPages) => {
-  if (minutePage.value > maxPages) {
-    minutePage.value = maxPages
+watch(() => historyState.value.selectedDate, () => {
+  selectedHourKey.value = null
+  selectedMinuteKey.value = null
+  detailOpen.value = false
+})
+
+watch(hourlyLoad, (hours) => {
+  if (!hours.length) {
+    selectedHourKey.value = null
+    return
   }
-})
 
-watch(selectedMinute, () => {
-  secondPage.value = 1
-})
-
-watch(secondTotalPages, (maxPages) => {
-  if (secondPage.value > maxPages) {
-    secondPage.value = maxPages
+  if (selectedHourKey.value && hours.some((hour) => hour.hour === selectedHourKey.value)) {
+    return
   }
-})
+
+  selectedHourKey.value = historyState.value.topHour?.hour ?? hours[0].hour
+}, { immediate: true })
 
 watch(detailOpen, (isOpen) => {
   if (!isOpen) {
     selectedMinuteKey.value = null
-    minutePage.value = 1
-    secondPage.value = 1
   }
 })
+
+let themeObserver: MutationObserver | null = null
 
 let liveRefreshTimeout: number | null = null
 let liveRefreshInterval: number | null = null
@@ -426,6 +450,202 @@ function socketBarWidth(energyKwh: number): number {
   return Math.max(8, (number(energyKwh) / maxSocketEnergy.value) * 100)
 }
 
+function getChartTokens(): {
+  mutedText: string
+  border: string
+  chart1: string
+  chart2: string
+} {
+  if (typeof document === 'undefined') {
+    return {
+      mutedText: 'hsl(0 0% 45%)',
+      border: 'hsl(0 0% 92%)',
+      chart1: 'hsl(12 76% 61%)',
+      chart2: 'hsl(173 58% 39%)',
+    }
+  }
+
+  const styles = getComputedStyle(document.documentElement)
+
+  return {
+    mutedText: styles.getPropertyValue('--muted-foreground').trim() || 'hsl(0 0% 45%)',
+    border: styles.getPropertyValue('--border').trim() || 'hsl(0 0% 92%)',
+    chart1: styles.getPropertyValue('--chart-1').trim() || 'hsl(12 76% 61%)',
+    chart2: styles.getPropertyValue('--chart-2').trim() || 'hsl(173 58% 39%)',
+  }
+}
+
+function buildMixedChartData<T extends { energy_kwh: number; avg_power_w: number; warnings?: WarningCounters }>(
+  items: T[],
+  labelGetter: (item: T, index: number) => string,
+) {
+  const tokens = getChartTokens()
+
+  return {
+    labels: items.map(labelGetter),
+    datasets: [
+      {
+        type: 'line',
+        label: 'Energy (kWh)',
+        data: items.map((item) => number(item.energy_kwh)),
+        borderColor: tokens.chart2,
+        backgroundColor: tokens.chart2,
+        pointBackgroundColor: tokens.chart2,
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2,
+        pointRadius: 3,
+        pointHoverRadius: 3,
+        tension: 0.35,
+        fill: false,
+        yAxisID: 'y',
+      },
+      {
+        type: 'line',
+        label: 'Average power (W)',
+        data: items.map((item) => number(item.avg_power_w)),
+        borderColor: tokens.chart1,
+        backgroundColor: tokens.chart1,
+        pointBackgroundColor: tokens.chart1,
+        pointBorderColor: '#ffffff',
+        pointBorderWidth: 2,
+        pointRadius: 3,
+        pointHoverRadius: 3,
+        tension: 0.35,
+        fill: false,
+        yAxisID: 'y1',
+      },
+    ],
+  }
+}
+
+type ChartHoverConfig = {
+  pointRadius?: number
+  pointHoverRadius?: number
+  pointHitRadius?: number
+  animationDuration?: number
+}
+
+function buildChartOptions(
+  onSelect: (index: number) => void,
+  kind: 'hour' | 'minute' | 'second',
+  hoverConfig: ChartHoverConfig | null = null,
+) {
+  const tokens = getChartTokens()
+  const interactive = kind !== 'second'
+  const pointRadius = hoverConfig?.pointRadius ?? 3
+  const pointHoverRadius = hoverConfig?.pointHoverRadius ?? 3
+  const pointHitRadius = hoverConfig?.pointHitRadius ?? 8
+  const animationDuration = hoverConfig?.animationDuration ?? 120
+
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: animationDuration > 0
+      ? {
+          duration: animationDuration,
+        }
+      : false,
+    interaction: {
+      mode: 'index',
+      intersect: false,
+    },
+    hover: {
+      mode: 'index',
+      intersect: false,
+    },
+    elements: {
+      point: {
+        radius: pointRadius,
+        hoverRadius: pointHoverRadius,
+        hitRadius: pointHitRadius,
+        borderWidth: 2,
+        hoverBorderWidth: 2,
+      },
+    },
+    onClick: (_event: unknown, elements: Array<{ index: number }>) => {
+      const index = elements?.[0]?.index
+      if (typeof index === 'number') {
+        onSelect(index)
+      }
+    },
+    plugins: {
+      legend: {
+        display: false,
+      },
+      tooltip: {
+        enabled: true,
+        backgroundColor: 'rgba(15, 23, 42, 0.96)',
+        borderColor: 'rgba(148, 163, 184, 0.22)',
+        borderWidth: 1,
+        titleColor: '#ffffff',
+        bodyColor: '#e2e8f0',
+        padding: 12,
+        cornerRadius: 12,
+        displayColors: true,
+        callbacks: {
+          label(context: { dataset: { label?: string }; parsed: { y?: number } }) {
+            const value = Number(context.parsed.y ?? 0)
+            if (context.dataset.label === 'Average power (W)') {
+              return ` ${context.dataset.label}: ${fmtPower(value, 1)} W`
+            }
+
+            return ` ${context.dataset.label}: ${fmt(value, 4)} kWh`
+          },
+          title(context: Array<{ label?: string }>) {
+            if (kind === 'hour') return `Hour ${context[0]?.label ?? ''}`
+            if (kind === 'minute') return `Minute ${context[0]?.label ?? ''}`
+            return `Second ${context[0]?.label ?? ''}`
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        ticks: {
+          color: tokens.mutedText,
+          autoSkip: true,
+          maxRotation: 0,
+        },
+        grid: {
+          display: false,
+        },
+        border: {
+          color: tokens.border,
+        },
+      },
+      y: {
+        beginAtZero: true,
+        position: 'left',
+        ticks: {
+          color: tokens.mutedText,
+          callback: (value: string | number) => `${value} kWh`,
+        },
+        grid: {
+          color: tokens.border,
+        },
+        border: {
+          color: tokens.border,
+        },
+      },
+      y1: {
+        beginAtZero: true,
+        position: 'right',
+        ticks: {
+          color: tokens.mutedText,
+          callback: (value: string | number) => `${value} W`,
+        },
+        grid: {
+          drawOnChartArea: false,
+          color: tokens.border,
+        },
+        border: {
+          color: tokens.border,
+        },
+      },
+    },
+  }
+}
+
 function lastSeenLabel(updatedAt: string | null): string {
   if (!updatedAt) return 'never'
   const timestamp = Date.parse(updatedAt)
@@ -533,6 +753,14 @@ onMounted(() => {
   window.addEventListener('pulsenode:latest', liveHandler)
   window.addEventListener('popstate', popStateHandler)
   liveRefreshInterval = window.setInterval(refreshTodayHistory, 30000)
+
+  themeObserver = new MutationObserver(() => {
+    themeRevision.value += 1
+  })
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['class', 'style'],
+  })
 })
 
 onUnmounted(() => {
@@ -546,6 +774,8 @@ onUnmounted(() => {
   if (liveRefreshInterval !== null) {
     window.clearInterval(liveRefreshInterval)
   }
+
+  themeObserver?.disconnect()
 })
 </script>
 
@@ -709,89 +939,49 @@ onUnmounted(() => {
       <div class="space-y-5">
         <Card id="history-hourly-map" class="gap-0 rounded-3xl border-border/30 py-0 shadow-none">
           <CardHeader class="p-5 pb-0 sm:p-6 sm:pb-0">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <CardTitle class="text-base">
-                Hourly load map
-              </CardTitle>
-              <div class="text-right">
-                <p class="text-xs text-muted-foreground">
-                  {{ pagedStartIndex }}-{{ pagedEndIndex }} / {{ hourlyLoad.length }}
+            <div class="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Hourly load map
                 </p>
-                <p class="text-[11px] text-muted-foreground/80">
-                  Click an hour for minute and second detail
-                </p>
-              </div>
+                <CardTitle class="mt-1 text-base">
+                  Energy trend across the day
+                </CardTitle>
+          </div>
             </div>
           </CardHeader>
-          <CardContent class="space-y-4 p-5 pt-4 sm:p-6 sm:pt-4">
-            <div class="grid gap-3 sm:grid-cols-2">
-              <button
-                v-for="hour in pagedHourly"
-                :key="hour.hour"
-                type="button"
-                class="rounded-2xl border border-border/40 bg-background p-4 text-left transition-colors hover:border-primary/40 hover:bg-muted/30 focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:outline-none"
-                @click="openHourDetails(hour)"
+          <CardContent class="p-5 pt-4 sm:p-6 sm:pt-4">
+            <div class="rounded-[28px] border border-border/40 bg-background/95 p-4">
+              <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <p class="text-sm text-muted-foreground">
+                  Click a bar to inspect minute and second details.
+                </p>
+                <p class="text-xs text-muted-foreground">
+                  {{ hourlyLoad.length }} hourly samples
+                </p>
+              </div>
+
+              <div
+                v-if="hourlyLoad.length"
+                class="overflow-x-auto rounded-[24px] bg-background p-4"
               >
-                <div class="flex items-center justify-between gap-2">
-                  <p class="font-semibold tabular-nums">
-                    {{ hour.hour }}
-                  </p>
-                  <Badge
-                    variant="outline"
-                    :class="loadState(hour) === 'overload'
-                      ? 'border-red-500/40 text-red-300'
-                      : loadState(hour) === 'high'
-                        ? 'border-amber-500/40 text-amber-300'
-                        : 'border-border text-muted-foreground'"
-                  >
-                    {{ loadState(hour) }}
-                  </Badge>
-                </div>
-                <p class="mt-1.5 text-xl font-semibold leading-none tabular-nums">
-                  {{ fmtEnergy(hour.energy_kwh) }}
-                </p>
-                <p class="mt-1 text-xs text-muted-foreground">
-                  Avg {{ fmtPower(hour.avg_power_w, 1) }} W · Peak {{ fmtPower(hour.peak_power_w, 1) }} W
-                </p>
-                <p class="mt-3 text-xs font-medium text-primary">
-                  Open details
-                </p>
-              </button>
-            </div>
-
-            <Pagination
-              v-if="hourlyLoad.length > PER_PAGE"
-              v-model:page="hourlyPage"
-              :items-per-page="PER_PAGE"
-              :total="hourlyLoad.length"
-              :sibling-count="1"
-              show-edges
-            >
-              <PaginationContent v-slot="{ items }" class="justify-center">
-                <PaginationFirst />
-                <PaginationPrevious />
-
-                <template
-                  v-for="(item, index) in items"
-                  :key="`hourly-page-${index}`"
-                >
-                  <PaginationItem
-                    v-if="item.type === 'page'"
-                    :value="item.value"
-                    :is-active="item.value === hourlyPage"
-                  >
-                    {{ item.value }}
-                  </PaginationItem>
-                  <PaginationEllipsis
-                    v-else
-                    :index="index"
+                <div class="min-w-[980px]">
+                  <Chart
+                    type="line"
+                    :data="hourlyChartData"
+                    :options="hourlyChartOptions"
+                    class="h-[22rem] w-full"
                   />
-                </template>
+                </div>
+              </div>
 
-                <PaginationNext />
-                <PaginationLast />
-              </PaginationContent>
-            </Pagination>
+              <div
+                v-else
+                class="rounded-[24px] border border-dashed border-border/50 bg-background p-6 text-sm text-muted-foreground"
+              >
+                No hourly samples are available for this day.
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -837,8 +1027,7 @@ onUnmounted(() => {
         </Card>
       </div>
 
-      <Card class="gap-0 rounded-3xl border-border/30 py-0 shadow-none xl:self-start xl:flex xl:h-[838px] xl:min-h-0 xl:flex-col">
-        <CardHeader class="p-5 pb-0 sm:p-6 sm:pb-0">
+       <Card class="gap-0 rounded-3xl border-border/30 py-0 shadow-none xl:self-start xl:flex xl:h-[978px] xl:min-h-0 xl:flex-col">        <CardHeader class="p-5 pb-0 sm:p-6 sm:pb-0">
           <CardTitle class="text-base">
             Selected day
           </CardTitle>
@@ -970,7 +1159,7 @@ onUnmounted(() => {
     </div>
 
     <Dialog v-model:open="detailOpen">
-      <DialogContent class="max-h-[82vh] overflow-y-auto p-5 sm:max-w-[720px] sm:p-5">
+      <DialogContent class="max-h-[92vh] w-[96vw] overflow-y-auto p-5 sm:max-w-[1180px] sm:p-6 xl:max-w-[1440px]">
         <DialogHeader class="pr-8">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -1034,167 +1223,71 @@ onUnmounted(() => {
           </div>
 
           <template v-if="!selectedMinute">
-            <div class="flex items-center justify-between gap-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
               <p class="text-sm font-medium">
-                Minute breakdown
+                Minute timeline
               </p>
               <p class="text-xs text-muted-foreground">
-                {{ minutePagedStartIndex }}-{{ minutePagedEndIndex }} / {{ selectedHourMinutes.length }}
+                Scroll to inspect all minute samples inside the selected hour.
               </p>
             </div>
 
-            <div class="grid gap-2 sm:grid-cols-2">
-              <button
-                v-for="minute in pagedMinutes"
-                :key="minute.minute"
-                type="button"
-                class="rounded-2xl border border-border/40 bg-background p-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/30 focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:outline-none"
-                @click="openMinuteDetails(minute)"
-              >
-                <div class="flex items-center justify-between gap-2">
-                  <p class="font-semibold tabular-nums">
-                    {{ minute.minute }}
-                  </p>
-                  <Badge
-                    variant="outline"
-                    :class="loadState(minute) === 'overload'
-                      ? 'border-red-500/40 text-red-300'
-                      : loadState(minute) === 'high'
-                        ? 'border-amber-500/40 text-amber-300'
-                        : 'border-border text-muted-foreground'"
-                  >
-                    {{ loadState(minute) }}
-                  </Badge>
-                </div>
-                <p class="mt-1 text-base font-semibold leading-none tabular-nums">
-                  {{ fmtEnergy(minute.energy_kwh) }}
-                </p>
-                <p class="mt-1 text-[11px] text-muted-foreground">
-                  Avg {{ fmtPower(minute.avg_power_w, 1) }} W · Peak {{ fmtPower(minute.peak_power_w, 1) }} W
-                </p>
-                <p class="mt-2 text-xs font-medium text-primary">
-                  {{ minute.seconds?.length ?? 0 }} second samples
-                </p>
-              </button>
-            </div>
-
-            <Pagination
-              v-if="selectedHourMinutes.length > DETAIL_PER_PAGE"
-              v-model:page="minutePage"
-              :items-per-page="DETAIL_PER_PAGE"
-              :total="selectedHourMinutes.length"
-              :sibling-count="1"
-              show-edges
-            >
-              <PaginationContent v-slot="{ items }" class="justify-center">
-                <PaginationFirst />
-                <PaginationPrevious />
-
-                <template
-                  v-for="(item, index) in items"
-                  :key="`minute-page-${index}`"
-                >
-                  <PaginationItem
-                    v-if="item.type === 'page'"
-                    :value="item.value"
-                    :is-active="item.value === minutePage"
-                  >
-                    {{ item.value }}
-                  </PaginationItem>
-                  <PaginationEllipsis
-                    v-else
-                    :index="index"
+            <div v-if="selectedHourMinutes.length" class="rounded-[24px] border border-border/40 bg-background p-4">
+              <div class="h-[20rem] min-h-[20rem] overflow-x-auto overflow-y-hidden">
+                <div class="min-w-[980px] h-full">
+                  <Chart
+                    :key="`minute-${historyState.selectedDate}-${selectedHour?.hour ?? 'none'}-${themeRevision}`"
+                    type="line"
+                    :data="minuteChartData"
+                    :options="minuteChartOptions"
+                    class="h-full w-full"
                   />
-                </template>
-
-                <PaginationNext />
-                <PaginationLast />
-              </PaginationContent>
-            </Pagination>
-          </template>
-
-          <template v-else>
-            <div class="flex items-center justify-between gap-2">
-              <p class="text-sm font-medium">
-                Second breakdown
-              </p>
-              <p class="text-xs text-muted-foreground">
-                {{ secondPagedStartIndex }}-{{ secondPagedEndIndex }} / {{ selectedMinuteSeconds.length }}
-              </p>
-            </div>
-
-            <div
-              v-if="selectedMinuteSeconds.length"
-              class="grid gap-2 sm:grid-cols-2"
-            >
-              <div
-                v-for="second in pagedSeconds"
-                :key="second.second"
-                class="rounded-2xl border border-border/40 bg-background p-3"
-              >
-                <div class="flex items-center justify-between gap-2">
-                  <p class="font-semibold tabular-nums">
-                    {{ second.second }}
-                  </p>
-                  <Badge
-                    variant="outline"
-                    :class="loadState(second) === 'overload'
-                      ? 'border-red-500/40 text-red-300'
-                      : loadState(second) === 'high'
-                        ? 'border-amber-500/40 text-amber-300'
-                        : 'border-border text-muted-foreground'"
-                  >
-                    {{ loadState(second) }}
-                  </Badge>
                 </div>
-                <p class="mt-1 text-base font-semibold leading-none tabular-nums">
-                  {{ fmtEnergy(second.energy_kwh) }}
-                </p>
-                <p class="mt-1 text-[11px] text-muted-foreground">
-                  Avg {{ fmtPower(second.avg_power_w, 1) }} W · Peak {{ fmtPower(second.peak_power_w, 1) }} W
-                </p>
               </div>
             </div>
+
             <p
               v-else
               class="rounded-2xl border border-dashed border-border/50 bg-background p-4 text-sm text-muted-foreground"
             >
-              No second-level samples were recorded for this minute.
+              No minute-level samples are available for this hour.
             </p>
+          </template>
 
-            <Pagination
-              v-if="selectedMinuteSeconds.length > DETAIL_PER_PAGE"
-              v-model:page="secondPage"
-              :items-per-page="DETAIL_PER_PAGE"
-              :total="selectedMinuteSeconds.length"
-              :sibling-count="1"
-              show-edges
-            >
-              <PaginationContent v-slot="{ items }" class="justify-center">
-                <PaginationFirst />
-                <PaginationPrevious />
+          <template v-else>
+            <div class="rounded-[24px] border border-border/40 bg-background p-4">
+              <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p class="text-sm font-medium">
+                  Second timeline
+                </p>
+                <p class="text-xs text-muted-foreground">
+                  Detailed chart for the selected minute.
+                </p>
+              </div>
 
-                <template
-                  v-for="(item, index) in items"
-                  :key="`second-page-${index}`"
-                >
-                  <PaginationItem
-                    v-if="item.type === 'page'"
-                    :value="item.value"
-                    :is-active="item.value === secondPage"
-                  >
-                    {{ item.value }}
-                  </PaginationItem>
-                  <PaginationEllipsis
-                    v-else
-                    :index="index"
+              <div
+                v-if="selectedMinuteSeconds.length"
+                class="h-[18rem] min-h-[18rem] overflow-x-auto overflow-y-hidden"
+              >
+                <div class="min-w-[980px] h-full">
+                  <Chart
+                    :key="`second-${historyState.selectedDate}-${selectedMinute?.minute ?? 'none'}-${themeRevision}`"
+                    type="line"
+                    :data="secondChartData"
+                    :options="secondChartOptions"
+                    class="h-full w-full"
                   />
-                </template>
+                </div>
+              </div>
 
-                <PaginationNext />
-                <PaginationLast />
-              </PaginationContent>
-            </Pagination>
+              <p
+                v-else
+                class="rounded-2xl border border-dashed border-border/50 bg-background p-4 text-sm text-muted-foreground"
+              >
+                No second-level samples were recorded for this minute.
+              </p>
+            </div>
+
           </template>
         </div>
 
