@@ -1,4 +1,18 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: pulsenode-caddy
+    depends_on:
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
   web:
     build:
       context: .
@@ -11,8 +25,6 @@ services:
       - /bin/sh
       - -lc
       - php artisan config:clear && php artisan route:clear && php artisan view:clear && exec php artisan serve --host=0.0.0.0 --port=8080
-    ports:
-      - "8080:8080"
     volumes:
       - storage-data:/var/www/html/storage
     restart: unless-stopped
@@ -31,4 +43,6 @@ services:
     restart: unless-stopped
 
 volumes:
+  caddy-data:
+  caddy-config:
   storage-data:
