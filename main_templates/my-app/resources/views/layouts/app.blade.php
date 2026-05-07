@@ -42,9 +42,9 @@
 
         <title>{{ trim($__env->yieldContent('title', 'PulseNode')) }} — {{ config('app.name', 'PulseNode') }}</title>
 
-        <link rel="icon" href="/favicon.ico" sizes="any">
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+        <link rel="icon" href="/favicon.ico?v=20260507" sizes="any">
+        <link rel="icon" href="/images/pulsenode-logo.png?v=20260507" type="image/png">
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260507">
 
         <link rel="preconnect" href="https://fonts.bunny.net">
         <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600,700" rel="stylesheet" />

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Head, Link } from '@inertiajs/vue3'
-import AppLogoIcon from '@/components/AppLogoIcon.vue'
+import BrandLogoImage from '@/components/BrandLogoImage.vue'
 import ThemeModeSwitcher from '@/components/ThemeModeSwitcher.vue'
 import { dashboard, login, register } from '@/routes'
 
@@ -89,8 +89,8 @@ const thisWeekTotal = computed(() => {
             <header class="mt-8 rounded-full border border-slate-200/60 dark:border-gray-700/50 bg-white/70 dark:bg-gray-700/60 py-3 px-6 shadow-md dark:shadow-xl backdrop-blur-xl">
                 <nav class="flex items-center justify-between">
                     <div class="flex items-center gap-3">
-                        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 dark:bg-emerald-500 shadow-[0_0_15px_rgba(79,70,229,0.3)] dark:shadow-emerald-500/20">
-                            <AppLogoIcon class="h-5 w-5 text-white" />
+                        <div class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-white shadow-[0_0_15px_rgba(79,70,229,0.3)] ring-1 ring-black/5 dark:bg-white/95 dark:shadow-emerald-500/20">
+                            <BrandLogoImage class="h-full w-full object-cover" />
                         </div>
                         <span class="font-semibold text-slate-900 dark:text-white tracking-wide">PulseNode</span>
                     </div>
@@ -99,7 +99,7 @@ const thisWeekTotal = computed(() => {
                     <div class="hidden md:flex flex-1 items-center justify-center gap-10 text-[13px] font-medium text-slate-500 dark:text-slate-400">
                         <a href="#" class="hover:text-slate-900 dark:hover:text-white transition-colors">Devices</a>
                         <a href="#" class="hover:text-slate-900 dark:hover:text-white transition-colors">Energy Plans</a>
-                        <a href="#" class="hover:text-slate-900 dark:hover:text-white transition-colors">Docs</a>
+                        <a href="https://github.com/Copernicus12/PulseNode" target="_blank" rel="noreferrer" class="hover:text-slate-900 dark:hover:text-white transition-colors">Docs</a>
                     </div>
 
                     <!-- Right Auth Actions -->

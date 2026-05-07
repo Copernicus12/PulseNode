@@ -3,7 +3,7 @@ import { Form, Head, Link } from '@inertiajs/vue3';
 import InputError from '@/components/InputError.vue';
 import TextLink from '@/components/TextLink.vue';
 import ThemeModeSwitcher from '@/components/ThemeModeSwitcher.vue';
-import AppLogoIcon from '@/components/AppLogoIcon.vue';
+import BrandLogoImage from '@/components/BrandLogoImage.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,19 +43,26 @@ import { store } from '@/routes/register';
 
         <div class="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 sm:px-6 lg:px-8">
             <header class="mt-8 rounded-full border border-slate-200/60 dark:border-gray-700/50 bg-white/70 dark:bg-gray-700/60 py-3 px-6 shadow-md dark:shadow-xl backdrop-blur-xl">
-                <nav class="flex items-center justify-between">
+                <nav class="flex items-center gap-4">
                     <Link href="/" class="flex items-center gap-3">
-                        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 dark:bg-emerald-500 dark:shadow-emerald-500/20">
-                            <AppLogoIcon class="h-5 w-5 text-white" />
+                        <div class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-white ring-1 ring-black/5 dark:bg-white/95 dark:shadow-emerald-500/20">
+                            <BrandLogoImage class="h-full w-full object-cover" />
                         </div>
                         <span class="font-semibold text-slate-900 dark:text-white tracking-wide">PulseNode</span>
                     </Link>
+
+                    <div class="flex flex-1 items-center justify-center gap-10 text-[13px] font-medium text-slate-500 dark:text-slate-400">
+                        <a href="#" class="hover:text-slate-900 dark:hover:text-white transition-colors">Devices</a>
+                        <a href="#" class="hover:text-slate-900 dark:hover:text-white transition-colors">Energy Plans</a>
+                        <a href="https://github.com/Copernicus12/PulseNode" target="_blank" rel="noreferrer" class="hover:text-slate-900 dark:hover:text-white transition-colors">Docs</a>
+                    </div>
 
                     <div class="flex items-center gap-3 text-[13px] font-medium">
                         <ThemeModeSwitcher
                             compact
                             button-class="border border-slate-200 dark:border-gray-700/60 bg-white dark:bg-gray-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-full px-2.5 py-2"
                         />
+
                         <div class="w-px h-5 bg-slate-300 dark:bg-white/10 mx-1"></div>
                         <Link href="/" class="rounded-full border border-slate-300 dark:border-white/10 bg-slate-100 dark:bg-white/5 px-5 py-2 text-slate-800 dark:text-white transition hover:bg-slate-200 dark:hover:bg-white/10">
                             Home
