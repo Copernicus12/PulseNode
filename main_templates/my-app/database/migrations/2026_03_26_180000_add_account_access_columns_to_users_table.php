@@ -14,12 +14,20 @@ return new class extends Migration
             $table->timestamp('guest_expires_at')->nullable();
             $table->boolean('is_blocked')->default(false);
             $table->timestamp('blocked_at')->nullable();
+            $table->string('account_status')->default('active');
+            $table->timestamp('requested_at')->nullable();
+            $table->timestamp('approved_at')->nullable();
+            $table->timestamp('rejected_at')->nullable();
         });
 
         DB::table('users')->update([
             'role' => 'admin',
             'is_blocked' => false,
             'blocked_at' => null,
+            'account_status' => 'active',
+            'requested_at' => null,
+            'approved_at' => now(),
+            'rejected_at' => null,
         ]);
     }
 
@@ -31,6 +39,10 @@ return new class extends Migration
                 'guest_expires_at',
                 'is_blocked',
                 'blocked_at',
+                'account_status',
+                'requested_at',
+                'approved_at',
+                'rejected_at',
             ]);
         });
     }

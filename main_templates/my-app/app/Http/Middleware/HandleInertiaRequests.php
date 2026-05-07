@@ -40,9 +40,15 @@ class HandleInertiaRequests extends Middleware
 
         if ($user !== null && method_exists($user, 'isAdmin') && $user->isAdmin()) {
             $authModel = get_class($user);
+            $pendingStatus = defined($authModel.'::ACCOUNT_STATUS_PENDING')
+                ? $authModel::ACCOUNT_STATUS_PENDING
+                : 'pending';
             $accountsSummary = [
                 'total' => $authModel::query()->count(),
                 'blocked' => $authModel::query()->where('is_blocked', true)->count(),
+                'pending_requests' => $authModel::query()
+                    ->where('account_status', $pendingStatus)
+                    ->count(),
                 'active_guests' => $authModel::query()
                     ->where('role', $authModel::ROLE_GUEST)
                     ->where('is_blocked', false)

@@ -104,6 +104,57 @@ class NotificationCenter
         ], 30);
     }
 
+    public function accountRequestSubmitted(string $name, string $email, string $userId): void
+    {
+        $this->store([
+            'type' => 'account_request_created',
+            'level' => 'warning',
+            'title' => 'New account request',
+            'message' => $name.' ('.$email.') requested access and is waiting for approval.',
+            'action_url' => $this->routePath('accounts.index'),
+            'meta' => [
+                'user_id' => $userId,
+                'email' => $email,
+                'name' => $name,
+                'status' => 'pending',
+            ],
+        ], 120);
+    }
+
+    public function accountRequestApproved(string $name, string $email, string $userId): void
+    {
+        $this->store([
+            'type' => 'account_request_approved',
+            'level' => 'success',
+            'title' => 'Account request approved',
+            'message' => $name.' ('.$email.') can now log in.',
+            'action_url' => $this->routePath('accounts.index'),
+            'meta' => [
+                'user_id' => $userId,
+                'email' => $email,
+                'name' => $name,
+                'status' => 'active',
+            ],
+        ], 120);
+    }
+
+    public function accountRequestRejected(string $name, string $email, string $userId): void
+    {
+        $this->store([
+            'type' => 'account_request_rejected',
+            'level' => 'error',
+            'title' => 'Account request rejected',
+            'message' => $name.' ('.$email.') was declined by an administrator.',
+            'action_url' => $this->routePath('accounts.index'),
+            'meta' => [
+                'user_id' => $userId,
+                'email' => $email,
+                'name' => $name,
+                'status' => 'rejected',
+            ],
+        ], 120);
+    }
+
     public function recordTelemetryUpdate(array $previous, array $latest, Esp32ConnectionHealth $connectionHealth): void
     {
         $wasOnline = $connectionHealth->isOnline($previous);

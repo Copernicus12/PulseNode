@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AccountsController;
+use App\Http\Controllers\Auth\RequestAccountController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Esp32ApiController;
 use App\Http\Controllers\NotificationController;
@@ -39,6 +40,10 @@ Route::get('/', function (\App\Support\Esp32StateStore $store, \App\Support\Esp3
     ]);
 })->name('home');
 
+Route::post('register', [RequestAccountController::class, 'store'])
+    ->middleware('guest')
+    ->name('register.store');
+
 Route::get('dashboard', DashboardController::class)
     ->middleware(['auth'])->name('dashboard');
 Route::prefix('accounts')->middleware(['auth', 'admin'])->name('accounts.')->group(function (): void {
@@ -49,6 +54,8 @@ Route::prefix('accounts')->middleware(['auth', 'admin'])->name('accounts.')->gro
         ->middleware('throttle:6,1')
         ->name('password.update');
     Route::patch('{user}', [AccountsController::class, 'update'])->name('update');
+    Route::post('{user}/approve', [AccountsController::class, 'approve'])->name('approve');
+    Route::post('{user}/reject', [AccountsController::class, 'reject'])->name('reject');
     Route::post('{user}/toggle-block', [AccountsController::class, 'toggleBlock'])->name('toggle-block');
     Route::delete('{user}', [AccountsController::class, 'destroy'])->name('destroy');
 });

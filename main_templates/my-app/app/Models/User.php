@@ -19,6 +19,12 @@ class User extends Authenticatable
 
     public const ROLE_GUEST = 'guest';
 
+    public const ACCOUNT_STATUS_ACTIVE = 'active';
+
+    public const ACCOUNT_STATUS_PENDING = 'pending';
+
+    public const ACCOUNT_STATUS_REJECTED = 'rejected';
+
     /**
      * The attributes that are mass assignable.
      *
@@ -32,6 +38,10 @@ class User extends Authenticatable
         'guest_expires_at',
         'is_blocked',
         'blocked_at',
+        'account_status',
+        'requested_at',
+        'approved_at',
+        'rejected_at',
         'electricity_price_per_wh',
         'billing_currency',
         'billing_tax_percent',
@@ -65,6 +75,9 @@ class User extends Authenticatable
             'two_factor_confirmed_at' => 'datetime',
             'guest_expires_at' => 'datetime',
             'blocked_at' => 'datetime',
+            'requested_at' => 'datetime',
+            'approved_at' => 'datetime',
+            'rejected_at' => 'datetime',
             'is_blocked' => 'boolean',
             'electricity_price_per_wh' => 'decimal:6',
             'billing_tax_percent' => 'decimal:2',
@@ -97,6 +110,21 @@ class User extends Authenticatable
         return $this->role === self::ROLE_GUEST;
     }
 
+    public function isPendingApproval(): bool
+    {
+        return $this->account_status === self::ACCOUNT_STATUS_PENDING;
+    }
+
+    public function isRejectedRequest(): bool
+    {
+        return $this->account_status === self::ACCOUNT_STATUS_REJECTED;
+    }
+
+    public function isActiveAccount(): bool
+    {
+        return $this->account_status === self::ACCOUNT_STATUS_ACTIVE;
+    }
+
     public function hasExpiredGuestAccess(): bool
     {
         return $this->isGuest()
@@ -113,6 +141,9 @@ class User extends Authenticatable
 
     public function isAccessBlocked(): bool
     {
-        return (bool) $this->is_blocked || $this->hasExpiredGuestAccess();
+        return (bool) $this->is_blocked
+            || $this->hasExpiredGuestAccess()
+            || $this->isPendingApproval()
+            || $this->isRejectedRequest();
     }
 }

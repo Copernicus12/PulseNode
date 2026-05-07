@@ -47,6 +47,7 @@ type Summary = {
     moderators: number;
     active_guests: number;
     blocked: number;
+    pending_requests: number;
 };
 
 type Flash = {
@@ -61,11 +62,17 @@ type ManagedUser = {
     email: string;
     role: string;
     is_blocked: boolean;
+    account_status: string;
     guest_expires_at?: string | null;
     blocked_at?: string | null;
+    requested_at?: string | null;
+    approved_at?: string | null;
+    rejected_at?: string | null;
     created_at?: string | null;
     is_self: boolean;
     update_url: string;
+    approve_url: string;
+    reject_url: string;
     toggle_block_url: string;
     destroy_url: string;
 };
@@ -109,7 +116,13 @@ const state = reactive<AccountsPageProps>({
 });
 
 const createDialogOpen = ref(false);
-const selectedUserId = ref<string | null>(state.users[0]?.id ?? null);
+const rejectDialogOpen = ref(false);
+const rejectTargetUser = ref<ManagedUser | null>(null);
+const selectedUserId = ref<string | null>(
+    state.users.find((user) => !isPendingRequest(user))?.id ??
+        state.users[0]?.id ??
+        null,
+);
 const isSubmitting = ref(false);
 const accountsNavViewport = ref<HTMLElement | null>(null);
 const accountsScrollbarActive = ref(false);
@@ -142,8 +155,8 @@ const accountForms = reactive(
 
 const selectedUser = computed(
     () =>
-        state.users.find((user) => user.id === selectedUserId.value) ??
-        state.users[0] ??
+        activeUsers.value.find((user) => user.id === selectedUserId.value) ??
+        activeUsers.value[0] ??
         null,
 );
 
@@ -151,7 +164,23 @@ const selectedForm = computed(() =>
     selectedUser.value ? accountForms[selectedUser.value.id] : null,
 );
 
+const pendingRequests = computed(() =>
+    state.users.filter((user) => isPendingRequest(user)),
+);
+
+const activeUsers = computed(() =>
+    state.users.filter((user) => !isPendingRequest(user)),
+);
+
 const compactStats = computed(() => [
+    {
+        label: 'Pending',
+        value: state.summary.pending_requests,
+        tone:
+            state.summary.pending_requests > 0
+                ? 'border-amber-500/20 bg-amber-500/10 text-amber-200'
+                : 'border-border/40 bg-muted/30 text-muted-foreground',
+    },
     {
         label: 'Blocked',
         value: state.summary.blocked,
@@ -240,6 +269,14 @@ function roleLabel(role: string): string {
         .replace(/\b\w/g, (value) => value.toUpperCase());
 }
 
+function isPendingRequest(user: ManagedUser): boolean {
+    return user.account_status === 'pending';
+}
+
+function isRejectedRequest(user: ManagedUser): boolean {
+    return user.account_status === 'rejected';
+}
+
 function isExpiredGuest(user: ManagedUser): boolean {
     if (user.role !== 'guest' || !user.guest_expires_at) return false;
 
@@ -257,6 +294,8 @@ function guestState(user: ManagedUser): string {
 }
 
 function accountStatusLabel(user: ManagedUser): string {
+    if (isPendingRequest(user)) return 'Pending review';
+    if (isRejectedRequest(user)) return 'Rejected';
     if (user.is_blocked) return 'Blocked';
     if (user.role === 'guest') return 'Guest';
 
@@ -264,6 +303,18 @@ function accountStatusLabel(user: ManagedUser): string {
 }
 
 function accountStatusCopy(user: ManagedUser): string {
+    if (isPendingRequest(user)) {
+        return user.requested_at
+            ? `Requested on ${formatDate(user.requested_at)}`
+            : 'Waiting for admin approval.';
+    }
+
+    if (isRejectedRequest(user)) {
+        return user.rejected_at
+            ? `Rejected on ${formatDate(user.rejected_at)}`
+            : 'This request was declined.';
+    }
+
     if (user.is_blocked) {
         return user.blocked_at
             ? `Blocked on ${formatDate(user.blocked_at)}`
@@ -278,6 +329,10 @@ function accountStatusCopy(user: ManagedUser): string {
 }
 
 function statusTone(user: ManagedUser): string {
+    if (isPendingRequest(user))
+        return 'border-amber-500/20 bg-amber-500/10 text-amber-200';
+    if (isRejectedRequest(user))
+        return 'border-red-500/20 bg-red-500/10 text-red-300';
     if (user.is_blocked) return 'border-red-500/20 bg-red-500/10 text-red-300';
     if (user.role === 'guest')
         return 'border-amber-500/20 bg-amber-500/10 text-amber-200';
@@ -337,21 +392,29 @@ function syncState(next: AccountsPageProps): void {
 
     if (
         previousSelectedId &&
-        state.users.some((user) => user.id === previousSelectedId)
+        state.users.some(
+            (user) =>
+                user.id === previousSelectedId &&
+                !isPendingRequest(user),
+        )
     ) {
         selectedUserId.value = previousSelectedId;
     } else {
-        selectedUserId.value = state.users[0]?.id ?? null;
+        selectedUserId.value =
+            state.users.find((user) => !isPendingRequest(user))?.id ??
+            state.users[0]?.id ??
+            null;
     }
 
     window.dispatchEvent(
         new CustomEvent('pulsenode:accounts-summary', {
-            detail: {
-                total: state.summary.total,
-                active_guests: state.summary.active_guests,
-                blocked: state.summary.blocked,
-            },
-        }),
+        detail: {
+            total: state.summary.total,
+            active_guests: state.summary.active_guests,
+            blocked: state.summary.blocked,
+            pending_requests: state.summary.pending_requests,
+        },
+    }),
     );
 
     queueAccountsScrollbarSync();
@@ -525,6 +588,39 @@ async function submitDestroy(user: ManagedUser): Promise<void> {
     await submitRequest(user.destroy_url, formData);
 }
 
+async function submitApproveRequest(user: ManagedUser): Promise<void> {
+    const formData = new FormData();
+    formData.set('_token', state.csrfToken);
+
+    await submitRequest(user.approve_url, formData);
+}
+
+async function submitRejectRequest(user: ManagedUser): Promise<void> {
+    rejectTargetUser.value = user;
+    rejectDialogOpen.value = true;
+}
+
+async function confirmRejectRequest(): Promise<void> {
+    if (!rejectTargetUser.value) return;
+
+    const formData = new FormData();
+    formData.set('_token', state.csrfToken);
+
+    const target = rejectTargetUser.value;
+    const succeeded = await submitRequest(target.reject_url, formData);
+
+    if (succeeded) {
+        rejectDialogOpen.value = false;
+        rejectTargetUser.value = null;
+    }
+}
+
+watch(rejectDialogOpen, (isOpen) => {
+    if (!isOpen) {
+        rejectTargetUser.value = null;
+    }
+});
+
 showFlashToast();
 
 onMounted(() => {
@@ -556,6 +652,50 @@ watch(
             container-aria-label="Accounts notifications"
         />
 
+        <Dialog v-model:open="rejectDialogOpen">
+            <DialogContent class="sm:max-w-lg">
+                <DialogHeader class="space-y-2">
+                    <DialogTitle>Reject account request?</DialogTitle>
+                    <DialogDescription>
+                        This will remove the pending request and the user will
+                        need to submit a new request if they want access
+                        again.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div
+                    class="rounded-2xl border border-border/30 bg-background/70 p-4 text-sm leading-6 text-muted-foreground"
+                >
+                    <p class="font-medium text-foreground">
+                        {{ rejectTargetUser?.name || 'Selected request' }}
+                    </p>
+                    <p class="mt-1 break-all">
+                        {{ rejectTargetUser?.email || 'No email available' }}
+                    </p>
+                    <p class="mt-3">
+                        If you continue, the request will be rejected and the
+                        pending account removed from the list.
+                    </p>
+                </div>
+
+                <DialogFooter class="gap-2">
+                    <DialogClose as-child>
+                        <Button variant="secondary" :disabled="isSubmitting">
+                            Cancel
+                        </Button>
+                    </DialogClose>
+                    <Button
+                        type="button"
+                        variant="destructive"
+                        :disabled="isSubmitting || rejectTargetUser === null"
+                        @click="confirmRejectRequest"
+                    >
+                        Reject request
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
         <Card id="accounts-workspace-header" class="relative overflow-hidden border-border/40 shadow-none">
             <div
                 class="pointer-events-none absolute inset-0 bg-linear-to-r from-primary/8 via-transparent to-transparent"
@@ -569,7 +709,7 @@ watch(
                         </CardTitle>
                         <CardDescription class="mt-1 text-sm leading-5">
                             Compact account navigation with quick access
-                            editing.
+                            editing and request approvals.
                         </CardDescription>
                     </div>
 
@@ -739,6 +879,112 @@ watch(
             </CardHeader>
         </Card>
 
+        <Card
+            id="accounts-pending-requests"
+            class="border-border/40 shadow-none"
+        >
+            <CardHeader class="gap-3 p-4 sm:p-5">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <CardTitle class="text-lg tracking-tight">
+                            Pending requests
+                        </CardTitle>
+                        <CardDescription class="mt-1 text-sm leading-5">
+                            Review account requests before they appear in the
+                            active accounts list.
+                        </CardDescription>
+                    </div>
+
+                    <Badge
+                        variant="outline"
+                        class="rounded-full px-3 py-1 text-xs"
+                        :class="
+                            pendingRequests.length > 0
+                                ? 'border-amber-500/20 bg-amber-500/10 text-amber-200'
+                                : 'border-border/40 bg-muted/30 text-muted-foreground'
+                        "
+                    >
+                        {{ pendingRequests.length }} waiting
+                    </Badge>
+                </div>
+            </CardHeader>
+
+            <CardContent class="p-4 pt-0 sm:p-5 sm:pt-0">
+                <div v-if="pendingRequests.length > 0" class="overflow-x-auto rounded-2xl bg-secondary/40 ring-1 ring-border/30">
+                    <table class="w-full min-w-[980px] text-sm">
+                        <thead>
+                            <tr class="border-b border-border/30 bg-secondary/40 text-left text-xs text-muted-foreground">
+                                <th class="px-3 py-2.5 font-medium">Request</th>
+                                <th class="px-3 py-2.5 font-medium">Email</th>
+                                <th class="px-3 py-2.5 font-medium">Requested</th>
+                                <th class="px-3 py-2.5 font-medium">Status</th>
+                                <th class="px-3 py-2.5 font-medium">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr
+                                v-for="user in pendingRequests"
+                                :key="user.id"
+                                class="border-b border-border/20 last:border-0"
+                            >
+                                <td class="px-3 py-2.5">
+                                    <div class="font-medium text-foreground">
+                                        {{ user.name }}
+                                    </div>
+                                    <div class="mt-1 text-xs text-muted-foreground">
+                                        Role: {{ roleLabel(user.role) }}
+                                    </div>
+                                </td>
+                                <td class="px-3 py-2.5 text-muted-foreground">
+                                    {{ user.email }}
+                                </td>
+                                <td class="px-3 py-2.5 text-muted-foreground">
+                                    {{ user.requested_at ? formatDate(user.requested_at) : 'Just now' }}
+                                </td>
+                                <td class="px-3 py-2.5">
+                                    <span
+                                        class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium"
+                                        :class="statusTone(user)"
+                                    >
+                                        {{ accountStatusLabel(user) }}
+                                    </span>
+                                </td>
+                                <td class="px-3 py-2.5">
+                                    <div class="flex flex-wrap gap-2">
+                                        <Button
+                                            type="button"
+                                            class="h-8 rounded-xl px-3"
+                                            :disabled="isSubmitting"
+                                            @click="submitApproveRequest(user)"
+                                        >
+                                            <ShieldCheck class="size-4" />
+                                            Approve
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="destructive"
+                                            class="h-8 rounded-xl px-3"
+                                            :disabled="isSubmitting"
+                                            @click="submitRejectRequest(user)"
+                                        >
+                                            Reject
+                                        </Button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div
+                    v-else
+                    class="rounded-2xl border border-dashed border-border/40 bg-background/40 p-5 text-sm leading-5 text-muted-foreground"
+                >
+                    No pending requests right now.
+                </div>
+            </CardContent>
+        </Card>
+
         <div class="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
             <Card
                 class="border-border/40 shadow-none xl:sticky xl:top-4 xl:self-start"
@@ -765,7 +1011,7 @@ watch(
                             @scroll="handleAccountsNavScroll"
                         >
                             <button
-                                v-for="user in state.users"
+                                v-for="user in activeUsers"
                                 :key="user.id"
                                 type="button"
                                 class="w-full rounded-2xl border p-3 text-left transition"
@@ -832,6 +1078,14 @@ watch(
                                     </div>
                                 </div>
                             </button>
+
+                            <div
+                                v-if="activeUsers.length === 0"
+                                class="rounded-2xl border border-dashed border-border/40 bg-background/40 p-4 text-sm leading-5 text-muted-foreground"
+                            >
+                                No active accounts yet. Approve a pending
+                                request to unlock the first account.
+                            </div>
                         </nav>
 
                         <div
@@ -916,6 +1170,15 @@ watch(
                                 {{ accountStatusCopy(selectedUser) }}
                             </div>
                         </div>
+
+                        <div
+                            v-if="isPendingRequest(selectedUser)"
+                            class="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-200"
+                        >
+                            This request was created from the public request
+                            form. Approve it to activate the account, or reject
+                            it to remove the request.
+                        </div>
                     </CardHeader>
 
                     <CardContent class="space-y-4 p-4 pt-0 sm:p-5 sm:pt-0">
@@ -963,6 +1226,30 @@ watch(
                         <div
                             class="rounded-3xl border border-border/30 bg-card/60 p-4"
                         >
+                            <div
+                                v-if="isPendingRequest(selectedUser)"
+                                class="mb-4 grid gap-3 sm:grid-cols-2"
+                            >
+                                <Button
+                                    type="button"
+                                    class="h-10 w-full rounded-xl"
+                                    :disabled="isSubmitting"
+                                    @click="submitApproveRequest(selectedUser)"
+                                >
+                                    <ShieldCheck class="size-4" />
+                                    Approve request
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    class="h-10 w-full rounded-xl"
+                                    :disabled="isSubmitting"
+                                    @click="submitRejectRequest(selectedUser)"
+                                >
+                                    Reject request
+                                </Button>
+                            </div>
+
                             <form
                                 :action="selectedUser.update_url"
                                 method="POST"
@@ -994,6 +1281,7 @@ watch(
                                             v-model="selectedForm.role"
                                             name="role"
                                             class="rounded-xl"
+                                            :disabled="isPendingRequest(selectedUser)"
                                         >
                                             <NativeSelectOption
                                                 v-for="role in state.roles"
@@ -1021,7 +1309,8 @@ watch(
                                             min="1"
                                             max="720"
                                             :disabled="
-                                                selectedForm.role !== 'guest'
+                                                selectedForm.role !== 'guest' ||
+                                                isPendingRequest(selectedUser)
                                             "
                                             class="h-10 rounded-xl"
                                         />
@@ -1031,7 +1320,10 @@ watch(
                                         <Button
                                             type="submit"
                                             class="h-10 w-full rounded-xl lg:w-auto"
-                                            :disabled="isSubmitting"
+                                            :disabled="
+                                                isSubmitting ||
+                                                isPendingRequest(selectedUser)
+                                            "
                                         >
                                             Save access
                                         </Button>
@@ -1058,9 +1350,7 @@ watch(
                                         type="submit"
                                         class="h-10 w-full rounded-xl"
                                         variant="outline"
-                                        :disabled="
-                                            selectedUser.is_self || isSubmitting
-                                        "
+                                        :disabled="selectedUser.is_self || isSubmitting || isPendingRequest(selectedUser)"
                                     >
                                         <Ban class="size-4" />
                                         {{
@@ -1142,10 +1432,18 @@ watch(
 
                 <template v-else>
                     <CardContent class="p-8 text-center">
-                        <p class="text-sm font-medium">No accounts found</p>
+                        <p class="text-sm font-medium">
+                            No active accounts selected
+                        </p>
                         <p class="mt-2 text-sm text-muted-foreground">
-                            Open the create account dialog to add the first
-                            account.
+                            <template v-if="pendingRequests.length > 0">
+                                Approve one of the pending requests above to
+                                move it into the active accounts list.
+                            </template>
+                            <template v-else>
+                                Open the create account dialog to add the first
+                                account.
+                            </template>
                         </p>
                     </CardContent>
                 </template>

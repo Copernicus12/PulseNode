@@ -7,9 +7,11 @@ use App\Actions\Fortify\ResetUserPassword;
 use App\Http\Responses\LoginResponse;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
 use Laravel\Fortify\Features;
@@ -42,6 +44,37 @@ class FortifyServiceProvider extends ServiceProvider
     {
         Fortify::resetUserPasswordsUsing(ResetUserPassword::class);
         Fortify::createUsersUsing(CreateNewUser::class);
+        Fortify::authenticateUsing(function (Request $request) {
+            /** @var class-string<\Illuminate\Database\Eloquent\Model> $authModel */
+            $authModel = config('auth.providers.users.model', \App\Models\User::class);
+            $user = $authModel::query()
+                ->where('email', (string) $request->string('email'))
+                ->first();
+
+            if ($user === null || ! Hash::check((string) $request->string('password'), (string) $user->password)) {
+                return null;
+            }
+
+            if (method_exists($user, 'isPendingApproval') && $user->isPendingApproval()) {
+                throw ValidationException::withMessages([
+                    'email' => ['Your account request is waiting for admin approval.'],
+                ]);
+            }
+
+            if (method_exists($user, 'isRejectedRequest') && $user->isRejectedRequest()) {
+                throw ValidationException::withMessages([
+                    'email' => ['This account request was declined. Please submit a new request or contact an administrator.'],
+                ]);
+            }
+
+            if (method_exists($user, 'isAccessBlocked') && $user->isAccessBlocked()) {
+                throw ValidationException::withMessages([
+                    'email' => ['This account is currently blocked. Contact an administrator.'],
+                ]);
+            }
+
+            return $user;
+        });
     }
 
     /**

@@ -3,6 +3,7 @@ import { onMounted } from 'vue';
 import { Form, Head, Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import { toast } from 'vue-sonner';
+import { AlertTriangle } from 'lucide-vue-next';
 import AppLogoIcon from '@/components/AppLogoIcon.vue';
 import InputError from '@/components/InputError.vue';
 import TextLink from '@/components/TextLink.vue';
@@ -180,6 +181,68 @@ onMounted(() => {
                                     class="dark:border-gray-600 dark:bg-gray-800/70"
                                 />
                                 <InputError :message="errors.email" />
+                            </div>
+
+                            <div
+                                v-if="
+                                    typeof errors.email === 'string' &&
+                                    errors.email.includes(
+                                        'waiting for admin approval',
+                                    )
+                                "
+                                class="rounded-2xl border border-amber-500/30 bg-amber-500/12 p-4 shadow-[0_0_0_1px_rgba(245,158,11,0.12)]"
+                            >
+                                <div class="flex items-start gap-3">
+                                    <div
+                                        class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-200"
+                                    >
+                                        <AlertTriangle class="h-4 w-4" />
+                                    </div>
+                                    <div class="min-w-0">
+                                        <p
+                                            class="text-sm font-semibold text-amber-50"
+                                        >
+                                            Request pending approval
+                                        </p>
+                                        <p
+                                            class="mt-1 text-sm leading-5 text-amber-100/90"
+                                        >
+                                            Your account request is waiting for
+                                            an administrator. You cannot log in
+                                            until it is approved.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div
+                                v-else-if="
+                                    typeof errors.email === 'string' &&
+                                    errors.email.includes('declined')
+                                "
+                                class="rounded-2xl border border-red-500/30 bg-red-500/12 p-4 shadow-[0_0_0_1px_rgba(239,68,68,0.12)]"
+                            >
+                                <div class="flex items-start gap-3">
+                                    <div
+                                        class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-200"
+                                    >
+                                        <AlertTriangle class="h-4 w-4" />
+                                    </div>
+                                    <div class="min-w-0">
+                                        <p
+                                            class="text-sm font-semibold text-red-50"
+                                        >
+                                            Request declined
+                                        </p>
+                                        <p
+                                            class="mt-1 text-sm leading-5 text-red-100/90"
+                                        >
+                                            This account request was declined.
+                                            Please contact an administrator if
+                                            you need access.
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="grid gap-2">

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Settings\PasswordUpdateRequest;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
+use App\Support\NotificationCenter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -18,6 +19,7 @@ class AccountsController extends Controller
         $users = $authModel::query()
             ->get()
             ->sortBy(fn ($user) => strtolower((string) $user->name))
+            ->sortBy(fn ($user) => $user->account_status === $authModel::ACCOUNT_STATUS_PENDING ? 0 : 1)
             ->sortBy(fn ($user) => $user->is_blocked ? 0 : 1)
             ->sortBy(fn ($user) => match ($user->role) {
                 $authModel::ROLE_ADMIN => 0,
@@ -37,6 +39,9 @@ class AccountsController extends Controller
                 ->where('guest_expires_at', '>', now())
                 ->count(),
             'blocked' => $authModel::query()->where('is_blocked', true)->count(),
+            'pending_requests' => $authModel::query()
+                ->where('account_status', $authModel::ACCOUNT_STATUS_PENDING)
+                ->count(),
         ];
 
         $roles = $authModel::roles();
@@ -68,6 +73,10 @@ class AccountsController extends Controller
             'guest_expires_at' => $guestExpiry,
             'is_blocked' => false,
             'blocked_at' => null,
+            'account_status' => $authModel::ACCOUNT_STATUS_ACTIVE,
+            'requested_at' => null,
+            'approved_at' => now(),
+            'rejected_at' => null,
         ]);
 
         return redirect()
@@ -118,6 +127,12 @@ class AccountsController extends Controller
     {
         $user = $this->findUser($user);
 
+        if ($user->isPendingApproval()) {
+            return redirect()
+                ->route('accounts.index')
+                ->with('accounts_error', 'Pending requests need to be approved or rejected instead of blocked.');
+        }
+
         if ($request->user()?->is($user)) {
             return redirect()
                 ->route('accounts.index')
@@ -149,6 +164,59 @@ class AccountsController extends Controller
         return redirect()
             ->route('accounts.index')
             ->with('accounts_success', 'Account blocked successfully.');
+    }
+
+    public function approve(Request $request, string $user, NotificationCenter $notifications): RedirectResponse
+    {
+        $user = $this->findUser($user);
+
+        if (! $user->isPendingApproval()) {
+            return redirect()
+                ->route('accounts.index')
+                ->with('accounts_error', 'Only pending requests can be approved.');
+        }
+
+        $user->forceFill([
+            'account_status' => $this->authModelClass()::ACCOUNT_STATUS_ACTIVE,
+            'requested_at' => $user->requested_at ?? now(),
+            'approved_at' => now(),
+            'rejected_at' => null,
+            'is_blocked' => false,
+            'blocked_at' => null,
+        ])->save();
+
+        $notifications->accountRequestApproved(
+            (string) $user->name,
+            (string) $user->email,
+            (string) $user->getKey(),
+        );
+
+        return redirect()
+            ->route('accounts.index')
+            ->with('accounts_success', 'Account request approved successfully.');
+    }
+
+    public function reject(Request $request, string $user, NotificationCenter $notifications): RedirectResponse
+    {
+        $user = $this->findUser($user);
+
+        if (! $user->isPendingApproval()) {
+            return redirect()
+                ->route('accounts.index')
+                ->with('accounts_error', 'Only pending requests can be rejected.');
+        }
+
+        $notifications->accountRequestRejected(
+            (string) $user->name,
+            (string) $user->email,
+            (string) $user->getKey(),
+        );
+
+        $user->delete();
+
+        return redirect()
+            ->route('accounts.index')
+            ->with('accounts_success', 'Account request rejected successfully.');
     }
 
     public function destroy(Request $request, string $user): RedirectResponse

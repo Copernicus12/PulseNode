@@ -64,6 +64,43 @@ class AccountsManagementTest extends TestCase
         $this->assertNotNull($guest->guest_expires_at);
     }
 
+    public function test_admin_can_approve_a_pending_account_request(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $request = User::factory()->pendingRequest()->create([
+            'name' => 'Request User',
+            'email' => 'request@example.com',
+        ]);
+
+        $this->actingAs($admin);
+
+        $response = $this->post(route('accounts.approve', $request));
+
+        $response->assertRedirect(route('accounts.index'));
+        $this->assertDatabaseHas('users', [
+            'id' => $request->id,
+            'account_status' => User::ACCOUNT_STATUS_ACTIVE,
+        ]);
+    }
+
+    public function test_admin_can_reject_a_pending_account_request(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $request = User::factory()->pendingRequest()->create([
+            'name' => 'Reject User',
+            'email' => 'reject@example.com',
+        ]);
+
+        $this->actingAs($admin);
+
+        $response = $this->post(route('accounts.reject', $request));
+
+        $response->assertRedirect(route('accounts.index'));
+        $this->assertDatabaseMissing('users', [
+            'id' => $request->id,
+        ]);
+    }
+
     public function test_expired_guest_accounts_are_blocked_and_logged_out_on_next_request(): void
     {
         $guest = User::factory()->guest(now()->subHour())->create();

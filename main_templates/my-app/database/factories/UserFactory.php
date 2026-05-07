@@ -33,6 +33,10 @@ class UserFactory extends Factory
             'guest_expires_at' => null,
             'is_blocked' => false,
             'blocked_at' => null,
+            'account_status' => User::ACCOUNT_STATUS_ACTIVE,
+            'requested_at' => null,
+            'approved_at' => now(),
+            'rejected_at' => null,
             'electricity_price_per_wh' => 0.0008,
             'billing_currency' => 'RON',
             'billing_tax_percent' => 21,
@@ -73,6 +77,10 @@ class UserFactory extends Factory
             'guest_expires_at' => null,
             'is_blocked' => false,
             'blocked_at' => null,
+            'account_status' => User::ACCOUNT_STATUS_ACTIVE,
+            'requested_at' => null,
+            'approved_at' => now(),
+            'rejected_at' => null,
         ]);
     }
 
@@ -83,6 +91,10 @@ class UserFactory extends Factory
             'guest_expires_at' => null,
             'is_blocked' => false,
             'blocked_at' => null,
+            'account_status' => User::ACCOUNT_STATUS_ACTIVE,
+            'requested_at' => null,
+            'approved_at' => now(),
+            'rejected_at' => null,
         ]);
     }
 
@@ -93,6 +105,10 @@ class UserFactory extends Factory
             'guest_expires_at' => $expiresAt ?? now()->addHour(),
             'is_blocked' => false,
             'blocked_at' => null,
+            'account_status' => User::ACCOUNT_STATUS_ACTIVE,
+            'requested_at' => null,
+            'approved_at' => now(),
+            'rejected_at' => null,
         ]);
     }
 
@@ -101,6 +117,18 @@ class UserFactory extends Factory
         return $this->state(fn (array $attributes) => [
             'is_blocked' => true,
             'blocked_at' => now(),
+        ]);
+    }
+
+    public function pendingRequest(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'account_status' => User::ACCOUNT_STATUS_PENDING,
+            'requested_at' => now(),
+            'approved_at' => null,
+            'rejected_at' => null,
+            'is_blocked' => false,
+            'blocked_at' => null,
         ]);
     }
 }

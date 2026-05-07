@@ -13,10 +13,10 @@ import { store } from '@/routes/register';
 
 <template>
     <AuthBase
-        title="Create an account"
-        description="Enter your details below to create your account"
+        title="Request access"
+        description="Send your details to request a new account. An administrator will review it before activation."
     >
-        <Head title="Register" />
+        <Head title="Request access" />
 
         <Form
             v-bind="store.form()"
@@ -90,12 +90,12 @@ import { store } from '@/routes/register';
                     data-test="register-user-button"
                 >
                     <Spinner v-if="processing" />
-                    Create account
+                    Send request
                 </Button>
             </div>
 
             <div class="text-center text-sm text-muted-foreground">
-                Already have an account?
+                Already have access?
                 <TextLink
                     :href="login()"
                     class="underline underline-offset-4"

@@ -51,6 +51,7 @@ type NotificationItem = {
 type AccountsSummary = {
     total: number;
     blocked: number;
+    pending_requests: number;
     active_guests: number;
 } | null;
 
@@ -725,7 +726,13 @@ onBeforeUnmount(() => {
                 >
                     <Users class="h-[18px] w-[18px]" />
                     <span
-                        v-if="(accountsSummary?.blocked ?? 0) > 0"
+                        v-if="(accountsSummary?.pending_requests ?? 0) > 0"
+                        class="absolute -top-1 -right-1 min-w-[1.15rem] rounded-full bg-amber-400 px-1.5 py-0.5 text-center text-[10px] leading-none font-bold text-background"
+                    >
+                        {{ accountsSummary?.pending_requests }}
+                    </span>
+                    <span
+                        v-else-if="(accountsSummary?.blocked ?? 0) > 0"
                         class="absolute -top-1 -right-1 min-w-[1.15rem] rounded-full bg-red-400 px-1.5 py-0.5 text-center text-[10px] leading-none font-bold text-background"
                     >
                         {{ accountsSummary?.blocked }}
@@ -783,10 +790,10 @@ onBeforeUnmount(() => {
                             <p
                                 class="text-[10px] tracking-[0.14em] text-muted-foreground uppercase"
                             >
-                                Blocked
+                                Pending
                             </p>
                             <p class="mt-1 text-lg font-semibold tabular-nums">
-                                {{ accountsSummary?.blocked ?? 0 }}
+                                {{ accountsSummary?.pending_requests ?? 0 }}
                             </p>
                         </div>
                     </div>
