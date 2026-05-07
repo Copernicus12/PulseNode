@@ -123,6 +123,8 @@
             var STORAGE_KEY = 'pulsenode.globalTour.state';
             var REDIRECT_KEY = 'pulsenode.globalTour.redirecting';
             var CURRENT_PATH = window.location.pathname;
+            var TOUR_COMPLETE_URL = @json(route('dashboard.tour.complete'));
+            var CSRF_TOKEN = @json(csrf_token());
 
             var overlay = document.getElementById('global-tour-overlay');
             var backdrop = document.getElementById('global-tour-backdrop');
@@ -288,7 +290,22 @@
 
             function stopFollowLoop() { if (followInterval) { window.clearInterval(followInterval); followInterval = 0; } }
             function startFollowLoop() { stopFollowLoop(); followInterval = window.setInterval(function () { if (state.active) scheduleSpotlightRefresh(); }, 220); }
-            function finishTour() { state.active = false; setOverlayVisible(false); stopFollowLoop(); clearState(); }
+            function markTourCompleted() {
+                try {
+                    window.fetch(TOUR_COMPLETE_URL, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': CSRF_TOKEN,
+                        },
+                        keepalive: true,
+                        body: JSON.stringify({ completed: true }),
+                    });
+                } catch (_) {}
+            }
+            function finishTour() { state.active = false; setOverlayVisible(false); stopFollowLoop(); clearState(); markTourCompleted(); }
             function nextStep() { if (state.index >= tourSteps.length - 1) { finishTour(); return; } state.index += 1; renderStep(); }
             function prevStep() { if (state.index <= 0) { renderStep(); return; } state.index -= 1; renderStep(); }
             function startTourFrom(index) { state.active = true; state.index = Math.min(Math.max(0, Number(index || 0)), tourSteps.length - 1); renderStep(); startFollowLoop(); }

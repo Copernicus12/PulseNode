@@ -9,6 +9,7 @@ use App\Support\Esp32ConnectionHealth;
 use App\Support\Esp32StateStore;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Illuminate\View\View;
 use Throwable;
 
@@ -126,6 +127,21 @@ class DashboardController extends Controller
             'energyUsage',
             'dashboardBilling',
         ));
+    }
+
+    public function completeTour(Request $request): Response
+    {
+        $user = $request->user();
+
+        if ($user === null) {
+            return response()->noContent();
+        }
+
+        $user->forceFill([
+            'dashboard_tour_completed_at' => now(),
+        ])->save();
+
+        return response()->noContent();
     }
 
     private function displayCurrent(float $current): float

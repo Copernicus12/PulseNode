@@ -66,6 +66,9 @@
             $billingSettingsActive = request()->routeIs('settings.index', 'electricity-billing.edit');
             $appearanceSettingsActive = request()->routeIs('appearance.*');
             $powerStripDiagnosticsActive = request()->routeIs('power-strip-diagnostics.*');
+            $autoStartDashboardTour = auth()->check()
+                && request()->routeIs('dashboard')
+                && ! auth()->user()?->hasCompletedDashboardTour();
         @endphp
         <div class="min-h-screen bg-background text-foreground">
 
@@ -702,6 +705,9 @@
             var STORAGE_KEY = 'pulsenode.globalTour.state';
             var REDIRECT_KEY = 'pulsenode.globalTour.redirecting';
             var CURRENT_PATH = window.location.pathname;
+            var TOUR_COMPLETE_URL = @json(route('dashboard.tour.complete'));
+            var CSRF_TOKEN = @json(csrf_token());
+            var SHOULD_AUTO_START = @json($autoStartDashboardTour);
 
             var overlay = document.getElementById('global-tour-overlay');
             var backdrop = document.getElementById('global-tour-backdrop');
@@ -1058,11 +1064,28 @@
                 }, 220);
             }
 
+            function markTourCompleted() {
+                try {
+                    window.fetch(TOUR_COMPLETE_URL, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': CSRF_TOKEN,
+                        },
+                        keepalive: true,
+                        body: JSON.stringify({ completed: true }),
+                    });
+                } catch (_) {}
+            }
+
             function finishTour() {
                 state.active = false;
                 setOverlayVisible(false);
                 stopFollowLoop();
                 clearState();
+                markTourCompleted();
             }
 
             function nextStep() {
@@ -1154,6 +1177,14 @@
             window.addEventListener('scroll', scheduleSpotlightRefresh, true);
 
             resumeTourIfNeeded();
+
+            if (SHOULD_AUTO_START && !readState()) {
+                window.setTimeout(function () {
+                    if (!state.active) {
+                        startTourFrom(0);
+                    }
+                }, 700);
+            }
 
             // Keep the guide manual-only so it never opens automatically on public visits.
         })();

@@ -40,6 +40,7 @@ class CreateNewUser implements CreatesNewUsers
             'requested_at' => now(),
             'approved_at' => null,
             'rejected_at' => null,
+            'dashboard_tour_completed_at' => null,
         ]);
 
         $notifications?->accountRequestSubmitted(

@@ -3,6 +3,9 @@ export type User = {
     name: string;
     email: string;
     avatar?: string;
+    role?: string;
+    account_status?: string | null;
+    dashboard_tour_completed_at?: string | null;
     email_verified_at: string | null;
     created_at: string;
     updated_at: string;

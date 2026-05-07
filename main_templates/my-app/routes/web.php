@@ -46,6 +46,9 @@ Route::post('register', [RequestAccountController::class, 'store'])
 
 Route::get('dashboard', DashboardController::class)
     ->middleware(['auth'])->name('dashboard');
+Route::post('dashboard/tour/complete', [DashboardController::class, 'completeTour'])
+    ->middleware(['auth'])
+    ->name('dashboard.tour.complete');
 Route::prefix('accounts')->middleware(['auth', 'admin'])->name('accounts.')->group(function (): void {
     Route::get('/', [AccountsController::class, 'index'])->name('index');
     Route::post('/', [AccountsController::class, 'store'])->name('store');

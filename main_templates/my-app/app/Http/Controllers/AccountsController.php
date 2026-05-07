@@ -77,6 +77,7 @@ class AccountsController extends Controller
             'requested_at' => null,
             'approved_at' => now(),
             'rejected_at' => null,
+            'dashboard_tour_completed_at' => null,
         ]);
 
         return redirect()
@@ -181,6 +182,7 @@ class AccountsController extends Controller
             'requested_at' => $user->requested_at ?? now(),
             'approved_at' => now(),
             'rejected_at' => null,
+            'dashboard_tour_completed_at' => $user->dashboard_tour_completed_at,
             'is_blocked' => false,
             'blocked_at' => null,
         ])->save();

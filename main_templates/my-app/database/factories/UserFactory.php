@@ -37,6 +37,7 @@ class UserFactory extends Factory
             'requested_at' => null,
             'approved_at' => now(),
             'rejected_at' => null,
+            'dashboard_tour_completed_at' => null,
             'electricity_price_per_wh' => 0.0008,
             'billing_currency' => 'RON',
             'billing_tax_percent' => 21,
@@ -81,6 +82,7 @@ class UserFactory extends Factory
             'requested_at' => null,
             'approved_at' => now(),
             'rejected_at' => null,
+            'dashboard_tour_completed_at' => null,
         ]);
     }
 
@@ -95,6 +97,7 @@ class UserFactory extends Factory
             'requested_at' => null,
             'approved_at' => now(),
             'rejected_at' => null,
+            'dashboard_tour_completed_at' => null,
         ]);
     }
 
@@ -109,6 +112,7 @@ class UserFactory extends Factory
             'requested_at' => null,
             'approved_at' => now(),
             'rejected_at' => null,
+            'dashboard_tour_completed_at' => null,
         ]);
     }
 
@@ -127,6 +131,7 @@ class UserFactory extends Factory
             'requested_at' => now(),
             'approved_at' => null,
             'rejected_at' => null,
+            'dashboard_tour_completed_at' => null,
             'is_blocked' => false,
             'blocked_at' => null,
         ]);

@@ -45,6 +45,7 @@ class MongoUser extends Authenticatable
         'requested_at',
         'approved_at',
         'rejected_at',
+        'dashboard_tour_completed_at',
         'electricity_price_per_wh',
         'billing_currency',
         'billing_tax_percent',
@@ -81,6 +82,7 @@ class MongoUser extends Authenticatable
             'requested_at' => 'datetime',
             'approved_at' => 'datetime',
             'rejected_at' => 'datetime',
+            'dashboard_tour_completed_at' => 'datetime',
             'is_blocked' => 'boolean',
             'electricity_price_per_wh' => 'decimal:6',
             'billing_tax_percent' => 'decimal:2',
@@ -126,6 +128,11 @@ class MongoUser extends Authenticatable
     public function isActiveAccount(): bool
     {
         return $this->account_status === self::ACCOUNT_STATUS_ACTIVE;
+    }
+
+    public function hasCompletedDashboardTour(): bool
+    {
+        return $this->dashboard_tour_completed_at !== null;
     }
 
     public function hasExpiredGuestAccess(): bool
