@@ -110,6 +110,12 @@ bool invertCurrent[NUM_CHANNELS] = {true, true, true};
 // praguri mici doar pentru afisaj/publicare
 const float CURRENT_ZERO_THRESHOLD_A = 0.02f;
 const float POWER_ZERO_THRESHOLD_W = 1.0f;
+const float IDLE_CURRENT_MAX_A = 1.50f;
+const float IDLE_ACTIVE_POWER_MAX_W = 15.0f;
+const float IDLE_POWER_FACTOR_MAX = 0.15f;
+// Corectie de faza intre ZMPT si ACS712 pentru un PF mai realist.
+// Se poate ajusta ulterior daca ai un wattmetru de referinta.
+const float VOLTAGE_PHASE_CALIBRATION = 1.70f;
 
 // =====================================================
 // TIMPI
@@ -156,10 +162,6 @@ SensorChannel channels[NUM_CHANNELS] = {
 VoltageChannel zmpt = {VOLTAGE_PIN, 2048.0f};
 
 Measurements meas;
-Measurements smoothedMeas;
-bool smoothedMeasInitialized = false;
-
-const float TELEMETRY_EMA_ALPHA = 0.45f;
 
 // =====================================================
 // STARE
@@ -225,32 +227,6 @@ float sanitizePower(float power) {
     return 0.0f;
   }
   return power;
-}
-
-Measurements smoothMeasurements(const Measurements& raw) {
-  if (!smoothedMeasInitialized) {
-    smoothedMeas = raw;
-    smoothedMeasInitialized = true;
-    return smoothedMeas;
-  }
-
-  auto smoothValue = [](float previous, float next) -> float {
-    return previous + (TELEMETRY_EMA_ALPHA * (next - previous));
-  };
-
-  smoothedMeas.voltageRMS = smoothValue(smoothedMeas.voltageRMS, raw.voltageRMS);
-  smoothedMeas.totalActivePowerW = smoothValue(smoothedMeas.totalActivePowerW, raw.totalActivePowerW);
-  smoothedMeas.totalApparentPowerVA = smoothValue(smoothedMeas.totalApparentPowerVA, raw.totalApparentPowerVA);
-  smoothedMeas.totalCurrentRMS = smoothValue(smoothedMeas.totalCurrentRMS, raw.totalCurrentRMS);
-
-  for (int i = 0; i < NUM_CHANNELS; i++) {
-    smoothedMeas.currentRMS[i] = smoothValue(smoothedMeas.currentRMS[i], raw.currentRMS[i]);
-    smoothedMeas.activePowerW[i] = smoothValue(smoothedMeas.activePowerW[i], raw.activePowerW[i]);
-    smoothedMeas.apparentPowerVA[i] = smoothValue(smoothedMeas.apparentPowerVA[i], raw.apparentPowerVA[i]);
-    smoothedMeas.powerFactor[i] = smoothValue(smoothedMeas.powerFactor[i], raw.powerFactor[i]);
-  }
-
-  return smoothedMeas;
 }
 
 const char* wifiStatusToString(wl_status_t status) {
@@ -1107,6 +1083,8 @@ Measurements measurePower() {
   double sumI2[NUM_CHANNELS] = {0.0, 0.0, 0.0};
   double sumP[NUM_CHANNELS]  = {0.0, 0.0, 0.0};
   uint32_t count = 0;
+  double lastFilteredV = 0.0;
+  bool lastFilteredVInitialized = false;
 
   int minI[NUM_CHANNELS] = {4095, 4095, 4095};
   int maxI[NUM_CHANNELS] = {0, 0, 0};
@@ -1120,6 +1098,15 @@ Measurements measurePower() {
     float centeredV = (float)rawV - zmpt.adcOffset;
     float vAdcV = centeredV * (ADC_VREF / ADC_MAX);
     float voltage = vAdcV * voltageCalibration;
+    float phaseShiftedVoltage = voltage;
+
+    if (lastFilteredVInitialized) {
+      phaseShiftedVoltage = (float)(lastFilteredV +
+                                    (double)VOLTAGE_PHASE_CALIBRATION *
+                                    ((double)voltage - lastFilteredV));
+    } else {
+      lastFilteredVInitialized = true;
+    }
 
     sumV2 += (double)voltage * (double)voltage;
 
@@ -1136,9 +1123,10 @@ Measurements measurePower() {
       if (invertCurrent[i]) current = -current;
 
       sumI2[i] += (double)current * (double)current;
-      sumP[i]  += (double)voltage * (double)current;
+      sumP[i]  += (double)phaseShiftedVoltage * (double)current;
     }
 
+    lastFilteredV = (double)voltage;
     count++;
     delayMicroseconds(150);
   }
@@ -1148,6 +1136,14 @@ Measurements measurePower() {
   m.voltageRMS = sqrt(sumV2 / (double)count);
 
   for (int i = 0; i < NUM_CHANNELS; i++) {
+    if (!channels[i].relayState) {
+      m.currentRMS[i] = 0.0f;
+      m.activePowerW[i] = 0.0f;
+      m.apparentPowerVA[i] = 0.0f;
+      m.powerFactor[i] = 0.0f;
+      continue;
+    }
+
     m.currentRMS[i] = sqrt(sumI2[i] / (double)count);
     m.activePowerW[i] = sumP[i] / (double)count;
 
@@ -1176,6 +1172,18 @@ Measurements measurePower() {
     }
 
     m.powerFactor[i] = clampf(m.powerFactor[i], -1.0f, 1.0f);
+
+    bool idleLike = channels[i].relayState &&
+                    m.currentRMS[i] < IDLE_CURRENT_MAX_A &&
+                    m.activePowerW[i] < IDLE_ACTIVE_POWER_MAX_W &&
+                    fabs(m.powerFactor[i]) < IDLE_POWER_FACTOR_MAX;
+
+    if (idleLike) {
+      m.currentRMS[i] = 0.0f;
+      m.activePowerW[i] = 0.0f;
+      m.apparentPowerVA[i] = 0.0f;
+      m.powerFactor[i] = 0.0f;
+    }
 
     m.currentRMS[i] = sanitizeCurrent(m.currentRMS[i]);
     m.activePowerW[i] = sanitizePower(m.activePowerW[i]);
@@ -1409,27 +1417,27 @@ bool ensureMqttConnected() {
   return false;
 }
 
-void publishMQTT(const Measurements& publishSource) {
+void publishMQTT() {
   if (!ensureMqttConnected()) return;
   client.loop();
 
   float publishCurrent[NUM_CHANNELS] = {
-    publishSource.currentRMS[0],
-    publishSource.currentRMS[1],
-    publishSource.currentRMS[2]
+    meas.currentRMS[0],
+    meas.currentRMS[1],
+    meas.currentRMS[2]
   };
   float publishPower[NUM_CHANNELS] = {
-    publishSource.activePowerW[0] < 0.0f ? 0.0f : publishSource.activePowerW[0],
-    publishSource.activePowerW[1] < 0.0f ? 0.0f : publishSource.activePowerW[1],
-    publishSource.activePowerW[2] < 0.0f ? 0.0f : publishSource.activePowerW[2]
+    meas.activePowerW[0] < 0.0f ? 0.0f : meas.activePowerW[0],
+    meas.activePowerW[1] < 0.0f ? 0.0f : meas.activePowerW[1],
+    meas.activePowerW[2] < 0.0f ? 0.0f : meas.activePowerW[2]
   };
-  float totalCurrent = publishSource.totalCurrentRMS;
+  float totalCurrent = meas.totalCurrentRMS;
   float totalPower = publishPower[0] + publishPower[1] + publishPower[2];
 
   char payload[384];
   snprintf(payload, sizeof(payload),
            "{\"voltage\":%.1f,\"current\":%.3f,\"current_1\":%.3f,\"current_2\":%.3f,\"current_3\":%.3f,\"power\":%.1f,\"power_1\":%.1f,\"power_2\":%.1f,\"power_3\":%.1f,\"energy\":%.5f,\"relay_1\":%s,\"relay_2\":%s,\"relay_3\":%s}",
-           publishSource.voltageRMS,
+           meas.voltageRMS,
            totalCurrent,
            publishCurrent[0],
            publishCurrent[1],
@@ -1544,7 +1552,6 @@ void loop() {
 
   if (now - lastMeasureMs >= MEASURE_INTERVAL_MS) {
     meas = measurePower();
-    Measurements publishMeas = smoothMeasurements(meas);
 
     float deltaHours = (now - lastEnergyMs) / 3600000.0f;
     lastEnergyMs = now;
@@ -1573,7 +1580,7 @@ void loop() {
   }
 
   if (now - lastMqttMs >= MQTT_INTERVAL_MS) {
-    publishMQTT(publishMeas);
+    publishMQTT();
     lastMqttMs = now;
   }
 }
