@@ -13,6 +13,7 @@ use App\Models\BillingInvoiceFile;
 use App\Models\BillingInvoiceFolder;
 use App\Models\BillingTariffProfile;
 use App\Support\BillingInvoiceStorage;
+use Carbon\Carbon;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -421,7 +422,9 @@ class ElectricityBillingController extends Controller
         $extension = (string) ($metadata['file_extension'] ?? pathinfo($originalName, PATHINFO_EXTENSION));
         $sizeBytes = (int) ($document['length'] ?? 0);
         $uploadedAt = isset($document['uploadDate']) && method_exists($document['uploadDate'], 'toDateTime')
-            ? $document['uploadDate']->toDateTime()->format(DATE_ATOM)
+            ? Carbon::instance($document['uploadDate']->toDateTime())
+                ->setTimezone(config('app.timezone'))
+                ->toIso8601String()
             : null;
 
         return [

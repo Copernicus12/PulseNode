@@ -6,6 +6,7 @@ use App\Models\DetectionPlan;
 use App\Models\DeviceDetection;
 use App\Models\DeviceProfile;
 use App\Models\EnergyReading;
+use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 class DeviceProfiler
@@ -44,8 +45,8 @@ class DeviceProfiler
         $startupRatio = round($peakPower / max($avgPower, 1), 2);
         $durationMinutes = round($active->count() * $this->sampleMinutes(), 1);
         $energyEstimate = round((float) $active->sum('delta_energy'), 5);
-        $lastSeenAt = optional($active->last()->sampled_at)?->toIso8601String();
-        $observedFrom = optional($active->first()->sampled_at)?->toIso8601String();
+        $lastSeenAt = $this->formatSampleTimestamp($active->last()->sampled_at ?? null);
+        $observedFrom = $this->formatSampleTimestamp($active->first()->sampled_at ?? null);
 
         return [
             'socket_index' => $socketIndex,
@@ -389,5 +390,16 @@ class DeviceProfiler
             ->sum() / $count;
 
         return sqrt($variance);
+    }
+
+    private function formatSampleTimestamp(mixed $sampledAt): ?string
+    {
+        if ($sampledAt instanceof Carbon) {
+            return $sampledAt->copy()
+                ->setTimezone(config('app.timezone'))
+                ->toIso8601String();
+        }
+
+        return optional($sampledAt)?->toIso8601String();
     }
 }

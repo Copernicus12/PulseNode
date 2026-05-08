@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use MongoDB\BSON\UTCDateTime;
 use MongoDB\Model\BSONArray;
@@ -49,7 +50,9 @@ class Esp32StateStore
             && isset($doc['received_at'])
             && $doc['received_at'] instanceof UTCDateTime
         ) {
-            $updatedAt = $doc['received_at']->toDateTime()->format(DATE_ATOM);
+            $updatedAt = Carbon::instance($doc['received_at']->toDateTime())
+                ->setTimezone(config('app.timezone'))
+                ->toIso8601String();
         }
 
         if (is_string($updatedAt) && trim($updatedAt) !== '') {

@@ -1,7 +1,4 @@
 <script setup lang="ts">
-import { ChevronLeft } from 'lucide-vue-next'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import Chart from 'primevue/chart'
 import {
   CategoryScale,
   Chart as ChartJS,
@@ -12,6 +9,9 @@ import {
   PointElement,
   Tooltip,
 } from 'chart.js'
+import { ChevronLeft } from 'lucide-vue-next'
+import Chart from 'primevue/chart'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
@@ -185,7 +185,7 @@ const pickerDate = ref<string | undefined>(historyState.value.daySelector?.ancho
 const liveLastSeen = ref(historyLastSeenLabel(historyState.value))
 const liveOnline = ref(historyState.value.isOnline)
 const selectedDateIsToday = computed(() => (
-  historyState.value.selectedDate === new Date().toISOString().slice(0, 10)
+  historyState.value.selectedDate === localDateString()
 ))
 
 const dayWindowItems = computed(() => historyState.value.dayWindow ?? [])
@@ -315,6 +315,14 @@ let historyRequestInFlight = false
 function number(value: unknown): number {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : 0
+}
+
+function localDateString(date = new Date()): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
 }
 
 function fmt(value: unknown, digits = 1): string {
@@ -534,7 +542,6 @@ function buildChartOptions(
   hoverConfig: ChartHoverConfig | null = null,
 ) {
   const tokens = getChartTokens()
-  const interactive = kind !== 'second'
   const pointRadius = hoverConfig?.pointRadius ?? 3
   const pointHoverRadius = hoverConfig?.pointHoverRadius ?? 3
   const pointHitRadius = hoverConfig?.pointHitRadius ?? 8
@@ -693,12 +700,6 @@ function isDeviceOnline(updatedAt: string | null): boolean {
   if (!Number.isFinite(timestamp)) return false
 
   return (Date.now() - timestamp) <= 5 * 60 * 1000
-}
-
-function loadState(item: { warnings?: WarningCounters }): 'overload' | 'high' | 'normal' {
-  if ((item.warnings?.overload ?? 0) > 0) return 'overload'
-  if ((item.warnings?.high ?? 0) > 0) return 'high'
-  return 'normal'
 }
 
 function openHourDetails(hour: HourlyStat): void {

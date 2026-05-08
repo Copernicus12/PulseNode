@@ -7,6 +7,7 @@ import time
 import os
 import ssl
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
 
@@ -48,6 +49,7 @@ MONGO_DB_NAME = os.getenv("MONGO_DB_NAME") or os.getenv("MONGODB_DATABASE", "esp
 MONGO_COLLECTION = os.getenv("MONGO_COLLECTION") or os.getenv("MONGODB_COLLECTION", "readings")
 MONGO_TLS_CA_FILE = os.getenv("MONGO_TLS_CA_FILE")
 MONGO_RETRY_INTERVAL = int(os.getenv("MONGO_RETRY_INTERVAL", "30"))
+LOCAL_TIMEZONE = ZoneInfo(os.getenv("APP_TIMEZONE", "Europe/Bucharest"))
 
 mongo_client = None
 mongo_collection = None
@@ -137,6 +139,7 @@ def on_message(client, userdata, msg):
         document = {
             "topic": msg.topic,
             "received_at": datetime.now(timezone.utc),
+            "received_at_local": datetime.now(LOCAL_TIMEZONE).isoformat(),
             "payload": payload,
         }
         if mongo_ready and mongo_collection is not None:
