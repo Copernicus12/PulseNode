@@ -60,6 +60,7 @@ export default defineConfig({
                 'resources/css/app.css',
                 'resources/js/app.ts',
                 'resources/js/power-strip-safety-guard.ts',
+                'resources/js/power-strip-notifications.ts',
                 'resources/js/relay-command-toast.ts',
                 'resources/js/history-page.ts',
                 'resources/js/notifications-page.ts',
