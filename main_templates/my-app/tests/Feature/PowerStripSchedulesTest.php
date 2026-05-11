@@ -51,4 +51,34 @@ class PowerStripSchedulesTest extends TestCase
             ->assertSee('45.7 W', false)
             ->assertSee('89.0 W', false);
     }
+
+    public function test_schedules_page_can_return_json_for_live_refreshes(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->getJson(route('devices.schedules.index'))
+            ->assertOk()
+            ->assertJsonStructure([
+                'latest',
+                'scheduleStats' => [
+                    'active_rules',
+                    'scheduled_windows',
+                    'coverage',
+                    'next_trigger',
+                ],
+                'socketOverview' => [
+                    '*' => [
+                        'index',
+                        'label',
+                        'power',
+                        'current',
+                        'status',
+                        'state_label',
+                        'status_label',
+                        'schedule_count',
+                    ],
+                ],
+            ]);
+    }
 }

@@ -39,6 +39,7 @@
     $schedulesPageProps = [
         'csrfToken' => csrf_token(),
         'storeUrl' => route('devices.schedules.store'),
+        'refreshUrl' => route('devices.schedules.index'),
         'redirectRoute' => request()->route()?->getName() ?? 'devices.schedules.index',
         'redirectPage' => max(1, (int) request()->integer('page', 1)),
         'shouldOpenOnMount' => $errors->any(),
@@ -128,13 +129,13 @@
             </div>
 
             <div class="flex flex-wrap gap-2">
-                <span class="inline-flex items-center rounded-full bg-primary/15 px-3 py-1 text-xs font-medium text-primary">
+                <span data-schedules-active-rules class="inline-flex items-center rounded-full bg-primary/15 px-3 py-1 text-xs font-medium text-primary">
                     {{ $scheduleStats['active_rules'] }} active
                 </span>
-                <span class="inline-flex items-center rounded-full bg-background px-3 py-1 text-xs text-muted-foreground ring-1 ring-border/30">
+                <span data-schedules-next-trigger class="inline-flex items-center rounded-full bg-background px-3 py-1 text-xs text-muted-foreground ring-1 ring-border/30">
                     Next: {{ $scheduleStats['next_trigger'] }}
                 </span>
-                <span class="inline-flex items-center rounded-full bg-background px-3 py-1 text-xs text-muted-foreground ring-1 ring-border/30">
+                <span data-schedules-coverage class="inline-flex items-center rounded-full bg-background px-3 py-1 text-xs text-muted-foreground ring-1 ring-border/30">
                     {{ $scheduleStats['coverage'] }}
                 </span>
             </div>
@@ -158,14 +159,14 @@
 
         <div class="grid gap-3 lg:grid-cols-3">
             @foreach($socketOverview as $socket)
-                <article class="rounded-3xl border border-border/40 bg-card p-4 shadow-sm">
+                <article data-socket-card="{{ $socket['index'] }}" class="rounded-3xl border border-border/40 bg-card p-4 shadow-sm">
                     <div class="flex items-start justify-between gap-3">
                         <div>
                             <p class="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">Socket {{ $socket['index'] }}</p>
-                            <h3 class="mt-1 text-base font-semibold">{{ $socket['label'] }}</h3>
-                            <p class="mt-1 text-xs text-muted-foreground">{{ $socket['status_label'] }}</p>
+                            <h3 class="mt-1 text-base font-semibold" data-socket-label>{{ $socket['label'] }}</h3>
+                            <p class="mt-1 text-xs text-muted-foreground" data-socket-status-label>{{ $socket['status_label'] }}</p>
                         </div>
-                        <span class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium {{ $statusClasses[$socket['status']] ?? $statusClasses['idle'] }}">
+                        <span data-socket-status class="inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium {{ $statusClasses[$socket['status']] ?? $statusClasses['idle'] }}">
                             {{ $socket['state_label'] }}
                         </span>
                     </div>
@@ -173,20 +174,20 @@
                     <div class="mt-4 grid grid-cols-2 gap-2 text-sm">
                         <div class="rounded-2xl bg-background px-3 py-2 ring-1 ring-border/20">
                             <p class="text-[11px] text-muted-foreground">Power</p>
-                            <p class="mt-1 font-semibold tabular-nums">{{ number_format($socket['power'], 1) }} W</p>
+                            <p class="mt-1 font-semibold tabular-nums" data-socket-power>{{ number_format($socket['power'], 1) }} W</p>
                         </div>
                         <div class="rounded-2xl bg-background px-3 py-2 ring-1 ring-border/20">
                             <p class="text-[11px] text-muted-foreground">Current</p>
-                            <p class="mt-1 font-semibold tabular-nums">{{ number_format($socket['current'], 3) }} A</p>
+                            <p class="mt-1 font-semibold tabular-nums" data-socket-current>{{ number_format($socket['current'], 3) }} A</p>
                         </div>
                     </div>
 
                     <div class="mt-3 rounded-2xl bg-background px-3 py-3 ring-1 ring-border/20">
                         <div class="flex items-center justify-between gap-2">
                             <p class="text-xs text-muted-foreground">Schedules</p>
-                            <p class="text-xs font-medium text-foreground">{{ $socket['schedule_count'] }}</p>
+                            <p class="text-xs font-medium text-foreground" data-socket-schedule-count>{{ $socket['schedule_count'] }}</p>
                         </div>
-                        <p class="mt-1 text-sm font-medium text-foreground">
+                        <p class="mt-1 text-sm font-medium text-foreground" data-socket-next-schedule>
                             {{ $socket['next_schedule'] ? $socket['next_schedule']->name : 'No schedules yet' }}
                         </p>
                     </div>

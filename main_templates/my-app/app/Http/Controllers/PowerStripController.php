@@ -273,9 +273,15 @@ class PowerStripController extends Controller
         return view('devices.index', $this->buildDevicesPageData($store, $profiler, $connectionHealth, 'plans', 6));
     }
 
-    public function deviceSchedules(Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth, Request $request): View
+    public function deviceSchedules(Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth, Request $request): View|JsonResponse
     {
-        return view('devices.schedules', $this->buildSchedulesPageData($store, $connectionHealth, $request));
+        $pageData = $this->buildSchedulesPageData($store, $connectionHealth, $request);
+
+        if ($request->expectsJson()) {
+            return response()->json($pageData);
+        }
+
+        return view('devices.schedules', $pageData);
     }
 
     public function storeSocketSchedule(StoreSocketScheduleRequest $request): RedirectResponse
