@@ -165,7 +165,7 @@ class EnergyReading extends Model
             return null;
         }
 
-        return Carbon::instance($doc['received_at']->toDateTime())->toDateString();
+        return self::toAppTimezone($doc['received_at'])->toDateString();
     }
 
     private static function mongoCollection(): ?\MongoDB\Collection
@@ -215,7 +215,7 @@ class EnergyReading extends Model
 
             $sampledAt = now();
             if (isset($doc['received_at']) && $doc['received_at'] instanceof UTCDateTime) {
-                $sampledAt = Carbon::instance($doc['received_at']->toDateTime());
+                $sampledAt = self::toAppTimezone($doc['received_at']);
             }
 
             $energy = max(0.0, (float) ($payload['energy'] ?? 0));
@@ -313,9 +313,7 @@ class EnergyReading extends Model
         $secondBuckets = [];
 
         foreach ($samples as $sample) {
-            $sampledAt = $sample->sampled_at instanceof Carbon
-                ? $sample->sampled_at
-                : Carbon::parse($sample->sampled_at);
+            $sampledAt = self::toAppTimezone($sample->sampled_at ?? now());
 
             $hour = (int) $sampledAt->format('H');
             $minute = (int) $sampledAt->format('i');
@@ -432,8 +430,8 @@ class EnergyReading extends Model
                 $duration = max(1, (int) round($item['samples'] * $sampleMinutes));
 
                 return [
-                    'start' => Carbon::parse($item['start'])->format('H:i'),
-                    'end' => Carbon::parse($item['end'])->format('H:i'),
+                    'start' => self::toAppTimezone($item['start'])->format('H:i'),
+                    'end' => self::toAppTimezone($item['end'])->format('H:i'),
                     'duration_minutes' => $duration,
                     'energy_kwh' => round((float) $item['energy_kwh'], 6),
                     'avg_power_w' => $item['samples'] > 0
@@ -445,5 +443,19 @@ class EnergyReading extends Model
             ->take(6)
             ->values()
             ->all();
+    }
+
+    private static function toAppTimezone(mixed $value): Carbon
+    {
+        if ($value instanceof Carbon) {
+            return $value->copy()->setTimezone(config('app.timezone'));
+        }
+
+        if ($value instanceof UTCDateTime) {
+            return Carbon::instance($value->toDateTime())
+                ->setTimezone(config('app.timezone'));
+        }
+
+        return Carbon::parse($value)->setTimezone(config('app.timezone'));
     }
 }
