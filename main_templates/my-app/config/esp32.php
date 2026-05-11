@@ -21,6 +21,8 @@ return [
         'database' => env('MONGODB_DATABASE', 'espData'),
         'collection' => env('MONGODB_COLLECTION', 'readings'),
         'notifications_collection' => env('MONGODB_NOTIFICATIONS_COLLECTION', 'notifications'),
+        'guard_policies_collection' => env('MONGODB_GUARD_POLICIES_COLLECTION', 'power_strip_guard_policies'),
+        'power_strip_command_logs_collection' => env('MONGODB_POWER_STRIP_COMMAND_LOGS_COLLECTION', 'power_strip_command_logs'),
         'billing_invoices_bucket' => env('MONGODB_BILLING_INVOICES_BUCKET', 'billing_invoices'),
         'server_selection_timeout_ms' => (int) env('MONGODB_SERVER_SELECTION_TIMEOUT_MS', 1500),
         'connect_timeout_ms' => (int) env('MONGODB_CONNECT_TIMEOUT_MS', 1500),

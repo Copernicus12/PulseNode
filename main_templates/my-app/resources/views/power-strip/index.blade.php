@@ -4,6 +4,7 @@
 
 @push('head')
     @vite('resources/js/relay-command-toast.ts')
+    @vite('resources/js/power-strip-notifications.ts')
     @vite('resources/js/power-strip-safety-guard.ts')
 @endpush
 
@@ -15,6 +16,35 @@
 
 <div class="space-y-5">
     @include('layouts._relay-command-alert', ['relayCommandGuard' => $relayCommandGuard])
+
+    <div id="powerstrip-notifications-root"></div>
+    <script>
+        window.__powerStripCommandLogs = @json($commandLogs ?? []);
+    </script>
+
+    @if(session('power_strip_log'))
+        <script>
+            (function () {
+                var logEntry = @json(session('power_strip_log'));
+                var existingLogs = Array.isArray(window.__powerStripCommandLogs) ? window.__powerStripCommandLogs : [];
+
+                if (window.pulsenodeShowPowerStripToast) {
+                    window.pulsenodeShowPowerStripToast({
+                        level: logEntry && logEntry.level ? logEntry.level : 'success',
+                        title: logEntry && logEntry.message ? logEntry.message : 'Power Strip updated',
+                        detail: 'Power Strip actions were updated successfully.',
+                    });
+                }
+
+                if (existingLogs.length === 0) {
+                    window.__powerStripCommandLogs = [logEntry];
+                    if (typeof persistCommandLog === 'function') {
+                        persistCommandLog(logEntry).catch(function() {});
+                    }
+                }
+            })();
+        </script>
+    @endif
 
     {{-- ── Row 1: Operations header ── --}}
     <div id="powerstrip-command-center" class="light-outline-strong rounded-3xl bg-card p-7">
@@ -94,90 +124,209 @@
         @endforeach
     </div>
 
-    {{-- ── Row 3: Operational scenes + safeguards ── --}}
-    <div class="grid gap-5 lg:grid-cols-2">
-
-        {{-- Scene Presets + command log --}}
-        <div class="light-outline-strong flex h-full flex-col rounded-3xl bg-card p-7">
-            <div class="flex items-start justify-between gap-3">
-                <div>
-                    <h3 class="text-lg font-bold">Scene Presets</h3>
-                    <p class="text-sm text-muted-foreground">Operational shortcuts, not analytics.</p>
-                </div>
-                <span id="scene-status" class="rounded-full bg-primary/15 px-3 py-1 text-xs font-medium text-primary">Manual mode</span>
-            </div>
-
-            <div class="mt-5 grid gap-3 sm:grid-cols-2">
-                <button type="button" onclick="applyScene('focus')" class="light-outline rounded-2xl bg-background p-4 text-left transition hover:bg-muted">
-                    <p class="text-sm font-semibold">Focus</p>
-                    <p class="text-xs text-muted-foreground">S1 ON, S2 ON, S3 OFF</p>
-                </button>
-                <button type="button" onclick="applyScene('night')" class="light-outline rounded-2xl bg-background p-4 text-left transition hover:bg-muted">
-                    <p class="text-sm font-semibold">Night</p>
-                    <p class="text-xs text-muted-foreground">S1 OFF, S2 OFF, S3 ON</p>
-                </button>
-                <button type="button" onclick="applyScene('away')" class="light-outline rounded-2xl bg-background p-4 text-left transition hover:bg-muted">
-                    <p class="text-sm font-semibold">Away</p>
-                    <p class="text-xs text-muted-foreground">All OFF</p>
-                </button>
-                <button type="button" onclick="applyScene('boost')" class="light-outline rounded-2xl bg-background p-4 text-left transition hover:bg-muted">
-                    <p class="text-sm font-semibold">Boost</p>
-                    <p class="text-xs text-muted-foreground">All ON</p>
-                </button>
-            </div>
-
-            <div class="light-outline mt-5 flex min-h-[330px] flex-col rounded-2xl bg-background p-4">
-                <div class="flex items-center justify-between">
-                    <p class="text-sm font-semibold">Command Log</p>
-                    <button type="button" onclick="clearCommandLog()" class="text-xs text-muted-foreground transition hover:text-foreground">Clear</button>
-                </div>
-                <div id="command-log" class="mt-3 max-h-[250px] min-h-[170px] flex-1 space-y-2 overflow-auto pr-1 text-xs"></div>
-                <div class="mt-4 grid gap-2 sm:grid-cols-3">
-                    <div class="light-outline-soft rounded-xl bg-card px-3 py-2">
-                        <p class="text-[11px] text-muted-foreground">Commands</p>
-                        <p id="log-total" class="mt-1 text-sm font-semibold tabular-nums">0</p>
-                    </div>
-                    <div class="light-outline-soft rounded-xl bg-card px-3 py-2">
-                        <p class="text-[11px] text-muted-foreground">Errors</p>
-                        <p id="log-errors" class="mt-1 text-sm font-semibold tabular-nums">0</p>
-                    </div>
-                    <div class="light-outline-soft rounded-xl bg-card px-3 py-2">
-                        <p class="text-[11px] text-muted-foreground">Last action</p>
-                        <p id="log-last-action" class="mt-1 truncate text-sm font-semibold">-</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="light-outline mt-5 rounded-2xl bg-background p-4">
-                <div class="flex items-center justify-between">
-                    <p class="text-sm font-semibold">Automation Notes</p>
-                    <span id="automation-notes-status" class="text-[11px] text-muted-foreground">Live recommendations</span>
-                </div>
-                <div class="mt-3 space-y-2 text-xs text-muted-foreground">
-                    <p id="automation-note-1" class="light-outline-soft rounded-xl bg-card px-3 py-2">Waiting for recent commands...</p>
-                    <p id="automation-note-2" class="light-outline-soft rounded-xl bg-card px-3 py-2">Run a scene to get contextual recommendations.</p>
-                    <p id="automation-note-3" class="light-outline-soft rounded-xl bg-card px-3 py-2">Use Test Guard after changing policy values.</p>
-                </div>
-            </div>
-        </div>
-
-        {{-- Safety guard + quick operations --}}
-        <div class="flex flex-col gap-5">
-            <div id="powerstrip-safety-guard" class="light-outline-strong rounded-3xl bg-card p-7">
-                <div id="safety-guard-field-root" class="w-full">
+    {{-- ── Row 3: Guard + log ── --}}
+    <div class="grid gap-5 xl:grid-cols-2 xl:items-start">
+        <div class="space-y-5">
+            <div id="powerstrip-safety-guard" class="light-outline-strong flex h-full min-h-[842px] flex-col rounded-3xl bg-card p-5 sm:p-6">
+                <div
+                    id="safety-guard-field-root"
+                    class="w-full flex-1"
+                    data-policy='@json($guardPolicy)'
+                    data-save-url="{{ route('power-strip.guard-policy.store') }}"
+                >
                     <p class="text-sm text-muted-foreground">Loading safety guard form...</p>
                 </div>
             </div>
 
-            <div id="powerstrip-service-ops" class="rounded-3xl bg-primary p-7 text-primary-foreground">
+        </div>
+
+        <div class="space-y-5">
+            <div class="light-outline-strong flex h-full min-h-[620px] flex-col rounded-3xl bg-card p-5 sm:p-6">
+                <div class="rounded-2xl border border-border/40 bg-background/40 px-4 py-3">
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-lg font-bold tracking-tight">Command Log</h3>
+                    </div>
+                    <button type="button" onclick="clearCommandLog()" class="rounded-2xl border border-border/40 bg-background/50 px-3 py-2 text-xs font-medium text-muted-foreground transition hover:text-foreground">
+                        Clear log
+                    </button>
+                    </div>
+                </div>
+
+                <div
+                    class="mt-4 flex-1 overflow-hidden rounded-2xl border border-border/40 bg-[#111111] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
+                    data-command-log-url="{{ route('power-strip.command-log.store') }}"
+                    data-command-log-clear-url="{{ route('power-strip.command-log.clear') }}"
+                >
+                    <div class="border-b border-white/5 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.24em] text-zinc-500">
+                        power-strip console
+                    </div>
+                    <div class="max-h-[420px] overflow-y-auto px-3 py-3">
+                        <div id="command-log" class="space-y-1 font-mono text-[12px] leading-6 text-zinc-200"></div>
+                        <div id="command-log-empty" class="px-1 py-1 font-mono text-[12px] text-zinc-500">
+                            [idle] waiting for power strip actions...
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 grid gap-3 md:grid-cols-3">
+                    <div class="rounded-2xl border border-border/40 bg-background/40 px-4 py-3">
+                        <p class="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">SUCCES</p>
+                        <p id="log-success" class="mt-1 font-mono text-sm font-semibold tabular-nums">0</p>
+                    </div>
+                    <div class="rounded-2xl border border-border/40 bg-background/40 px-4 py-3">
+                        <p class="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">WARNING</p>
+                        <p id="log-warnings" class="mt-1 font-mono text-sm font-semibold tabular-nums">0</p>
+                    </div>
+                    <div class="rounded-2xl border border-border/40 bg-background/40 px-4 py-3">
+                        <p class="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">ERROR</p>
+                        <p id="log-errors" class="mt-1 font-mono text-sm font-semibold tabular-nums">0</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="powerstrip-service-ops" class="rounded-3xl bg-primary p-6 text-primary-foreground">
                 <h3 class="text-lg font-bold">Service Operations</h3>
                 <p class="mt-1.5 text-sm opacity-70">Direct maintenance controls</p>
                 <div class="mt-5 flex flex-wrap gap-3">
                     <button onclick="toggleAllSockets(true)" class="rounded-2xl bg-primary-foreground/15 px-5 py-2.5 text-sm font-medium transition hover:bg-primary-foreground/25">Turn All On</button>
                     <button onclick="toggleAllSockets(false)" class="rounded-2xl bg-primary-foreground/15 px-5 py-2.5 text-sm font-medium transition hover:bg-primary-foreground/25">Turn All Off</button>
-                    <button onclick="simulateGuard()" class="rounded-2xl bg-primary-foreground/15 px-5 py-2.5 text-sm font-medium transition hover:bg-primary-foreground/25">Test Guard</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div
+        id="powerstrip-saved-policies"
+        class="light-outline-strong w-full rounded-3xl border-border/40 bg-card shadow-none"
+    >
+        <div class="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
+            <div>
+                <h3 class="text-lg font-bold tracking-tight">
+                    Saved policies
+                </h3>
+                <p class="mt-1 text-sm leading-5 text-muted-foreground">
+                    Review guard rules before they appear in the live list below.
+                </p>
+            </div>
+
+            <span
+                class="inline-flex rounded-full px-3 py-1 text-xs {{ count($guardPolicies) > 0 ? 'border border-amber-500/20 bg-amber-500/10 text-amber-200' : 'border border-border/40 bg-muted/30 text-muted-foreground' }}"
+            >
+                {{ count($guardPolicies) }} waiting
+            </span>
+        </div>
+
+        <div class="p-4 pt-0 sm:p-5 sm:pt-0">
+            @if(count($guardPolicies) > 0)
+                <div class="overflow-x-auto rounded-2xl bg-secondary/40 ring-1 ring-border/30">
+                    <table class="w-full min-w-[980px] text-sm">
+                        <thead>
+                            <tr class="border-b border-border/30 bg-secondary/40 text-left text-xs text-muted-foreground">
+                                <th class="px-3 py-2.5 font-medium">Policy</th>
+                                <th class="px-3 py-2.5 font-medium">Thresholds</th>
+                                <th class="px-3 py-2.5 font-medium">Window</th>
+                                <th class="px-3 py-2.5 font-medium">Status</th>
+                                <th class="px-3 py-2.5 font-medium">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($guardPolicies as $policy)
+                                <tr class="border-b border-border/20 last:border-0">
+                                    <td class="px-3 py-2.5">
+                                        <div class="font-medium text-foreground">
+                                            {{ $policy['scope_mode'] === 'per_socket' ? 'Per-socket guard' : 'Common guard' }}
+                                        </div>
+                                        <div class="mt-1 text-xs text-muted-foreground">
+                                            Action: {{ $policy['action'] === 'off-1' ? 'Turn off socket 1' : ($policy['action'] === 'off-2' ? 'Turn off socket 2' : ($policy['action'] === 'off-3' ? 'Turn off socket 3' : 'Turn off all sockets')) }}
+                                        </div>
+                                        @if(!empty($policy['notes']))
+                                            <div class="mt-2 rounded-xl bg-card px-3 py-2 text-xs text-muted-foreground">
+                                                {{ $policy['notes'] }}
+                                            </div>
+                                        @endif
+                                    </td>
+                                    <td class="px-3 py-2.5 text-muted-foreground">
+                                        {{ $policy['scope_mode'] === 'per_socket'
+                                            ? 'S1 '.number_format((float) $policy['socket_threshold_amps_1'], 1).' A · S2 '.number_format((float) $policy['socket_threshold_amps_2'], 1).' A · S3 '.number_format((float) $policy['socket_threshold_amps_3'], 1).' A'
+                                            : 'Common '.number_format((float) $policy['common_threshold_amps'], 1).' A' }}
+                                    </td>
+                                    <td class="px-3 py-2.5 text-muted-foreground">
+                                        <div>
+                                            {{ \Carbon\Carbon::parse($policy['start_date'])->toDateString() }} → {{ !empty($policy['has_end_date']) && !empty($policy['end_date']) ? \Carbon\Carbon::parse($policy['end_date'])->toDateString() : 'No end date' }}
+                                        </div>
+                                        @if(!empty($policy['last_triggered_at']))
+                                            <div class="mt-1 text-xs">
+                                                Last trigger: {{ \Carbon\Carbon::parse($policy['last_triggered_at'])->format('M j, Y g:i A') }}
+                                            </div>
+                                        @endif
+                                    </td>
+                                    <td class="px-3 py-2.5">
+                                        <span class="inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium {{ $policy['status_tone'] ?? 'border-border/40 bg-muted/30 text-muted-foreground' }}">
+                                            {{ $policy['status_label'] ?? 'Unknown' }}
+                                        </span>
+                                    </td>
+                                    <td class="px-3 py-2.5">
+                                        <div class="flex flex-wrap gap-2">
+                                            @if(!empty($policy['enabled']))
+                                                <form method="POST" action="{{ $policy['pause_url'] }}" class="inline">
+                                                    @csrf
+                                                    <button type="submit" class="h-8 rounded-xl bg-muted px-3 text-xs font-medium text-foreground transition hover:bg-muted/80">
+                                                        Pause
+                                                    </button>
+                                                </form>
+                                            @else
+                                                <form method="POST" action="{{ $policy['resume_url'] }}" class="inline">
+                                                    @csrf
+                                                    <button type="submit" class="h-8 rounded-xl bg-muted px-3 text-xs font-medium text-foreground transition hover:bg-muted/80">
+                                                        Resume
+                                                    </button>
+                                                </form>
+                                            @endif
+                                                @php
+                                                    $policyActionLabel = $policy['action'] === 'off-1'
+                                                        ? 'Turn off socket 1'
+                                                        : ($policy['action'] === 'off-2'
+                                                            ? 'Turn off socket 2'
+                                                            : ($policy['action'] === 'off-3'
+                                                                ? 'Turn off socket 3'
+                                                                : 'Turn off all sockets'));
+                                                    $policySummary = ($policy['scope_mode'] === 'per_socket'
+                                                        ? 'Per-socket guard'
+                                                        : 'Common guard')
+                                                        .' ('
+                                                        .(
+                                                            $policy['scope_mode'] === 'per_socket'
+                                                                ? 'S1 '.number_format((float) $policy['socket_threshold_amps_1'], 1).' A, S2 '.number_format((float) $policy['socket_threshold_amps_2'], 1).' A, S3 '.number_format((float) $policy['socket_threshold_amps_3'], 1).' A'
+                                                                : number_format((float) $policy['common_threshold_amps'], 1).' A'
+                                                        )
+                                                        .' -> '
+                                                        .$policyActionLabel
+                                                        .')';
+                                                @endphp
+                                                <button
+                                                    type="button"
+                                                    class="h-8 rounded-xl bg-red-500/10 px-3 text-xs font-medium text-red-300 transition hover:bg-red-500/20"
+                                                    data-delete-url="{{ $policy['delete_url'] }}"
+                                                    data-policy-summary="{{ $policySummary }}"
+                                                    data-delete-title="Delete guard policy?"
+                                                    onclick="openGuardPolicyDeleteDialog(this)"
+                                                >
+                                                    Delete
+                                                </button>
+                                            
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @else
+                <div class="rounded-2xl border border-dashed border-border/40 bg-secondary/20 px-4 py-6 text-sm text-muted-foreground">
+                    No guard policies yet. Save the first policy above and it will appear here.
+                </div>
+            @endif
         </div>
     </div>
 
@@ -197,133 +346,203 @@
 </div>
 
 <script>
-function updateAutomationNotes(rows, errors, lastAction) {
-    var statusEl = document.getElementById('automation-notes-status');
-    var note1 = document.getElementById('automation-note-1');
-    var note2 = document.getElementById('automation-note-2');
-    var note3 = document.getElementById('automation-note-3');
-    if (!statusEl || !note1 || !note2 || !note3) return;
-
-    var notes = [];
-    var lowerLast = (lastAction || '').toLowerCase();
-
-    if (!rows.length) {
-        notes.push('No recent commands yet. Start with Focus or Night to build a routine.');
-    } else {
-        notes.push('Last action: ' + lastAction + '.');
-    }
-
-    if (errors > 0) {
-        notes.push(errors + ' recent error(s) detected. Verify relay API or MQTT listener status.');
-        statusEl.textContent = 'Attention needed';
-        statusEl.className = 'text-[11px] text-amber-400';
-    } else if (!rows.length) {
-        notes.push('System is idle. Run one scene and the panel will suggest next steps.');
-        statusEl.textContent = 'Waiting for activity';
-        statusEl.className = 'text-[11px] text-muted-foreground';
-    } else {
-        notes.push('No recent errors. Automation flow looks stable.');
-        statusEl.textContent = 'Healthy automation';
-        statusEl.className = 'text-[11px] text-emerald-400';
-    }
-
-    if (lowerLast.indexOf('scene applied: focus') !== -1) {
-        notes.push('Focus is active. For lower idle draw later, switch to Night.');
-    } else if (lowerLast.indexOf('scene applied: night') !== -1) {
-        notes.push('Night is active. Use Away when leaving for full shutdown.');
-    } else if (lowerLast.indexOf('scene applied: away') !== -1 || lowerLast.indexOf('all sockets -> off') !== -1) {
-        notes.push('Away/off state detected. Turn on only required sockets to keep consumption low.');
-    } else if (lowerLast.indexOf('guard policy updated') !== -1) {
-        notes.push('Policy was updated. Run Test Guard once to validate the selected action.');
-    } else if (lowerLast.indexOf('socket') !== -1) {
-        notes.push('Manual socket override detected. Consider using a scene for faster repeat actions.');
-    } else if (lowerLast.indexOf('scene failed') !== -1) {
-        notes.push('A scene failed recently. Retry after checking device connectivity.');
-    } else {
-        notes.push('Use Boost only for short bursts, then return to Focus or Night.');
-    }
-
-    note1.textContent = notes[0] || '';
-    note2.textContent = notes[1] || '';
-    note3.textContent = notes[2] || '';
-}
-
 function updateCommandLogInsights() {
     var host = document.getElementById('command-log');
-    var totalEl = document.getElementById('log-total');
+    var empty = document.getElementById('command-log-empty');
+    var shellState = document.getElementById('log-shell-state');
+    var successEl = document.getElementById('log-success');
+    var warningEl = document.getElementById('log-warnings');
     var errorEl = document.getElementById('log-errors');
-    var lastEl = document.getElementById('log-last-action');
     if (!host) return;
 
     var rows = [];
     for (var i = 0; i < host.children.length; i++) {
-        rows.push((host.children[i].textContent || '').trim());
+        var row = host.children[i];
+        var level = row.dataset.level || row.dataset.type || 'success';
+        if (level === 'info') level = 'success';
+        rows.push({
+            message: (row.dataset.message || row.textContent || '').trim(),
+            type: level,
+        });
     }
 
     var total = rows.length;
+    var success = 0;
+    var warnings = 0;
     var errors = 0;
     for (var j = 0; j < rows.length; j++) {
-        var row = rows[j].toLowerCase();
-        if (row.indexOf('failed') !== -1 || row.indexOf('error') !== -1 || row.indexOf('not active') !== -1 || row.indexOf('no guard') !== -1) {
+        if (rows[j].type === 'warning') {
+            warnings++;
+        }
+        if (rows[j].type === 'error') {
             errors++;
         }
-    }
-
-    if (totalEl) totalEl.textContent = String(total);
-    if (errorEl) errorEl.textContent = String(errors);
-    var lastAction = '-';
-    if (lastEl) {
-        if (!total) {
-            lastEl.textContent = '-';
-        } else {
-            lastEl.textContent = rows[0].replace(/^\[[^\]]+\]\s*/, '') || '-';
+        if (rows[j].type === 'success' || rows[j].type === 'info') {
+            success++;
         }
-        lastAction = lastEl.textContent || '-';
     }
 
-    updateAutomationNotes(rows, errors, lastAction);
+    if (successEl) successEl.textContent = String(success);
+    if (warningEl) warningEl.textContent = String(warnings);
+    if (errorEl) errorEl.textContent = String(errors);
+    if (empty) {
+        empty.classList.toggle('hidden', total > 0);
+    }
+    if (shellState) {
+        shellState.textContent = total > 0 ? 'live' : 'idle';
+    }
 }
 
-function addLog(message, isError) {
+function resolveLogLevel(isError, tone) {
+    if (tone === 'success') return 'success';
+    if (tone === 'warning') return 'warning';
+    if (tone === 'error') return 'error';
+    return isError ? 'error' : 'success';
+}
+
+function normalizeCommandLogEntry(entry, fallbackMessage, fallbackTone) {
+    var payload = entry && typeof entry === 'object' ? entry : {};
+    var level = payload.level || payload.type || fallbackTone || 'success';
+    if (level === 'info') level = 'success';
+    if (!['success', 'warning', 'error'].includes(level)) {
+        level = fallbackTone || 'success';
+    }
+
+    return {
+        level: level,
+        message: typeof payload.message === 'string' && payload.message.trim() !== '' ? payload.message : (fallbackMessage || 'Power Strip event'),
+        time: typeof payload.time === 'string' && payload.time.trim() !== '' ? payload.time : (typeof payload.created_at === 'string' && payload.created_at.trim() !== '' ? payload.created_at : new Date().toISOString()),
+        source: typeof payload.source === 'string' && payload.source.trim() !== '' ? payload.source : 'power-strip',
+        meta: payload.meta && typeof payload.meta === 'object' ? payload.meta : null,
+    };
+}
+
+function renderLogEntry(entry) {
     var host = document.getElementById('command-log');
+    var empty = document.getElementById('command-log-empty');
+    if (!host) return;
+
+    var item = normalizeCommandLogEntry(entry);
     if (!host) return;
     var row = document.createElement('div');
-    row.className = 'rounded-lg px-3 py-2 ' + (isError ? 'bg-red-500/10 text-red-300' : 'bg-card text-muted-foreground');
-    row.textContent = '[' + new Date().toLocaleTimeString() + '] ' + message;
+    var level = item.level;
+    row.dataset.type = level;
+    row.dataset.level = level;
+    row.dataset.message = item.message;
+    row.dataset.time = item.time;
+    row.dataset.source = item.source;
+    row.className = 'rounded-2xl border border-border/30 bg-background/30 px-3 py-2 transition';
+
+    var headerRow = document.createElement('div');
+    headerRow.className = 'flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[11px] text-zinc-500';
+
+    var timeCell = document.createElement('span');
+    timeCell.className = 'shrink-0 whitespace-nowrap';
+    timeCell.textContent = new Date(item.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    var typeCell = document.createElement('span');
+    typeCell.className = 'shrink-0 rounded-full border border-border/30 bg-background/40 px-2 py-0.5 text-[10px] font-semibold tracking-[0.18em] text-zinc-400';
+    typeCell.textContent = level === 'error' ? 'ERROR' : (level === 'warning' ? 'WARNING' : 'SUCCES');
+
+    var promptCell = document.createElement('span');
+    promptCell.className = 'shrink-0';
+    promptCell.textContent = 'power-strip@terminal>';
+
+    var messageCell = document.createElement('div');
+    messageCell.className = 'mt-2 pl-[1.45rem] font-mono text-[12px] leading-5 text-zinc-100 break-words';
+    messageCell.textContent = item.message;
+
+    headerRow.appendChild(promptCell);
+    headerRow.appendChild(timeCell);
+    headerRow.appendChild(typeCell);
+    row.appendChild(headerRow);
+    row.appendChild(messageCell);
     host.prepend(row);
-    while (host.children.length > 30) host.removeChild(host.lastChild);
-    var all = [];
-    for (var i = 0; i < host.children.length; i++) all.push(host.children[i].textContent || '');
-    localStorage.setItem('powerStripCommandLog', JSON.stringify(all));
+    if (empty) empty.classList.add('hidden');
+    while (host.children.length > 40) host.removeChild(host.lastChild);
     updateCommandLogInsights();
 }
 
-function restoreLog() {
+function hydrateCommandLog(entries) {
     var host = document.getElementById('command-log');
+    var empty = document.getElementById('command-log-empty');
     if (!host) return;
-    var raw = localStorage.getItem('powerStripCommandLog');
-    if (!raw) {
-        updateCommandLogInsights();
-        return;
-    }
-    try {
-        var rows = JSON.parse(raw);
-        if (!Array.isArray(rows)) return;
-        rows.forEach(function(text) {
-            var row = document.createElement('div');
-            row.className = 'rounded-lg bg-card px-3 py-2 text-muted-foreground';
-            row.textContent = text;
-            host.appendChild(row);
-        });
-        updateCommandLogInsights();
-    } catch (_) {}
+    var rows = Array.isArray(entries) ? entries : [];
+    rows.slice().reverse().forEach(function(entry) {
+        renderLogEntry(entry);
+    });
+    if (empty) empty.classList.toggle('hidden', host.children.length > 0);
+    updateCommandLogInsights();
 }
 
-function clearCommandLog() {
-    localStorage.removeItem('powerStripCommandLog');
+async function persistCommandLog(entry) {
     var host = document.getElementById('command-log');
+    var logCard = document.querySelector('[data-command-log-url]');
+    if (!host || !logCard) return null;
+
+    var response = await fetch(logCard.getAttribute('data-command-log-url') || '', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+            'X-CSRF-TOKEN': (function () {
+                var meta = document.querySelector('meta[name="csrf-token"]');
+                return meta ? (meta.getAttribute('content') || '') : '';
+            })(),
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(entry),
+    });
+
+    var payload = await response.json().catch(function() {
+        return {};
+    });
+
+    if (!response.ok) {
+        throw new Error((payload && payload.message) ? payload.message : 'Failed to save command log');
+    }
+
+    return payload && payload.log ? payload.log : null;
+}
+
+async function clearCommandLog() {
+    var logCard = document.querySelector('[data-command-log-clear-url]');
+    var clearUrl = logCard ? (logCard.getAttribute('data-command-log-clear-url') || '') : '';
+    if (clearUrl) {
+        try {
+            await fetch(clearUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': (function () {
+                        var meta = document.querySelector('meta[name="csrf-token"]');
+                        return meta ? (meta.getAttribute('content') || '') : '';
+                    })(),
+                },
+                credentials: 'same-origin',
+            });
+        } catch (_) {}
+    }
+
+    var host = document.getElementById('command-log');
+    var empty = document.getElementById('command-log-empty');
+    var shellState = document.getElementById('log-shell-state');
     if (host) host.innerHTML = '';
+    if (empty) empty.classList.remove('hidden');
+    if (shellState) shellState.textContent = 'idle';
+    window.__powerStripCommandLogs = [];
     updateCommandLogInsights();
+}
+
+function openGuardPolicyDeleteDialog(button) {
+    if (!button || !window.pulsenodeOpenPowerStripDeleteDialog) return;
+
+    window.pulsenodeOpenPowerStripDeleteDialog({
+        title: button.dataset.deleteTitle || 'Delete guard policy?',
+        actionUrl: button.dataset.deleteUrl || '',
+        policySummary: button.dataset.policySummary || '',
+    });
 }
 
 var relayState = {
@@ -487,20 +706,65 @@ function toggleSocket(idx, turnOn) {
             var latest = payload && payload.latest ? payload.latest : null;
             relayState[idx] = desiredState;
             setSocketToggleState(idx, desiredState, false);
-            addLog('Socket ' + idx + ' -> ' + (desiredState ? 'ON' : 'OFF'));
+            if (payload && payload.log) {
+                renderLogEntry(payload.log);
+            }
             if (latest) publishLatestSnapshot(latest);
         })
         .catch(function(e) {
             setSocketToggleState(idx, relayState[idx], false);
             console.error('Relay error', e);
-            addLog((e && e.message) ? e.message : ('Socket ' + idx + ' command failed'), true);
+            if (e && !e.payload && desiredState) {
+                persistCommandLog({
+                    level: 'warning',
+                    message: e && e.message ? e.message : ('Socket ' + idx + ' power-on blocked by guard.'),
+                    source: 'ui',
+                    meta: { socket_id: idx, state: desiredState ? 'on' : 'off', blocked: true },
+                }).then(function(log) {
+                    if (log) {
+                        renderLogEntry(log);
+                    }
+                }).catch(function() {
+                    renderLogEntry({
+                        level: 'warning',
+                        message: e && e.message ? e.message : ('Socket ' + idx + ' power-on blocked by guard.'),
+                        source: 'ui',
+                        time: new Date().toISOString(),
+                    });
+                });
+            } else if (e && e.payload && e.payload.log) {
+                renderLogEntry(e.payload.log);
+            } else {
+                renderLogEntry({
+                    level: 'error',
+                    message: (e && e.message) ? e.message : ('Socket ' + idx + ' command failed'),
+                    source: 'relay',
+                    time: new Date().toISOString(),
+                });
+            }
         });
 }
 
 function toggleAllSockets(turnOn) {
     if (turnOn && window.pulsenodeEnsureRelayCommandAllowed && !window.pulsenodeEnsureRelayCommandAllowed(true)) {
         var blockedGuard = window.__pulsenodeRelayCommandGuard || {};
-        addLog(blockedGuard.message || 'Socket power-on is unavailable right now.', true);
+        persistCommandLog({
+            level: 'warning',
+            message: blockedGuard.message || 'Power-on request blocked by guard.',
+            source: 'ui',
+            meta: { action: 'toggle_all', turn_on: true, blocked: true },
+        }).then(function(log) {
+            if (log) {
+                renderLogEntry(log);
+            }
+        }).catch(function() {
+            renderLogEntry({
+                level: 'warning',
+                message: blockedGuard.message || 'Power-on request blocked by guard.',
+                source: 'ui',
+                time: new Date().toISOString(),
+            });
+        });
         return;
     }
 
@@ -518,7 +782,11 @@ function toggleAllSockets(turnOn) {
         setSocketToggleState(1, turnOn, false);
         setSocketToggleState(2, turnOn, false);
         setSocketToggleState(3, turnOn, false);
-        addLog('All sockets -> ' + (turnOn ? 'ON' : 'OFF'));
+        payloads.forEach(function(payload) {
+            if (payload && payload.log) {
+                renderLogEntry(payload.log);
+            }
+        });
         var latest = payloads.length ? (payloads[payloads.length - 1].latest || null) : null;
         if (latest) publishLatestSnapshot(latest);
     }).catch(function(e) {
@@ -526,90 +794,20 @@ function toggleAllSockets(turnOn) {
         setSocketToggleState(2, relayState[2], false);
         setSocketToggleState(3, relayState[3], false);
         console.error('Toggle all error', e);
-        addLog((e && e.message) ? e.message : 'All sockets command failed', true);
+        if (e && e.payload && e.payload.log) {
+            renderLogEntry(e.payload.log);
+        } else {
+            renderLogEntry({
+                level: 'error',
+                message: (e && e.message) ? e.message : 'All-sockets command failed',
+                source: 'relay',
+                time: new Date().toISOString(),
+            });
+        }
     });
 }
 
-function applyScene(scene) {
-    var map = {
-        focus: [true, true, false],
-        night: [false, false, true],
-        away: [false, false, false],
-        boost: [true, true, true],
-    };
-    if (!map[scene]) return;
-    var state = map[scene];
-    if (state.some(function(value) { return value; }) && window.pulsenodeEnsureRelayCommandAllowed && !window.pulsenodeEnsureRelayCommandAllowed(true)) {
-        var blockedGuard = window.__pulsenodeRelayCommandGuard || {};
-        addLog(blockedGuard.message || 'Scene failed because socket power-on is unavailable right now.', true);
-        return;
-    }
-
-    Promise.all([
-        sendRelayCommand(1, state[0]),
-        sendRelayCommand(2, state[1]),
-        sendRelayCommand(3, state[2]),
-    ]).then(function(payloads) {
-        relayState[1] = state[0];
-        relayState[2] = state[1];
-        relayState[3] = state[2];
-        setSocketToggleState(1, state[0], false);
-        setSocketToggleState(2, state[1], false);
-        setSocketToggleState(3, state[2], false);
-        var badge = document.getElementById('scene-status');
-        if (badge) badge.textContent = scene.charAt(0).toUpperCase() + scene.slice(1) + ' mode';
-        addLog('Scene applied: ' + scene);
-        var latest = payloads.length ? (payloads[payloads.length - 1].latest || null) : null;
-        if (latest) publishLatestSnapshot(latest);
-    }).catch(function() { addLog('Scene failed: ' + scene, true); });
-}
-
-function saveGuardPolicy() {
-    var threshold = parseFloat((document.getElementById('guard-threshold') || {}).value || '1800');
-    var action = (document.getElementById('guard-action') || {}).value || 'off-3';
-    var startDate = (document.getElementById('guard-start-date') || {}).value || '';
-    localStorage.setItem('powerStripGuard', JSON.stringify({ threshold: threshold, action: action, startDate: startDate }));
-    var msg = document.getElementById('guard-message');
-    if (msg) {
-        msg.textContent = 'Policy saved: ' + threshold.toFixed(0) + 'W / ' + action + (startDate ? ' / starts ' + startDate : '');
-    }
-    addLog('Guard policy updated');
-}
-
-function loadGuardPolicy() {
-    var raw = localStorage.getItem('powerStripGuard');
-    if (!raw) return;
-    try {
-        var policy = JSON.parse(raw);
-        if (policy.threshold && document.getElementById('guard-threshold')) document.getElementById('guard-threshold').value = policy.threshold;
-        if (policy.action && document.getElementById('guard-action')) document.getElementById('guard-action').value = policy.action;
-        if (policy.startDate && document.getElementById('guard-start-date')) document.getElementById('guard-start-date').value = policy.startDate;
-    } catch (_) {}
-}
-
-function simulateGuard() {
-    var raw = localStorage.getItem('powerStripGuard');
-    if (!raw) {
-        addLog('No guard policy saved', true);
-        return;
-    }
-    try {
-        var policy = JSON.parse(raw);
-        if (policy.startDate) {
-            var startAt = new Date(policy.startDate + 'T00:00:00');
-            if (Number.isFinite(startAt.getTime()) && Date.now() < startAt.getTime()) {
-                addLog('Guard policy is not active yet (starts on ' + policy.startDate + ').', true);
-                return;
-            }
-        }
-        if (policy.action === 'off-3') return toggleSocket(3, false);
-        if (policy.action === 'off-2') return toggleSocket(2, false);
-        if (policy.action === 'off-all') return toggleAllSockets(false);
-    } catch (_) {}
-}
-
-restoreLog();
-loadGuardPolicy();
+hydrateCommandLog(window.__powerStripCommandLogs || []);
 
 function applyLatestMetrics(d) {
     if (!isPowerStripFresh(d)) {

@@ -12,6 +12,8 @@ use App\Support\DeviceProfiler;
 use App\Support\Esp32RelayPublisher;
 use App\Support\Esp32StateStore;
 use App\Support\NotificationCenter;
+use App\Support\PowerStripCommandLogStore;
+use App\Support\PowerStripGuardService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,7 +28,15 @@ class Esp32ApiController extends Controller
         return response()->json($store->latest());
     }
 
-    public function relay(int $relayId, string $state, Esp32StateStore $store, Esp32RelayPublisher $publisher, Esp32ConnectionHealth $connectionHealth, NotificationCenter $notifications): JsonResponse
+    public function relay(
+        int $relayId,
+        string $state,
+        Esp32StateStore $store,
+        Esp32RelayPublisher $publisher,
+        Esp32ConnectionHealth $connectionHealth,
+        NotificationCenter $notifications,
+        PowerStripCommandLogStore $commandLogStore,
+    ): JsonResponse
     {
         if (! in_array($state, ['on', 'off'], true)) {
             return response()->json([
@@ -47,6 +57,17 @@ class Esp32ApiController extends Controller
 
         if ($state === 'on' && ! $relayCommandGuard['can_turn_on']) {
             $notifications->relayCommandBlocked($relayId, $relayCommandGuard);
+            $log = $this->storePowerStripCommandLog(
+                $commandLogStore,
+                'warning',
+                'Socket '.$relayId.' power-on blocked by guard.',
+                'relay',
+                [
+                    'relay_id' => $relayId,
+                    'state' => $state,
+                    'guard_reason' => $relayCommandGuard['message'] ?? null,
+                ],
+            );
 
             return response()->json([
                 'status' => 'unavailable',
@@ -54,6 +75,7 @@ class Esp32ApiController extends Controller
                 'published' => false,
                 'message' => $relayCommandGuard['message'],
                 'guard' => $relayCommandGuard,
+                'log' => $log,
             ], 409);
         }
 
@@ -61,12 +83,24 @@ class Esp32ApiController extends Controller
             $publishResult = $publisher->publish($relayId, $state);
         } catch (RuntimeException $exception) {
             $notifications->relayCommandFailed($relayId, $state, $exception->getMessage());
+            $log = $this->storePowerStripCommandLog(
+                $commandLogStore,
+                'error',
+                'Socket '.$relayId.' command failed: '.$exception->getMessage(),
+                'relay',
+                [
+                    'relay_id' => $relayId,
+                    'state' => $state,
+                    'error' => $exception->getMessage(),
+                ],
+            );
 
             return response()->json([
                 'status' => 'error',
                 'sent' => strtoupper($state),
                 'published' => false,
                 'message' => $exception->getMessage(),
+                'log' => $log,
             ], 503);
         }
 
@@ -76,16 +110,27 @@ class Esp32ApiController extends Controller
             'relay_3' => $relayId === 3 ? $state === 'on' : (bool) ($latestState['relay_3'] ?? false),
         ]);
         $notifications->relayCommandSent($relayId, $state);
+        $log = $this->storePowerStripCommandLog(
+            $commandLogStore,
+            'success',
+            'Socket '.$relayId.' switched '.strtoupper($state).'.',
+            'relay',
+            [
+                'relay_id' => $relayId,
+                'state' => $state,
+            ],
+        );
 
         return response()->json([
             'status' => 'ok',
             ...$publishResult,
             'relay' => $latest["relay_{$relayId}"],
             'latest' => $latest,
+            'log' => $log,
         ]);
     }
 
-    public function ingest(Request $request, Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth, NotificationCenter $notifications): JsonResponse
+    public function ingest(Request $request, Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth, NotificationCenter $notifications, PowerStripGuardService $guardService): JsonResponse
     {
         $configuredToken = (string) config('esp32.ingest.token', '');
         if ($configuredToken !== '' && $request->header('X-ESP32-TOKEN') !== $configuredToken) {
@@ -114,11 +159,34 @@ class Esp32ApiController extends Controller
         $previous = $store->latest();
         $latest = $store->updateTelemetry($payload);
         $notifications->recordTelemetryUpdate($previous, $latest, $connectionHealth);
+        $guardService->enforce($latest);
 
         return response()->json([
             'status' => 'ok',
             'latest' => $latest,
         ]);
+    }
+
+    private function storePowerStripCommandLog(
+        PowerStripCommandLogStore $commandLogStore,
+        string $level,
+        string $message,
+        string $source = 'power-strip',
+        array $meta = [],
+    ): array
+    {
+        return $commandLogStore->store([
+            'level' => $level,
+            'message' => $message,
+            'source' => $source,
+            'meta' => $meta,
+        ]) ?? [
+            'level' => in_array($level, ['success', 'warning', 'error', 'info'], true) ? $level : 'info',
+            'message' => $message,
+            'source' => $source,
+            'meta' => $meta ?: null,
+            'time' => now()->toIso8601String(),
+        ];
     }
 
     public function energyHistory(Request $request, EnergyBillingCalculator $billingCalculator): JsonResponse

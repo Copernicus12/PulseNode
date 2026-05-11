@@ -65,6 +65,27 @@ Route::prefix('accounts')->middleware(['auth', 'admin'])->name('accounts.')->gro
 
 Route::get('power-strip', [PowerStripController::class, 'index'])
     ->middleware(['auth'])->name('power-strip.index');
+Route::post('power-strip/guard-policy', [PowerStripController::class, 'storeGuardPolicy'])
+    ->middleware(['auth'])
+    ->name('power-strip.guard-policy.store');
+Route::post('power-strip/command-log', [PowerStripController::class, 'storeCommandLog'])
+    ->middleware(['auth'])
+    ->name('power-strip.command-log.store');
+Route::post('power-strip/command-log/clear', [PowerStripController::class, 'clearCommandLog'])
+    ->middleware(['auth'])
+    ->name('power-strip.command-log.clear');
+Route::post('power-strip/guard-policies/{policyId}/pause', [PowerStripController::class, 'pauseGuardPolicy'])
+    ->middleware(['auth'])
+    ->name('power-strip.guard-policies.pause');
+Route::post('power-strip/guard-policies/{policyId}/resume', [PowerStripController::class, 'resumeGuardPolicy'])
+    ->middleware(['auth'])
+    ->name('power-strip.guard-policies.resume');
+Route::delete('power-strip/guard-policies/{policyId}', [PowerStripController::class, 'destroyGuardPolicy'])
+    ->middleware(['auth'])
+    ->name('power-strip.guard-policies.destroy');
+Route::post('power-strip/guard-policy/preview', [PowerStripController::class, 'previewGuardPolicy'])
+    ->middleware(['auth'])
+    ->name('power-strip.guard-policy.preview');
 Route::prefix('devices')->middleware(['auth'])->name('devices.')->group(function (): void {
     Route::get('/', [PowerStripController::class, 'devices'])->name('index');
     Route::get('profiles', [PowerStripController::class, 'deviceProfiles'])->name('profiles.index');

@@ -90,7 +90,7 @@
                 </p>
             </div>
             <div class="light-outline rounded-2xl bg-background p-5">
-                <p class="text-xs text-muted-foreground">Energy</p>
+                <p class="text-xs text-muted-foreground">Energy since power-on</p>
                 <p class="mt-2.5 text-2xl font-bold tabular-nums" id="dash-energy">
                     @if($isOnline)
                         {{ $energy }} <span class="text-sm font-normal text-muted-foreground">kWh</span>

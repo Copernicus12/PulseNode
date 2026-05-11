@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Support\PowerStripCommandLogStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Mockery;
 use Tests\TestCase;
 
 class LiveTelemetryUiTest extends TestCase
@@ -27,6 +29,12 @@ class LiveTelemetryUiTest extends TestCase
         $user = User::factory()->create();
         $this->actingAs($user);
 
+        $commandLogStore = Mockery::mock(PowerStripCommandLogStore::class);
+        $commandLogStore->shouldReceive('latest')
+            ->once()
+            ->andReturn([]);
+        $this->app->instance(PowerStripCommandLogStore::class, $commandLogStore);
+
         foreach (['dashboard', 'power-strip.index', 'devices.index', 'battery.index'] as $routeName) {
             $response = $this->get(route($routeName));
             $response->assertOk();
@@ -38,6 +46,12 @@ class LiveTelemetryUiTest extends TestCase
     {
         $user = User::factory()->create();
         $this->actingAs($user);
+
+        $commandLogStore = Mockery::mock(PowerStripCommandLogStore::class);
+        $commandLogStore->shouldReceive('latest')
+            ->once()
+            ->andReturn([]);
+        $this->app->instance(PowerStripCommandLogStore::class, $commandLogStore);
 
         foreach (['dashboard', 'power-strip.index'] as $routeName) {
             $response = $this->get(route($routeName));

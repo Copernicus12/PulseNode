@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { ref } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { DatePicker } from '@/components/ui/date-picker'
 import {
   Field,
   FieldDescription,
@@ -21,144 +22,230 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
-type GuardWindow = Window & {
-  saveGuardPolicy?: () => void
-  simulateGuard?: () => void
+type GuardPolicy = {
+  id?: string | null
+  enabled?: boolean
+  status?: 'active' | 'paused' | 'scheduled' | 'expired' | 'empty'
+  status_label?: string
+  status_tone?: string
+  scope_mode?: 'common' | 'per_socket'
+  common_threshold_amps?: number
+  socket_threshold_amps_1?: number
+  socket_threshold_amps_2?: number
+  socket_threshold_amps_3?: number
+  action?: 'off-1' | 'off-2' | 'off-3' | 'off-all'
+  start_date?: string
+  has_end_date?: boolean
+  end_date?: string | null
+  notes?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+  last_triggered_at?: string | null
+  last_triggered_reason?: string | null
+  pause_url?: string | null
+  resume_url?: string | null
+  delete_url?: string | null
 }
 
-const threshold = ref<string>('1800')
-const action = ref<string>('off-3')
-const startMonth = ref<string>('')
-const startYear = ref<string>('')
-const sameAsBasePolicy = ref<boolean>(true)
+const props = defineProps<{
+  initialPolicy?: GuardPolicy
+  saveUrl?: string
+}>()
+
+const initialPolicy = props.initialPolicy ?? {}
+
+function localDateString(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const enabled = ref<boolean>(Boolean(initialPolicy.enabled ?? false))
+const scopeMode = ref<'common' | 'per_socket'>(
+  initialPolicy.scope_mode === 'per_socket' ? 'per_socket' : 'common',
+)
+const commonThreshold = ref<string>(String(initialPolicy.common_threshold_amps ?? 10))
+const socketThreshold1 = ref<string>(String(initialPolicy.socket_threshold_amps_1 ?? 10))
+const socketThreshold2 = ref<string>(String(initialPolicy.socket_threshold_amps_2 ?? 10))
+const socketThreshold3 = ref<string>(String(initialPolicy.socket_threshold_amps_3 ?? 10))
+const action = ref<'off-1' | 'off-2' | 'off-3' | 'off-all'>(
+  initialPolicy.action ?? 'off-all',
+)
+const todayDate = localDateString()
+const startDate = ref<string>(initialPolicy.start_date ?? todayDate)
+const hasEndDate = ref<boolean>(Boolean(initialPolicy.has_end_date ?? false))
+const endDate = ref<string>(initialPolicy.end_date ?? '')
 const notes = ref<string>('')
 
-const months = [
-  { value: '01', label: '01' },
-  { value: '02', label: '02' },
-  { value: '03', label: '03' },
-  { value: '04', label: '04' },
-  { value: '05', label: '05' },
-  { value: '06', label: '06' },
-  { value: '07', label: '07' },
-  { value: '08', label: '08' },
-  { value: '09', label: '09' },
-  { value: '10', label: '10' },
-  { value: '11', label: '11' },
-  { value: '12', label: '12' },
+const isSubmitting = ref(false)
+const guardMessage = ref('Save a policy to add it to the list below.')
+
+const scopeOptions = [
+  { value: 'common', label: 'Common' },
+  { value: 'per_socket', label: 'Per socket' },
 ]
 
-const currentYear = new Date().getFullYear()
-const years = Array.from({ length: 8 }, (_, index) => String(currentYear + index))
-
-const startDate = computed(() =>
-  startYear.value && startMonth.value ? `${startYear.value}-${startMonth.value}-01` : '',
-)
-
-onMounted(() => {
-  try {
-    const raw = localStorage.getItem('powerStripGuard')
-    if (raw) {
-      const policy = JSON.parse(raw) as {
-        threshold?: number | string
-        action?: string
-        startDate?: string
-      }
-
-      if (policy.threshold !== undefined && policy.threshold !== null) {
-        threshold.value = String(policy.threshold)
-      }
-      if (policy.action) {
-        action.value = policy.action
-      }
-      if (policy.startDate) {
-        const parts = String(policy.startDate).split('-')
-        if (parts.length >= 2) {
-          startYear.value = parts[0] || ''
-          startMonth.value = parts[1] || ''
-        }
-      }
-    }
-  } catch (_) {
-    // Keep defaults if the saved policy is malformed.
-  }
-
-  try {
-    const savedNotes = localStorage.getItem('powerStripGuardNotes')
-    if (savedNotes) notes.value = savedNotes
-  } catch (_) {
-    // Ignore local storage access errors.
-  }
-})
-
-function savePolicy() {
-  try {
-    localStorage.setItem('powerStripGuardNotes', notes.value)
-  } catch (_) {
-    // Ignore local storage access errors.
-  }
-
-  ;(window as GuardWindow).saveGuardPolicy?.()
+function getCsrfToken(): string {
+  const meta = document.querySelector('meta[name="csrf-token"]')
+  return meta ? (meta.getAttribute('content') || '') : ''
 }
 
-function runTest() {
-  try {
-    localStorage.setItem('powerStripGuardNotes', notes.value)
-  } catch (_) {
-    // Ignore local storage access errors.
+async function submitMutation(url: string, method: 'POST' | 'DELETE', payload?: Record<string, unknown>) {
+  const response = await fetch(url, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'X-CSRF-TOKEN': getCsrfToken(),
+    },
+    credentials: 'same-origin',
+    body: payload ? JSON.stringify(payload) : undefined,
+  })
+
+  const data = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error((data && data.message) ? data.message : 'Operation failed')
   }
 
-  ;(window as GuardWindow).simulateGuard?.()
+  return data
 }
+
+function buildPayload() {
+  return {
+    enabled: enabled.value,
+    scope_mode: scopeMode.value,
+    common_threshold_amps: Number.parseFloat(commonThreshold.value || '0'),
+    socket_threshold_amps_1: Number.parseFloat(socketThreshold1.value || '0'),
+    socket_threshold_amps_2: Number.parseFloat(socketThreshold2.value || '0'),
+    socket_threshold_amps_3: Number.parseFloat(socketThreshold3.value || '0'),
+    action: action.value,
+    start_date: startDate.value,
+    has_end_date: hasEndDate.value,
+    end_date: hasEndDate.value ? endDate.value : null,
+    notes: notes.value || null,
+  }
+}
+
+async function savePolicy() {
+  const endpoint = props.saveUrl || '/power-strip/guard-policy'
+  isSubmitting.value = true
+
+  try {
+    await submitMutation(endpoint, 'POST', buildPayload())
+    window.location.reload()
+  } catch (error) {
+    guardMessage.value = error instanceof Error ? error.message : 'Failed to save guard policy.'
+  } finally {
+    isSubmitting.value = false
+  }
+}
+
 </script>
 
 <template>
   <div class="w-full font-sans text-foreground">
     <form @submit.prevent="savePolicy">
-      <FieldGroup class="gap-5">
+      <FieldGroup class="gap-4">
         <FieldSet>
           <FieldLegend class="text-lg font-bold tracking-tight">
             Safety Guard
           </FieldLegend>
-          <FieldDescription class="text-sm text-muted-foreground">
-            All protection rules are secure and local to your workspace.
+          <FieldDescription class="text-xs text-muted-foreground">
+            Create configurable, reusable policies for everyday scenarios.
           </FieldDescription>
 
-          <FieldGroup>
+          <FieldGroup class="gap-4">
+            <Field orientation="horizontal" class="items-start gap-3">
+              <Checkbox
+                id="guard-enabled-ui"
+                v-model="enabled"
+              />
+              <div class="space-y-0.5">
+                <FieldLabel for="guard-enabled-ui" class="text-sm font-medium leading-5">
+                  Enable guard
+                </FieldLabel>
+                <FieldDescription class="text-xs text-muted-foreground">
+                  When disabled, the policy is saved but stays paused.
+                </FieldDescription>
+              </div>
+            </Field>
+
             <Field>
-              <FieldLabel for="guard-threshold-ui" class="text-sm font-medium">
-                Power Threshold
+              <FieldLabel for="guard-scope-ui" class="text-sm font-medium">
+                Threshold scope
+              </FieldLabel>
+              <Select v-model="scopeMode">
+                <SelectTrigger id="guard-scope-ui" class="w-full">
+                  <SelectValue placeholder="Scope" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem
+                    v-for="option in scopeOptions"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <FieldDescription class="text-xs text-muted-foreground">
+                Common checks total current. Per socket checks each socket separately.
+              </FieldDescription>
+            </Field>
+
+            <Field>
+              <FieldLabel v-if="scopeMode === 'common'" for="guard-threshold-ui" class="text-sm font-medium">
+                Common current threshold
                 <span
                   class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-muted text-[10px] text-muted-foreground"
-                  title="Exemplu: la 1800W se poate opri automat Socket 3."
+                  title="When the total current goes above this value, the guard can act."
                 >
                   i
                 </span>
               </FieldLabel>
-              <div class="relative">
+              <FieldLabel v-else class="text-sm font-medium">
+                Per socket current thresholds
+              </FieldLabel>
+
+              <div v-if="scopeMode === 'common'" class="relative">
                 <Input
                   id="guard-threshold-ui"
-                  v-model="threshold"
+                  v-model="commonThreshold"
                   type="number"
-                  min="600"
-                  max="2800"
-                  step="50"
+                  min="0.1"
+                  max="100"
+                  step="0.1"
                   class="pr-9"
                   required
                 />
                 <span class="pointer-events-none absolute inset-y-0 right-3 inline-flex items-center text-xs text-muted-foreground">
-                  W
+                  A
                 </span>
               </div>
-              <FieldDescription class="text-sm text-muted-foreground">
-                Recommended range: 1200W - 2200W.
-              </FieldDescription>
+
+              <div v-else class="grid gap-3 md:grid-cols-3">
+                <div class="space-y-2">
+                  <FieldLabel for="guard-threshold-1-ui" class="text-sm font-medium">Socket 1</FieldLabel>
+                  <Input id="guard-threshold-1-ui" v-model="socketThreshold1" type="number" min="0.1" max="100" step="0.1" required />
+                </div>
+                <div class="space-y-2">
+                  <FieldLabel for="guard-threshold-2-ui" class="text-sm font-medium">Socket 2</FieldLabel>
+                  <Input id="guard-threshold-2-ui" v-model="socketThreshold2" type="number" min="0.1" max="100" step="0.1" required />
+                </div>
+                <div class="space-y-2">
+                  <FieldLabel for="guard-threshold-3-ui" class="text-sm font-medium">Socket 3</FieldLabel>
+                  <Input id="guard-threshold-3-ui" v-model="socketThreshold3" type="number" min="0.1" max="100" step="0.1" required />
+                </div>
+              </div>
             </Field>
 
-            <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
               <Field>
                 <FieldLabel for="guard-action-ui" class="text-sm font-medium">
-                  Guard Action
+                  Shutdown action
                 </FieldLabel>
                 <Select v-model="action">
                   <SelectTrigger id="guard-action-ui" class="w-full">
@@ -166,85 +253,77 @@ function runTest() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="off-3">
-                      Cut socket 3
+                      Turn off socket 3
                     </SelectItem>
                     <SelectItem value="off-2">
-                      Cut socket 2
+                      Turn off socket 2
+                    </SelectItem>
+                    <SelectItem value="off-1">
+                      Turn off socket 1
                     </SelectItem>
                     <SelectItem value="off-all">
-                      Cut all sockets
+                      Turn off all sockets
                     </SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
 
               <Field>
-                <FieldLabel for="guard-start-month-ui" class="text-sm font-medium">
-                  Month
+                <FieldLabel for="guard-start-date-ui" class="text-sm font-medium">
+                  Start date
                 </FieldLabel>
-                <Select v-model="startMonth">
-                  <SelectTrigger id="guard-start-month-ui" class="w-full">
-                    <SelectValue placeholder="MM" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem
-                      v-for="month in months"
-                      :key="month.value"
-                      :value="month.value"
-                    >
-                      {{ month.label }}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                <DatePicker
+                  id="guard-start-date-ui"
+                  v-model="startDate"
+                  placeholder="Select day"
+                  class="h-10"
+                  :min="todayDate"
+                />
+                <FieldDescription class="text-xs text-muted-foreground">
+                  The guard becomes eligible starting on this date.
+                </FieldDescription>
+              </Field>
+            </div>
+
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Field>
+                <Field orientation="horizontal" class="items-start gap-3">
+                  <Checkbox
+                    id="guard-end-date-enabled-ui"
+                    v-model="hasEndDate"
+                  />
+                  <div class="space-y-0.5">
+                    <FieldLabel for="guard-end-date-enabled-ui" class="text-sm font-medium leading-5">
+                      Add end date
+                    </FieldLabel>
+                    <FieldDescription class="text-xs text-muted-foreground">
+                      Turn this on if the guard should stop automatically later.
+                    </FieldDescription>
+                  </div>
+                </Field>
               </Field>
 
-              <Field>
-                <FieldLabel for="guard-start-year-ui" class="text-sm font-medium">
-                  Year
+              <Field :class="hasEndDate ? '' : 'opacity-60'">
+                <FieldLabel for="guard-end-date-ui" class="text-sm font-medium">
+                  End date
                 </FieldLabel>
-                <Select v-model="startYear">
-                  <SelectTrigger id="guard-start-year-ui" class="w-full">
-                    <SelectValue placeholder="YYYY" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem
-                      v-for="year in years"
-                      :key="year"
-                      :value="year"
-                    >
-                      {{ year }}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                <DatePicker
+                  id="guard-end-date-ui"
+                  v-model="endDate"
+                  placeholder="Select day"
+                  class="h-10"
+                  :min="todayDate"
+                  :disabled="!hasEndDate"
+                />
+                <FieldDescription class="text-xs text-muted-foreground">
+                  The guard stays active until this date, inclusive.
+                </FieldDescription>
               </Field>
             </div>
           </FieldGroup>
         </FieldSet>
 
-        <FieldSeparator />
-
-        <FieldSet>
-          <FieldLegend variant="label" class="text-base font-semibold">
-            Policy Behavior
-          </FieldLegend>
-          <FieldDescription class="text-sm text-muted-foreground">
-            Choose how this guard should behave once configured.
-          </FieldDescription>
-          <FieldGroup>
-            <Field orientation="horizontal">
-              <Checkbox
-                id="guard-base-policy-checkbox"
-                v-model="sameAsBasePolicy"
-              />
-              <FieldLabel
-                for="guard-base-policy-checkbox"
-                class="text-sm font-normal"
-              >
-                Enable pre-shutdown simulation log
-              </FieldLabel>
-            </Field>
-          </FieldGroup>
-        </FieldSet>
+        <FieldSeparator class="my-1" />
 
         <FieldSet>
           <FieldGroup>
@@ -262,24 +341,15 @@ function runTest() {
           </FieldGroup>
         </FieldSet>
 
-        <Field orientation="horizontal" class="gap-2">
-          <Button type="submit">
+        <Field orientation="horizontal" class="items-center justify-between gap-3 pt-1">
+          <Button type="submit" :disabled="isSubmitting">
             Save policy
           </Button>
-          <Button variant="outline" type="button" @click="runTest">
-            Run test
-          </Button>
+          <p class="text-xs text-muted-foreground">
+            {{ guardMessage }}
+          </p>
         </Field>
-
-        <p id="guard-message" class="text-sm text-muted-foreground">
-          No action executed.
-        </p>
       </FieldGroup>
     </form>
-
-    <input id="guard-threshold" type="hidden" :value="threshold">
-    <input id="guard-action" type="hidden" :value="action">
-    <input id="guard-start-date" type="hidden" :value="startDate">
-    <input id="guard-notes" type="hidden" :value="notes">
   </div>
 </template>

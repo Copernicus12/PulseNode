@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Support\AppNotificationStore;
 use App\Support\Esp32RelayPublisher;
 use App\Support\Esp32StateStore;
+use App\Support\PowerStripCommandLogStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
 use Tests\TestCase;
@@ -51,6 +52,20 @@ class RelayCommandAvailabilityTest extends TestCase
         $this->app->instance(Esp32StateStore::class, $store);
         $this->app->instance(Esp32RelayPublisher::class, $publisher);
         $this->app->instance(AppNotificationStore::class, $notifications);
+        $commandLogStore = Mockery::mock(PowerStripCommandLogStore::class);
+        $commandLogStore->shouldReceive('store')
+            ->once()
+            ->with(Mockery::on(fn (array $payload): bool => $payload['level'] === 'warning'
+                && $payload['source'] === 'relay'
+                && $payload['meta']['relay_id'] === 1))
+            ->andReturn([
+                'level' => 'warning',
+                'message' => 'Socket 1 power-on blocked by guard.',
+                'source' => 'relay',
+                'meta' => ['relay_id' => 1, 'state' => 'on'],
+                'time' => now()->toIso8601String(),
+            ]);
+        $this->app->instance(PowerStripCommandLogStore::class, $commandLogStore);
 
         $response = $this->get(route('api.relay', ['relayId' => 1, 'state' => 'on']));
 
@@ -64,6 +79,12 @@ class RelayCommandAvailabilityTest extends TestCase
     {
         $user = User::factory()->create();
         $this->actingAs($user);
+
+        $commandLogStore = Mockery::mock(PowerStripCommandLogStore::class);
+        $commandLogStore->shouldReceive('latest')
+            ->once()
+            ->andReturn([]);
+        $this->app->instance(PowerStripCommandLogStore::class, $commandLogStore);
 
         foreach (['dashboard', 'power-strip.index'] as $routeName) {
             $response = $this->get(route($routeName));
@@ -142,6 +163,15 @@ class RelayCommandAvailabilityTest extends TestCase
         $this->app->instance(Esp32StateStore::class, $store);
         $this->app->instance(Esp32RelayPublisher::class, $publisher);
         $this->app->instance(AppNotificationStore::class, $notifications);
+        $commandLogStore = Mockery::mock(PowerStripCommandLogStore::class);
+        $commandLogStore->shouldReceive('store')->once()->andReturn([
+            'level' => 'success',
+            'message' => 'Socket 1 switched OFF.',
+            'source' => 'relay',
+            'meta' => ['relay_id' => 1, 'state' => 'off'],
+            'time' => now()->toIso8601String(),
+        ]);
+        $this->app->instance(PowerStripCommandLogStore::class, $commandLogStore);
 
         $response = $this->get(route('api.relay', ['relayId' => 1, 'state' => 'off']));
 

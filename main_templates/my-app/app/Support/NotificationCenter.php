@@ -53,6 +53,35 @@ class NotificationCenter
         ]);
     }
 
+    public function guardTriggered(string $scopeMode, float $threshold, float $measuredValue, string $action, array $publishedRelays, ?int $triggeredSocket = null): void
+    {
+        $scopeLabel = $scopeMode === 'per_socket' ? 'per-socket' : 'common';
+        $socketLabel = $triggeredSocket !== null ? 'Socket '.$triggeredSocket : 'shared current';
+
+        $this->store([
+            'type' => 'guard_triggered',
+            'level' => 'warning',
+            'title' => 'Safety guard triggered',
+            'message' => sprintf(
+                'The %s guard reached %.2f A on %s and executed %s on relay %s.',
+                $scopeLabel,
+                $threshold,
+                $socketLabel,
+                $action,
+                implode(', ', array_map('strval', $publishedRelays))
+            ),
+            'action_url' => $this->routePath('power-strip.index'),
+            'meta' => [
+                'scope_mode' => $scopeMode,
+                'threshold' => $threshold,
+                'measured_value' => $measuredValue,
+                'action' => $action,
+                'published_relays' => $publishedRelays,
+                'triggered_socket' => $triggeredSocket,
+            ],
+        ], 30);
+    }
+
     public function deviceProfileCreated(string $profileName, int $socketIndex, string $actionRoute = 'devices.index'): void
     {
         $this->store([

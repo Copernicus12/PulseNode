@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Devices\StoreDetectionPlanRequest;
 use App\Http\Requests\Devices\StoreDeviceProfileRequest;
+use App\Http\Requests\PowerStrip\StorePowerStripGuardPolicyRequest;
 use App\Models\BillingTariffProfile;
 use App\Models\DetectionPlan;
 use App\Models\DeviceDetection;
@@ -17,6 +18,9 @@ use App\Support\EnergyBillingCalculator;
 use App\Support\Esp32ConnectionHealth;
 use App\Support\Esp32StateStore;
 use App\Support\NotificationCenter;
+use App\Support\PowerStripCommandLogStore;
+use App\Support\PowerStripGuardService;
+use App\Support\PowerStripGuardStore;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -34,11 +38,21 @@ class PowerStripController extends Controller
     /**
      * Main power-strip monitoring dashboard.
      */
-    public function index(Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth): View
+    public function index(
+        Esp32StateStore $store,
+        Esp32ConnectionHealth $connectionHealth,
+        PowerStripGuardStore $guardStore,
+        PowerStripCommandLogStore $commandLogStore,
+        PowerStripGuardService $guardService,
+    ): View
     {
         $latest = $store->latest();
         [$latest, $sockets, $activeSockets, $totalPower, $totalEnergy, $systemStatus] = $this->buildStripViewModel($latest, $connectionHealth);
         $relayCommandGuard = $connectionHealth->relayCommandAvailability($latest);
+        $guardPolicy = $guardStore->current();
+        $guardPolicies = $this->decorateGuardPolicies($guardStore->all());
+        $guardPreview = $guardService->preview($latest);
+        $commandLogs = $commandLogStore->latest(40);
 
         return view('power-strip.index', compact(
             'latest',
@@ -48,7 +62,192 @@ class PowerStripController extends Controller
             'totalEnergy',
             'systemStatus',
             'relayCommandGuard',
+            'guardPolicy',
+            'guardPolicies',
+            'guardPreview',
+            'commandLogs',
         ));
+    }
+
+    public function storeGuardPolicy(
+        StorePowerStripGuardPolicyRequest $request,
+        PowerStripGuardStore $guardStore,
+        PowerStripCommandLogStore $commandLogStore,
+    ): RedirectResponse|JsonResponse
+    {
+        $policy = $guardStore->save($request->validated());
+        $log = $this->recordCommandLog(
+            $commandLogStore,
+            'success',
+            'Saved '.$this->guardPolicySummary($policy).'.',
+            'guard',
+            ['policy_id' => $policy['id'] ?? null],
+        );
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'status' => 'ok',
+                'policy' => $policy,
+                'log' => $log,
+            ]);
+        }
+
+        return redirect()
+            ->route('power-strip.index')
+            ->with('power_strip_log', $log);
+    }
+
+    public function pauseGuardPolicy(
+        Request $request,
+        string $policyId,
+        PowerStripGuardStore $guardStore,
+        PowerStripCommandLogStore $commandLogStore,
+    ): RedirectResponse|JsonResponse
+    {
+        $policy = $guardStore->pause($policyId);
+
+        if ($policy === null) {
+            return $this->guardPolicyMissingResponse($request, $commandLogStore);
+        }
+
+        $log = $this->recordCommandLog(
+            $commandLogStore,
+            'success',
+            'Paused '.$this->guardPolicySummary($policy).'.',
+            'guard',
+            ['policy_id' => $policy['id'] ?? null],
+        );
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'status' => 'ok',
+                'policy' => $policy,
+                'policies' => $this->decorateGuardPolicies($guardStore->all()),
+                'log' => $log,
+            ]);
+        }
+
+        return redirect()
+            ->route('power-strip.index')
+            ->with('power_strip_log', $log);
+    }
+
+    public function resumeGuardPolicy(
+        Request $request,
+        string $policyId,
+        PowerStripGuardStore $guardStore,
+        PowerStripCommandLogStore $commandLogStore,
+    ): RedirectResponse|JsonResponse
+    {
+        $policy = $guardStore->resume($policyId);
+
+        if ($policy === null) {
+            return $this->guardPolicyMissingResponse($request, $commandLogStore);
+        }
+
+        $log = $this->recordCommandLog(
+            $commandLogStore,
+            'success',
+            'Resumed '.$this->guardPolicySummary($policy).'.',
+            'guard',
+            ['policy_id' => $policy['id'] ?? null],
+        );
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'status' => 'ok',
+                'policy' => $policy,
+                'policies' => $this->decorateGuardPolicies($guardStore->all()),
+                'log' => $log,
+            ]);
+        }
+
+        return redirect()
+            ->route('power-strip.index')
+            ->with('power_strip_log', $log);
+    }
+
+    public function destroyGuardPolicy(
+        Request $request,
+        string $policyId,
+        PowerStripGuardStore $guardStore,
+        PowerStripCommandLogStore $commandLogStore,
+    ): RedirectResponse|JsonResponse
+    {
+        $policySummary = trim((string) $request->input('policy_summary', ''));
+        $deleted = $guardStore->delete($policyId);
+
+        if (! $deleted) {
+            return $this->guardPolicyMissingResponse($request, $commandLogStore);
+        }
+
+        $log = $this->recordCommandLog(
+            $commandLogStore,
+            'warning',
+            'Deleted '.($policySummary !== '' ? $policySummary : ('policy #'.$policyId)).'.',
+            'guard',
+            ['policy_id' => $policyId, 'policy_summary' => $policySummary !== '' ? $policySummary : null],
+        );
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'status' => 'ok',
+                'policies' => $this->decorateGuardPolicies($guardStore->all()),
+                'log' => $log,
+            ]);
+        }
+
+        return redirect()
+            ->route('power-strip.index')
+            ->with('power_strip_log', $log);
+    }
+
+    public function storeCommandLog(Request $request, PowerStripCommandLogStore $commandLogStore): JsonResponse
+    {
+        $data = $request->validate([
+            'level' => ['required', 'string', 'in:success,warning,error,info'],
+            'message' => ['required', 'string', 'max:500'],
+            'source' => ['nullable', 'string', 'max:100'],
+            'meta' => ['nullable', 'array'],
+        ]);
+
+        $log = $this->recordCommandLog(
+            $commandLogStore,
+            (string) $data['level'],
+            (string) $data['message'],
+            (string) ($data['source'] ?? 'ui'),
+            is_array($data['meta'] ?? null) ? $data['meta'] : [],
+        );
+
+        return response()->json([
+            'status' => 'ok',
+            'log' => $log,
+        ]);
+    }
+
+    public function clearCommandLog(Request $request, PowerStripCommandLogStore $commandLogStore): JsonResponse
+    {
+        $commandLogStore->clear();
+
+        return response()->json([
+            'status' => 'ok',
+        ]);
+    }
+
+    public function previewGuardPolicy(Request $request, Esp32StateStore $store, PowerStripGuardService $guardService): JsonResponse
+    {
+        $latest = $store->latest();
+        $policy = $guardService->currentPolicy();
+
+        if ($request->isMethod('post') && count($request->all()) > 0) {
+            $policy = array_merge($policy, $request->all());
+        }
+
+        return response()->json([
+            'status' => 'ok',
+            'preview' => $guardService->evaluate($latest, $policy, false),
+            'latest' => $latest,
+        ]);
     }
 
     public function devices(Esp32StateStore $store, DeviceProfiler $profiler, Esp32ConnectionHealth $connectionHealth, Request $request): View|Response
@@ -222,6 +421,99 @@ class PowerStripController extends Controller
         return redirect()
             ->route($redirectRoute)
             ->with('devices_success', 'Detection plan "'.$name.'" removed.');
+    }
+
+    private function guardPolicyMissingResponse(Request $request, PowerStripCommandLogStore $commandLogStore): RedirectResponse|JsonResponse
+    {
+        $log = $this->recordCommandLog(
+            $commandLogStore,
+            'error',
+            'Safety guard policy not found.',
+            'guard',
+        );
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Safety guard policy not found.',
+                'log' => $log,
+            ], 404);
+        }
+
+        return redirect()
+            ->route('power-strip.index')
+            ->with('power_strip_log', $log);
+    }
+
+    private function decorateGuardPolicies(array $policies): array
+    {
+        return array_map(function (array $policy): array {
+            $status = (string) ($policy['status'] ?? 'empty');
+            $policyId = (string) ($policy['id'] ?? '');
+
+            return array_merge($policy, [
+                'status_tone' => $this->guardPolicyStatusTone($status),
+                'pause_url' => $policyId !== '' ? route('power-strip.guard-policies.pause', ['policyId' => $policyId]) : null,
+                'resume_url' => $policyId !== '' ? route('power-strip.guard-policies.resume', ['policyId' => $policyId]) : null,
+                'delete_url' => $policyId !== '' ? route('power-strip.guard-policies.destroy', ['policyId' => $policyId]) : null,
+            ]);
+        }, $policies);
+    }
+
+    private function guardPolicyStatusTone(string $status): string
+    {
+        return match ($status) {
+            'active' => 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300',
+            'paused' => 'border-slate-500/20 bg-slate-500/10 text-slate-200',
+            'scheduled' => 'border-amber-500/20 bg-amber-500/10 text-amber-200',
+            'expired' => 'border-rose-500/20 bg-rose-500/10 text-rose-200',
+            default => 'border-border/40 bg-muted/30 text-muted-foreground',
+        };
+    }
+
+    private function guardPolicySummary(array $policy): string
+    {
+        $policyId = (string) ($policy['id'] ?? '');
+        $scopeLabel = ($policy['scope_mode'] ?? 'common') === 'per_socket' ? 'Per-socket guard' : 'Common guard';
+        $thresholdLabel = ($policy['scope_mode'] ?? 'common') === 'per_socket'
+            ? 'S1 '.number_format((float) ($policy['socket_threshold_amps_1'] ?? 0), 1).' A, S2 '.number_format((float) ($policy['socket_threshold_amps_2'] ?? 0), 1).' A, S3 '.number_format((float) ($policy['socket_threshold_amps_3'] ?? 0), 1).' A'
+            : number_format((float) ($policy['common_threshold_amps'] ?? 0), 1).' A';
+        $actionLabel = $this->guardPolicyActionLabel((string) ($policy['action'] ?? 'off-all'));
+        $suffix = $policyId !== '' ? ' #'.substr($policyId, 0, 8) : '';
+
+        return $scopeLabel.$suffix.' ('.$thresholdLabel.' -> '.$actionLabel.')';
+    }
+
+    private function guardPolicyActionLabel(string $action): string
+    {
+        return match ($action) {
+            'off-1' => 'Turn off socket 1',
+            'off-2' => 'Turn off socket 2',
+            'off-3' => 'Turn off socket 3',
+            default => 'Turn off all sockets',
+        };
+    }
+
+    private function recordCommandLog(
+        PowerStripCommandLogStore $commandLogStore,
+        string $level,
+        string $message,
+        string $source = 'power-strip',
+        array $meta = [],
+    ): array
+    {
+        return $commandLogStore->store([
+            'level' => $level,
+            'message' => $message,
+            'source' => $source,
+            'meta' => $meta,
+        ]) ?? [
+            'level' => in_array($level, ['success', 'warning', 'error', 'info'], true) ? $level : 'info',
+            'message' => $message,
+            'source' => $source,
+            'meta' => $meta ?: null,
+            'time' => now()->toIso8601String(),
+        ];
     }
 
     public function battery(Esp32StateStore $store, BatteryInsights $insights, Esp32ConnectionHealth $connectionHealth): View

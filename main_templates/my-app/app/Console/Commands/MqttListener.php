@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use App\Support\Esp32StateStore;
 use App\Support\Esp32ConnectionHealth;
 use App\Support\NotificationCenter;
+use App\Support\PowerStripGuardService;
 use PhpMqtt\Client\MqttClient;
 use PhpMqtt\Client\ConnectionSettings;
 
@@ -17,13 +18,15 @@ class MqttListener extends Command
     private $store;
     private $connectionHealth;
     private $notifications;
+    private $guardService;
 
-    public function __construct(Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth, NotificationCenter $notifications)
+    public function __construct(Esp32StateStore $store, Esp32ConnectionHealth $connectionHealth, NotificationCenter $notifications, PowerStripGuardService $guardService)
     {
         parent::__construct();
         $this->store = $store;
         $this->connectionHealth = $connectionHealth;
         $this->notifications = $notifications;
+        $this->guardService = $guardService;
     }
 
     public function handle()
@@ -62,6 +65,7 @@ class MqttListener extends Command
                         $previous = $this->store->latest();
                         $latest = $this->store->updateTelemetry($data);
                         $this->notifications->recordTelemetryUpdate($previous, $latest, $this->connectionHealth);
+                        $this->guardService->enforce($latest);
                         $this->info('Data stored successfully');
                     }
                 } catch (\Exception $e) {

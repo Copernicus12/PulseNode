@@ -22,7 +22,7 @@ class PowerStripSettingsTest extends TestCase
                 ->component('settings/PowerStripDiagnostics')
                 ->where('diagnostics.hardware.device_type', 'ESP32-S3 N16R8 DevKit')
                 ->where('diagnostics.hardware.ingest_endpoint', 'POST /api/ingest')
-                ->where('diagnostics.connection.publish_interval_seconds', 10)
+                ->where('diagnostics.connection.publish_interval_seconds', 2)
                 ->where('diagnostics.pinout.0.pin', 'GPIO 4')
                 ->where('diagnostics.pinout.3.name', 'Voltage (ZMPT101B)')
                 ->where('diagnostics.pinout.6.name', 'Relay 3 (for Current 3)')
