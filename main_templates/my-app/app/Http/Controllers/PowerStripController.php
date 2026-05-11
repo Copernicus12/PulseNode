@@ -906,7 +906,7 @@ class PowerStripController extends Controller
             return [
                 'index' => $socketIndex,
                 'label' => (string) ($socket['label'] ?? ('Socket '.$socketIndex)),
-                'power' => round(max(0.0, (float) ($socket['power'] ?? 0)), 1),
+                'power' => round(max(0.0, (float) ($socket['power_w'] ?? 0)), 1),
                 'current' => $this->displayCurrent((float) ($socket['current'] ?? 0)),
                 'status' => $this->deriveSocketStatus($latest, $socketIndex, $connectionHealth),
                 'state_label' => $isOn ? 'Live' : 'Idle',
