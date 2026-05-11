@@ -72,35 +72,29 @@ class SocketScheduleRunner
             return null;
         }
 
-        if (! in_array($this->dayKey($now), $daysOfWeek, true)) {
-            return null;
-        }
-
-        $startTime = trim((string) data_get($schedule, 'start_time', ''));
-        if ($startTime === '' || ! $this->timeMatches($startTime, $now)) {
-            return null;
-        }
-
         $state = strtolower((string) data_get($schedule, 'action', ''));
         if (! in_array($state, ['on', 'off'], true)) {
             return null;
         }
 
         $lastTriggeredAt = data_get($schedule, 'last_triggered_at');
-        if ($lastTriggeredAt !== null) {
-            try {
-                if (Carbon::parse((string) $lastTriggeredAt)->format('Y-m-d H:i') === $now->format('Y-m-d H:i')) {
-                    return null;
-                }
-            } catch (Throwable) {
-                // Ignore malformed trigger timestamps and let the schedule run.
-            }
+        $lastTriggeredEvent = (string) data_get($schedule, 'last_triggered_event', '');
+
+        if ($this->shouldTriggerStart($schedule, $daysOfWeek, $now, $lastTriggeredAt, $lastTriggeredEvent)) {
+            return [
+                'event' => 'start_time',
+                'state' => $state,
+            ];
         }
 
-        return [
-            'event' => 'start_time',
-            'state' => $state,
-        ];
+        if ($this->shouldTriggerEnd($schedule, $daysOfWeek, $now, $lastTriggeredAt, $lastTriggeredEvent)) {
+            return [
+                'event' => 'end_time',
+                'state' => $this->reverseAction($state),
+            ];
+        }
+
+        return null;
     }
 
     private function executeSchedule(object|array $schedule, string $state, string $event, CarbonInterface $now, array $latest): ?array
@@ -235,6 +229,85 @@ class SocketScheduleRunner
     private function timeMatches(string $expectedTime, CarbonInterface $now): bool
     {
         return $this->normalizeTime($expectedTime) === $now->format('H:i');
+    }
+
+    private function shouldTriggerStart(
+        object|array $schedule,
+        array $daysOfWeek,
+        CarbonInterface $now,
+        mixed $lastTriggeredAt,
+        string $lastTriggeredEvent,
+    ): bool {
+        $startTime = $this->normalizeTime((string) data_get($schedule, 'start_time', ''));
+
+        if ($startTime === '' || ! in_array($this->dayKey($now), $daysOfWeek, true)) {
+            return false;
+        }
+
+        if (! $this->timeMatches($startTime, $now)) {
+            return false;
+        }
+
+        if ($this->alreadyTriggeredThisMinute($lastTriggeredAt, $now, $lastTriggeredEvent, 'start_time')) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function shouldTriggerEnd(
+        object|array $schedule,
+        array $daysOfWeek,
+        CarbonInterface $now,
+        mixed $lastTriggeredAt,
+        string $lastTriggeredEvent,
+    ): bool {
+        $endTime = $this->normalizeTime((string) data_get($schedule, 'end_time', ''));
+        $startTime = $this->normalizeTime((string) data_get($schedule, 'start_time', ''));
+
+        if ($endTime === '' || $startTime === '' || $endTime === $startTime) {
+            return false;
+        }
+
+        $isSameDayWindow = $endTime > $startTime;
+        $todayKey = $this->dayKey($now);
+        $yesterdayKey = $this->dayKey($now->copy()->subDay());
+
+        $dayMatches = $isSameDayWindow
+            ? in_array($todayKey, $daysOfWeek, true)
+            : in_array($yesterdayKey, $daysOfWeek, true);
+
+        if (! $dayMatches || ! $this->timeMatches($endTime, $now)) {
+            return false;
+        }
+
+        if ($this->alreadyTriggeredThisMinute($lastTriggeredAt, $now, $lastTriggeredEvent, 'end_time')) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function alreadyTriggeredThisMinute(
+        mixed $lastTriggeredAt,
+        CarbonInterface $now,
+        string $lastTriggeredEvent,
+        string $event,
+    ): bool {
+        if ($lastTriggeredEvent !== $event || $lastTriggeredAt === null) {
+            return false;
+        }
+
+        try {
+            return Carbon::parse((string) $lastTriggeredAt)->format('Y-m-d H:i') === $now->format('Y-m-d H:i');
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    private function reverseAction(string $state): string
+    {
+        return $state === 'on' ? 'off' : 'on';
     }
 
     private function normalizeTime(string $value): string
