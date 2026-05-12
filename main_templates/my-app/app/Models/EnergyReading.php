@@ -76,60 +76,25 @@ class EnergyReading extends Model
 
         return Cache::remember("energy.day_details.{$dayKey}", $ttl, function () use ($day, $dayKey): array {
             $samples = self::mongoSamplesForDate($dayKey);
+            $summary = self::buildDaySummaryPayload($samples, $day);
 
-            $socket1 = (float) $samples->sum('energy_socket_1');
-            $socket2 = (float) $samples->sum('energy_socket_2');
-            $socket3 = (float) $samples->sum('energy_socket_3');
-            $total = $socket1 + $socket2 + $socket3;
+            return array_merge($summary, [
+                'intervals' => self::buildIntervals($samples, (float) config('esp32.analytics.sample_minutes', 0.1667)),
+                'hourly' => self::buildHourlyBreakdown($samples),
+            ]);
+        });
+    }
 
-            $sampleMinutes = (float) config('esp32.analytics.sample_minutes', 0.1667);
-            $avgVoltage = max(1.0, (float) ($samples->avg('voltage') ?? 230));
+    public static function daySummary(string $date): array
+    {
+        $day = Carbon::parse($date)->startOfDay();
+        $dayKey = $day->toDateString();
+        $ttl = $day->isToday() ? now()->addSeconds(20) : now()->addHours(12);
 
-            $socketStats = [
-                [
-                    'name' => 'Socket 1',
-                    'energy_kwh' => round($socket1, 4),
-                    'percentage' => $total > 0 ? round(($socket1 / $total) * 100, 1) : 0,
-                    'avg_power_w' => round((float) ($samples->avg('power_socket_1') ?? 0), 1),
-                    'peak_power_w' => round((float) ($samples->max('power_socket_1') ?? 0), 1),
-                    'active_minutes' => round((float) $samples->where('current_1', '>', 0.05)->count() * $sampleMinutes, 1),
-                ],
-                [
-                    'name' => 'Socket 2',
-                    'energy_kwh' => round($socket2, 4),
-                    'percentage' => $total > 0 ? round(($socket2 / $total) * 100, 1) : 0,
-                    'avg_power_w' => round((float) ($samples->avg('power_socket_2') ?? 0), 1),
-                    'peak_power_w' => round((float) ($samples->max('power_socket_2') ?? 0), 1),
-                    'active_minutes' => round((float) $samples->where('current_2', '>', 0.05)->count() * $sampleMinutes, 1),
-                ],
-                [
-                    'name' => 'Socket 3',
-                    'energy_kwh' => round($socket3, 4),
-                    'percentage' => $total > 0 ? round(($socket3 / $total) * 100, 1) : 0,
-                    'avg_power_w' => round((float) ($samples->avg('power_socket_3') ?? 0), 1),
-                    'peak_power_w' => round((float) ($samples->max('power_socket_3') ?? 0), 1),
-                    'active_minutes' => round((float) $samples->where('current_3', '>', 0.05)->count() * $sampleMinutes, 1),
-                ],
-            ];
+        return Cache::remember("energy.day_summary.{$dayKey}", $ttl, function () use ($day, $dayKey): array {
+            $samples = self::mongoSamplesForDate($dayKey);
 
-            $hourly = self::buildHourlyBreakdown($samples);
-
-            return [
-                'date' => $dayKey,
-                'day_short' => strtoupper(substr($day->format('D'), 0, 3)),
-                'is_today' => $day->isToday(),
-                'total_kwh' => round($total, 4),
-                'from_time' => '00:00',
-                'to_time' => $day->isToday() ? now()->format('H:i:s') : '23:59:59',
-                'avg_voltage' => round($avgVoltage, 1),
-                'socket_stats' => $socketStats,
-                'warnings' => [
-                    'high' => $samples->where('warning_level', 'high')->count(),
-                    'overload' => $samples->where('warning_level', 'overload')->count(),
-                ],
-                'intervals' => self::buildIntervals($samples, $sampleMinutes),
-                'hourly' => $hourly,
-            ];
+            return self::buildDaySummaryPayload($samples, $day);
         });
     }
 
@@ -301,6 +266,63 @@ class EnergyReading extends Model
                 'total' => $s1 + $s2 + $s3,
             ];
         });
+    }
+
+    /**
+     * @param Collection<int, object> $samples
+     * @return array<string, mixed>
+     */
+    private static function buildDaySummaryPayload(Collection $samples, Carbon $day): array
+    {
+        $socket1 = (float) $samples->sum('energy_socket_1');
+        $socket2 = (float) $samples->sum('energy_socket_2');
+        $socket3 = (float) $samples->sum('energy_socket_3');
+        $total = $socket1 + $socket2 + $socket3;
+
+        $sampleMinutes = (float) config('esp32.analytics.sample_minutes', 0.1667);
+        $avgVoltage = max(1.0, (float) ($samples->avg('voltage') ?? 230));
+
+        $socketStats = [
+            [
+                'name' => 'Socket 1',
+                'energy_kwh' => round($socket1, 4),
+                'percentage' => $total > 0 ? round(($socket1 / $total) * 100, 1) : 0,
+                'avg_power_w' => round((float) ($samples->avg('power_socket_1') ?? 0), 1),
+                'peak_power_w' => round((float) ($samples->max('power_socket_1') ?? 0), 1),
+                'active_minutes' => round((float) $samples->where('current_1', '>', 0.05)->count() * $sampleMinutes, 1),
+            ],
+            [
+                'name' => 'Socket 2',
+                'energy_kwh' => round($socket2, 4),
+                'percentage' => $total > 0 ? round(($socket2 / $total) * 100, 1) : 0,
+                'avg_power_w' => round((float) ($samples->avg('power_socket_2') ?? 0), 1),
+                'peak_power_w' => round((float) ($samples->max('power_socket_2') ?? 0), 1),
+                'active_minutes' => round((float) $samples->where('current_2', '>', 0.05)->count() * $sampleMinutes, 1),
+            ],
+            [
+                'name' => 'Socket 3',
+                'energy_kwh' => round($socket3, 4),
+                'percentage' => $total > 0 ? round(($socket3 / $total) * 100, 1) : 0,
+                'avg_power_w' => round((float) ($samples->avg('power_socket_3') ?? 0), 1),
+                'peak_power_w' => round((float) ($samples->max('power_socket_3') ?? 0), 1),
+                'active_minutes' => round((float) $samples->where('current_3', '>', 0.05)->count() * $sampleMinutes, 1),
+            ],
+        ];
+
+        return [
+            'date' => $day->toDateString(),
+            'day_short' => strtoupper(substr($day->format('D'), 0, 3)),
+            'is_today' => $day->isToday(),
+            'total_kwh' => round($total, 4),
+            'from_time' => '00:00',
+            'to_time' => $day->isToday() ? now()->format('H:i:s') : '23:59:59',
+            'avg_voltage' => round($avgVoltage, 1),
+            'socket_stats' => $socketStats,
+            'warnings' => [
+                'high' => $samples->where('warning_level', 'high')->count(),
+                'overload' => $samples->where('warning_level', 'overload')->count(),
+            ],
+        ];
     }
 
     /**

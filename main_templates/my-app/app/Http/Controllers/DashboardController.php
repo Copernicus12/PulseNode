@@ -96,7 +96,7 @@ class DashboardController extends Controller
 
         // ── Weekly energy usage payload ────────────────────────────────
         $energyUsage = EnergyReading::historyPayload();
-        $todayDetails = EnergyReading::dayDetails(now()->toDateString());
+        $todayDetails = EnergyReading::daySummary(now()->toDateString());
         try {
             $billingProfiles = BillingTariffProfile::query()
                 ->where('owner_key', (string) $user?->getAuthIdentifier())
